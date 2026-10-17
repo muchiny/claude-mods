@@ -13,10 +13,11 @@ aucune connexion réseau et n'appelle pas le modèle.
 Dans une session Claude Code, dans un terminal :
 
 ```text
-/plugin install mode-clair --marketplace muchiny/claude-mods
+/plugin marketplace add muchiny/claude-mods
+/plugin install mode-clair@muchini-mods
 ```
 
-Réponds `y` pour ajouter la marketplace, puis choisis la portée : **utilisateur**
+Choisis la portée à l'installation : **utilisateur**
 pour l'avoir dans tous tes projets, **projet** pour le limiter au dépôt courant.
 Il faut Claude Code 2.1.296 ou plus récent : les mods sont encore en accès
 anticipé.

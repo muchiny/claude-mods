@@ -25,12 +25,6 @@ Dans une session Claude Code :
 /plugin install mode-clair@muchini-mods
 ```
 
-Raccourci équivalent :
-
-```text
-/plugin install mode-clair --marketplace muchiny/claude-mods
-```
-
 Choisis la portée à l'installation :
 
 - **utilisateur** : le mod est actif dans tous tes projets ;
