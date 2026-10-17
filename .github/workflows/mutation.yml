@@ -15,16 +15,16 @@ permissions:
 jobs:
   mutate:
     name: mutate ${{ matrix.file }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
         file: [bridge.ts, colors.ts, fr.ts, state.ts, superpowers.ts, view.ts, workflow.ts]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -37,7 +37,7 @@ jobs:
       - name: Stryker
         run: npx stryker run --mutate "mode-clair/hooks/${{ matrix.file }}" --concurrency 3 --reporters clear-text,html,json
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: mutation-${{ matrix.file }}
