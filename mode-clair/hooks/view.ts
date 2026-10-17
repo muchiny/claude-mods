@@ -1,0 +1,523 @@
+// Ce que le mod dessine, en lignes de morceaux { text, tone } (spec §4, §5.4).
+// Pur : aucun $, aucune horloge. register.tsx traduit les tons en couleurs ;
+// c'est sa seule décision.
+//
+// Les lignes d'appel et la carte /clair passent par un même colorieur
+// (toneLine), qui lit les tons dans le seul texte de la ligne : signe, état,
+// machine. La carte est d'abord une suite de lignes de texte ; c'est ce qui
+// permet à parseCard de la redessiner à l'identique depuis e.props.text.
+
+import type { BridgeCall, CallState, ClairState, Line, Nature, Piece, Superpowers, Tone, Waiting, Workflow } from '../types'
+import { steps } from './bridge'
+import { fr } from './fr'
+import { STATE_TABLE, hostIndex, machines, problems, unseenProblems } from './state'
+import { active, currentPhase } from './workflow'
+
+export type Ctx = { now: number; columns: number; isWorking: boolean; viewAgentId?: string }
+
+/** Signe d'attente (spec §4.1) : ⚠ suivi du sélecteur texte U+FE0E, ou ▲, selon la sonde de la tâche 2 (spec §10). */
+export const WAIT_SIGN: string = '\u26A0\uFE0E'
+
+const SEP = ' · '
+const NOTHING_RAN = fr("rien n'a tourné")
+const SEE_CARD = fr('voir /clair')
+const TRUNCATED = fr('tronqué')
+const UNKNOWN_HOST = fr('machine inconnue')
+const SEEN = fr('déjà vu')
+const UNSEEN_MARK = fr('problème non vu')
+const NONE_UNSEEN = fr('aucun problème non vu')
+const REMOTE = fr('à distance')
+const QUIET = fr('sans nouvelles')
+const STALE = fr('abandonné')
+const WAITS = fr('attend ton accord')
+const NATURE: Readonly<Record<Nature, string>> = { lecture: 'lecture', 'peut-modifier': 'peut modifier', inconnu: 'inconnu' }
+const MARK_SIGN = { ok: '✓', ko: '✗', off: '○' } as const
+const SIGNS: readonly string[] = [WAIT_SIGN, '●', '✓', '✗', '○', '?']
+const SIGN_TONE: Readonly<Record<string, Tone>> = { '●': 'accent', '✓': 'ok', '✗': 'erreur', '○': 'attenue', '?': 'attenue' }
+const WORD_TONE: ReadonlyMap<string, Tone> = new Map<string, Tone>([
+  [NOTHING_RAN, 'attenue'],
+  [SEE_CARD, 'attenue'],
+  [TRUNCATED, 'attention'],
+  [UNSEEN_MARK, 'erreur'],
+  [NONE_UNSEEN, 'attenue'],
+  [REMOTE, 'attenue'],
+  [QUIET, 'attenue'],
+  [STALE, 'attenue'],
+  [fr(NATURE.lecture), 'attenue'],
+  [fr(NATURE['peut-modifier']), 'attenue'],
+  [fr(NATURE.inconnu), 'attenue'],
+])
+const CODE_WORD = /^code[ \u00A0](?:\d+|\?)$/
+const UNSEEN_COUNT = /^\d+ problèmes? non vus?$/
+
+type IndexOf = (name: string) => number
+const NO_HOSTS: IndexOf = () => -1
+
+/** Identifiant affiché sur une seule ligne, tel quel par ailleurs. */
+function one(s: string): string {
+  return s.replace(/[\r\n\t]+/g, ' ')
+}
+
+function sameTone(a: Tone, b: Tone): boolean {
+  if (typeof a === 'string' || typeof b === 'string') return a === b
+  return a.machine === b.machine
+}
+
+/** Morceaux vides retirés, voisins de même ton fusionnés : une seule écriture par ligne. */
+function norm(line: readonly Piece[]): Line {
+  const out: Piece[] = []
+  for (const p of line) {
+    if (p.text === '') continue
+    const last = out[out.length - 1]
+    if (last !== undefined && sameTone(last.tone, p.tone)) out[out.length - 1] = { text: last.text + p.text, tone: last.tone }
+    else out.push({ text: p.text, tone: p.tone })
+  }
+  return out
+}
+
+function textOf(line: Line): string {
+  return line.map(p => p.text).join('')
+}
+
+function label(state: CallState): string {
+  return fr(STATE_TABLE[state].label)
+}
+
+function codeText(code: number | undefined): string {
+  return fr(`code ${code === undefined ? '?' : String(code)}`)
+}
+
+function hostText(host: string | null): string {
+  return host === null ? UNKNOWN_HOST : one(host)
+}
+
+/** La ligne de la table §5.4 dont le libellé (ou « code N ») est ce mot. */
+function rowOf(word: string): (typeof STATE_TABLE)[CallState] | undefined {
+  if (CODE_WORD.test(word)) return STATE_TABLE.code
+  for (const state of Object.keys(STATE_TABLE) as CallState[]) {
+    if (label(state) === word) return STATE_TABLE[state]
+  }
+  return undefined
+}
+
+function signTone(sign: string, word: string): Tone {
+  const row = rowOf(word)
+  if (row !== undefined && row.sign === sign) return row.tone
+  return SIGN_TONE[sign] ?? 'attention'
+}
+
+function wordTone(word: string, indexOf: IndexOf, hostSlot: boolean): Tone {
+  const i = indexOf(word)
+  if (i >= 0) return { machine: i }
+  if (hostSlot && word === UNKNOWN_HOST) return 'attenue'
+  const row = rowOf(word)
+  if (row !== undefined) return row.tone
+  return WORD_TONE.get(word) ?? (UNSEEN_COUNT.test(word) ? 'erreur' : 'texte')
+}
+
+function signAt(seg: string): string | null {
+  for (const sign of SIGNS) if (seg.startsWith(`${sign} `)) return sign
+  return null
+}
+
+/**
+ * Tons d'une ligne « signe machine · état · détail », lus dans son seul texte.
+ * Le signe prend le ton de l'état qui le suit (table §5.4) ; une ligne qui
+ * finit par « déjà vu » est atténuée en entier.
+ */
+function toneLine(text: string, indexOf: IndexOf): Line {
+  if (text.endsWith(SEP + SEEN)) return [{ text, tone: 'attenue' }]
+  const segs = text.split(SEP)
+  const out: Piece[] = []
+  segs.forEach((seg, i) => {
+    if (i > 0) out.push({ text: SEP, tone: 'attenue' })
+    const sign = signAt(seg)
+    if (sign === null) {
+      out.push({ text: seg, tone: wordTone(seg, indexOf, false) })
+      return
+    }
+    const rest = seg.slice(sign.length + 1)
+    const next = segs[1] ?? ''
+    const key = i === 0 && rowOf(next) !== undefined ? next : rest
+    out.push({ text: sign, tone: signTone(sign, key) })
+    out.push({ text: ' ', tone: 'texte' })
+    out.push({ text: rest, tone: wordTone(rest, indexOf, i === 0) })
+  })
+  return norm(out)
+}
+
+/** « signe machine · état · détails » ; dans la carte, « voir /clair » n'a pas de sens. */
+function callText(c: BridgeCall, inCard: boolean): string {
+  const row = STATE_TABLE[c.state]
+  const parts: string[] = []
+  if (c.state === 'en-cours' || c.state === 'fait') parts.push(one(c.tool))
+  else if (c.state === 'code') parts.push(codeText(c.code))
+  else parts.push(label(c.state))
+  if (c.state === 'echec-machine' && c.code !== undefined) parts.push(codeText(c.code))
+  // Nature : sur les états où l'appel a tourné ou a pu tourner (note sous la table §5.4).
+  if (c.state === 'fait' || c.state === 'code' || c.state === 'echec-machine' || c.state === 'delai-depasse' || c.truncated) {
+    parts.push(fr(NATURE[c.nature]))
+  }
+  if (!row.isCall) parts.push(NOTHING_RAN)
+  if (c.truncated) parts.push(TRUNCATED)
+  if (c.state === 'echec' && !inCard) parts.push(SEE_CARD)
+  return `${row.sign} ${hostText(c.host)}${SEP}${parts.join(SEP)}`
+}
+
+/** fr() sur un texte qui contient des identifiants : seules les parties autour d'eux sont touchées. */
+function frAround(s: string, ids: readonly string[]): string {
+  const id = ids.find(x => x !== '' && s.includes(x))
+  if (id === undefined) return fr(s)
+  const others = ids.filter(x => x !== id)
+  return s
+    .split(id)
+    .map(part => frAround(part, others))
+    .join(id)
+}
+
+/**
+ * « ✓ accord · ✗ win2025 injoignable · rien n’a tourné » (spec §5.1). bridge.steps
+ * finit lui-même tout appel qui n'a pas tourné par l'étape « rien n’a tourné » :
+ * c'est la conclusion du pipeline, écrite sans signe. Le drapeau « tronqué »,
+ * indépendant de l'état, suit en dernier, comme sur la ligne d'appel : c'est
+ * souvent la seule raison pour laquelle l'appel est dans « à regarder ».
+ */
+function pipelineText(c: BridgeCall): string {
+  const ids = [c.host ?? '', c.tool]
+  const parts = steps(c).map(st => (st.label === NOTHING_RAN ? NOTHING_RAN : `${MARK_SIGN[st.mark]} ${frAround(one(st.label), ids)}`))
+  if (c.truncated) parts.push(TRUNCATED)
+  return parts.join(SEP)
+}
+
+/** Largeur en cellules : un point de code par cellule, sélecteurs de variante et jointures exclus. */
+function width(text: string): number {
+  let n = 0
+  for (const ch of text) if (!/[\uFE00-\uFE0F\u200B-\u200D]/.test(ch)) n += 1
+  return n
+}
+
+function stateIndex(s: ClairState): IndexOf {
+  return name => hostIndex(s, name)
+}
+
+/**
+ * Coupe une ligne à `columns` cellules. Les détails partent d'abord, par
+ * segments entiers depuis la fin (remplacés par « … ») ; la tête
+ * « signe machine · état » n'est coupée que si elle ne tient pas seule.
+ */
+export function fit(line: Line, columns: number): Line {
+  const max = Number.isFinite(columns) ? Math.floor(columns) : 0
+  if (max < 1) return []
+  if (width(textOf(line)) <= max) return line
+  const chars: Piece[] = []
+  for (const p of line) for (const ch of p.text) chars.push({ text: ch, tone: p.tone })
+  const seps: number[] = []
+  for (let i = 0; i + 2 < chars.length; i++) {
+    if (chars[i]?.text === ' ' && chars[i + 1]?.text === '·' && chars[i + 2]?.text === ' ') seps.push(i)
+  }
+  for (let k = seps.length - 1; k >= 1; k--) {
+    const head = chars.slice(0, seps[k])
+    const w = width(textOf(head))
+    if (w + 2 <= max) return norm([...head, { text: ' …', tone: 'attenue' }])
+    if (w <= max) return norm([...head, { text: w < max ? '…' : '', tone: 'attenue' }])
+  }
+  const kept: Piece[] = []
+  let used = 0
+  for (const c of chars) {
+    const w = width(c.text)
+    if (used + w > max - 1) break
+    kept.push(c)
+    used += w
+  }
+  return norm([...kept, { text: '…', tone: 'attenue' }])
+}
+
+/**
+ * La ligne de l'appel que le formulaire de confirmation attend : « ⚠︎ machine · outil · attend ton
+ * accord ». Le dialogue de Claude Code cache alors la bande et la ligne d'état ; seule cette ligne
+ * reste visible. Trop étroite, c'est l'outil qui cède : coupé (« ssh… »), puis retiré ; la machine
+ * et l'attente restent, coupées par fit seulement si elles ne tiennent pas seules.
+ */
+function waitingCallLine(c: BridgeCall, s: ClairState, columns: number): Line {
+  const head: Piece[] = [
+    { text: WAIT_SIGN, tone: 'attention' },
+    { text: ' ', tone: 'texte' },
+    { text: hostText(c.host), tone: hostTone(s, c.host) },
+  ]
+  const tail: Piece[] = [
+    { text: SEP, tone: 'attenue' },
+    { text: WAITS, tone: 'attention' },
+  ]
+  const tool = [...one(c.tool)]
+  const max = Number.isFinite(columns) ? Math.floor(columns) : 0
+  const room = max - width(textOf([...head, ...tail])) - SEP.length
+  if (tool.length <= room) return norm([...head, { text: SEP, tone: 'attenue' }, { text: tool.join(''), tone: 'texte' }, ...tail])
+  if (room >= 2) {
+    return norm([...head, { text: SEP, tone: 'attenue' }, { text: tool.slice(0, room - 1).join(''), tone: 'texte' }, { text: '…', tone: 'attenue' }, ...tail])
+  }
+  return fit(norm([...head, ...tail]), columns)
+}
+
+/** La ligne d'un appel bridge, sous son appel (spec §4.3) ou dans la bande ; l'appel attendu par le formulaire dit l'attente. */
+export function callLine(c: BridgeCall, s: ClairState, columns: number): Line {
+  if (s.waiting !== null && s.waiting.callId === c.id) return waitingCallLine(c, s, columns)
+  return fit(toneLine(callText(c, false), stateIndex(s)), columns)
+}
+
+/** Le pipeline réel d'un appel (spec §5.1), étapes de bridge.steps. */
+export function pipeline(c: BridgeCall): Line {
+  return toneLine(pipelineText(c), NO_HOSTS)
+}
+
+/** Ligne d'état : seulement quand tu dois agir (spec §4.5). */
+export function statusText(s: ClairState): string | undefined {
+  const w = s.waiting
+  if (w === null) return undefined
+  return `${one(w.host ?? w.tool)}${fr(' attend ton accord')}`
+}
+
+/** Étiquette du pied de saisie (spec §4.6) : seulement s'il y a des problèmes non vus. */
+export function modeLabel(s: ClairState): string | null {
+  const n = unseenProblems(s)
+  return n > 0 ? `clair ✗ ${n}` : null
+}
+
+function plural(n: number, singular: string, many: string): string {
+  return `${n} ${n >= 2 ? many : singular}`
+}
+
+/** L'étape Superpowers en mots (spec §5.2) ; null = rien à dire. */
+function spText(sp: Superpowers | null, forBand: boolean): string | null {
+  if (sp === null || sp.stage === 'fin') return null
+  if (forBand && sp.isStale) return null
+  let t: string
+  if (sp.stage === 'cadrage') t = fr('cadrage')
+  else if (sp.stage === 'spec') t = fr('spécification')
+  else if (sp.stage === 'relecture') t = fr('relecture finale')
+  else {
+    t = sp.planTitle === null ? fr('plan') : `${fr('plan « ')}${one(sp.planTitle)}${fr(' »')}`
+    if (sp.stage === 'taches') {
+      if (sp.current !== null && sp.current > 0) {
+        t += SEP + (sp.tasks > 0 ? fr(`tâche ${sp.current} sur ${sp.tasks}`) : fr(`tâche ${sp.current}`))
+      } else if (sp.tasks > 0) {
+        t += SEP + fr(plural(sp.tasks, 'tâche', 'tâches'))
+      }
+    }
+  }
+  if (!forBand && sp.isStale) t += SEP + STALE
+  return t
+}
+
+function workflowText(w: Workflow): string {
+  const parts = [`${w.status === 'sans-nouvelles' ? '○' : '●'} ${fr('workflow ')}${one(w.name)}`]
+  if (w.status === 'distant') parts.push(REMOTE)
+  if (w.status === 'sans-nouvelles') parts.push(QUIET)
+  const phase = currentPhase(w)
+  if (phase !== null) parts.push(one(phase))
+  const running = w.agents.filter(a => a.state === 'en-cours').length
+  if (running > 0) parts.push(fr(plural(running, 'agent', 'agents')))
+  const failed = w.agents.filter(a => a.state === 'echec').length
+  if (failed > 0) parts.push(`✗ ${fr(`${failed} en échec`)}`)
+  return parts.join(SEP)
+}
+
+function latest(list: readonly Workflow[]): Workflow | undefined {
+  let best: Workflow | undefined
+  for (const w of list) if (best === undefined || w.startedAt >= best.startedAt) best = w
+  return best
+}
+
+function hostTone(s: ClairState, host: string | null): Tone {
+  if (host === null) return 'attenue'
+  const i = hostIndex(s, host)
+  return i >= 0 ? { machine: i } : 'texte'
+}
+
+function waitingInView(s: ClairState, w: Waiting, viewAgentId: string | undefined): boolean {
+  if (viewAgentId === undefined) return true
+  const c = s.calls.find(x => x.id === w.callId)
+  return c !== undefined && c.agentId === viewAgentId
+}
+
+function waitLine(s: ClairState, w: Waiting): Line {
+  return norm([
+    { text: `${WAIT_SIGN}${fr(' à toi')}`, tone: 'attention' },
+    { text: fr(' : réponds au formulaire ('), tone: 'texte' },
+    w.host === null ? { text: one(w.tool), tone: 'texte' } : { text: one(w.host), tone: hostTone(s, w.host) },
+    { text: ')', tone: 'texte' },
+  ])
+}
+
+function runningLine(s: ClairState, run: readonly BridgeCall[]): Line {
+  const names: (string | null)[] = []
+  for (const c of run) if (!names.includes(c.host)) names.push(c.host)
+  const out: Piece[] = [
+    { text: '●', tone: 'accent' },
+    { text: ` ${fr(plural(run.length, 'appel', 'appels'))}`, tone: 'texte' },
+    { text: SEP, tone: 'attenue' },
+  ]
+  names.slice(0, 3).forEach((h, i) => {
+    if (i > 0) out.push({ text: ', ', tone: 'texte' })
+    out.push({ text: hostText(h), tone: hostTone(s, h) })
+  })
+  if (names.length > 3) out.push({ text: ` +${names.length - 3}`, tone: 'attenue' })
+  return norm(out)
+}
+
+/**
+ * La bande au-dessus de la saisie (spec §4.2) ; [] = rendre next(e) seul.
+ * Ligne 1 : « à toi » (seule), sinon appels en cours, sinon workflow, sinon
+ * étape Superpowers. Ligne 2 : workflow ou Superpowers qui coexiste.
+ */
+export function bandLines(s: ClairState, ctx: Ctx): Line[] {
+  const w = s.waiting
+  if (w !== null && waitingInView(s, w, ctx.viewAgentId)) return [fit(waitLine(s, w), ctx.columns)]
+  const lines: Line[] = []
+  const run = s.calls.filter(c => c.state === 'en-cours' && (ctx.viewAgentId === undefined || c.agentId === ctx.viewAgentId))
+  const first = run[0]
+  if (first !== undefined) lines.push(run.length === 1 ? toneLine(callText(first, false), stateIndex(s)) : runningLine(s, run))
+  if (ctx.viewAgentId === undefined) {
+    const wf = latest(active(s.workflows))
+    if (wf !== undefined) lines.push(toneLine(workflowText(wf), NO_HOSTS))
+    // Pendant que Claude travaille, ou qu'un agent lancé sous le plan tourne encore (tâche 14b).
+    const agentRuns = s.superpowers !== null && s.superpowers.runningAgents.length > 0
+    const sp = ctx.isWorking || agentRuns ? spText(s.superpowers, true) : null
+    if (sp !== null) lines.push(toneLine(sp, NO_HOSTS))
+  }
+  return lines.slice(0, 2).map(l => fit(l, ctx.columns))
+}
+
+const EMPTY_CARD = fr('rien depuis le début de la session')
+const LOOK = fr('à regarder :')
+const VIEW_HEAD = fr('dernier appel sur ')
+const VIEW_TAIL = fr(' :')
+const VIEW_NONE = fr('aucun appel sur ')
+const GONE = fr("plus d'appel en mémoire")
+const VIEW_GONE = fr("plus d'appel en mémoire sur ")
+const QUOTE_OPEN = fr('« ')
+const QUOTE_CLOSE = fr(' »')
+const SUMMARY = /^\d+ machines? · \d+ appels? · /
+const MACHINE_LINE = /^(.*?) · \d+ appels? · /
+
+/** Dernier résultat d'une machine : « ✓ ssh_disk_usage », « ✓ code 2 », « ✗ injoignable ». */
+function lastText(c: BridgeCall): string {
+  const row = STATE_TABLE[c.state]
+  if (c.state === 'en-cours' || c.state === 'fait') return `${row.sign} ${one(c.tool)}`
+  if (c.state === 'code') return `${row.sign} ${codeText(c.code)}`
+  return `${row.sign} ${label(c.state)}`
+}
+
+/** Le texte de la carte, une chaîne par ligne (spec §4.4). */
+function cardTexts(s: ClairState, args: string): string[] {
+  const ms = machines(s)
+  const machineText = (m: (typeof ms)[number]): string => {
+    const last = lastText(m.last)
+    const mark = m.hasUnseenProblem && !last.startsWith('✗') ? `${SEP}✗ ${UNSEEN_MARK}` : ''
+    return `${one(m.host)}${SEP}${fr(plural(m.calls, 'appel', 'appels'))}${SEP}${last}${mark}`
+  }
+  // Une ligne par machine de hostOrder, à sa place : le rang d'une ligne est le
+  // hostIndex de sa machine (spec §4.7), même quand le plafond de 200 appels a
+  // évincé tous les siens (machines() la saute alors) ; elle reste, atténuée.
+  const hostLines = s.hostOrder.map((host, index) => {
+    const m = ms.find(x => x.index === index)
+    return m === undefined ? `${one(host)}${SEP}${GONE}` : machineText(m)
+  })
+  const quote = (reason: string): string => `${QUOTE_OPEN}${one(reason)}${QUOTE_CLOSE}`
+  const name = args.trim().split(/\s+/)[0] ?? ''
+  if (name !== '') {
+    const out = [...hostLines]
+    const m = ms.find(x => x.host === name)
+    if (m === undefined) return [...out, `${s.hostOrder.includes(name) ? VIEW_GONE : VIEW_NONE}${one(name)}`]
+    out.push(`${VIEW_HEAD}${one(m.host)}${VIEW_TAIL}`, callText(m.last, true), pipelineText(m.last))
+    if (m.last.reason !== undefined) out.push(quote(m.last.reason))
+    return out
+  }
+  const sp = spText(s.superpowers, false)
+  const wfs = s.workflows.filter(w => w.status === 'en-cours' || w.status === 'distant' || w.status === 'sans-nouvelles')
+  if (s.calls.length === 0 && sp === null && wfs.length === 0) return [EMPTY_CARD]
+  const out: string[] = []
+  if (s.calls.length > 0) {
+    const unseen = unseenProblems(s)
+    const total = ms.reduce((n, m) => n + m.calls, 0)
+    const problemsText = unseen > 0 ? fr(plural(unseen, 'problème non vu', 'problèmes non vus')) : NONE_UNSEEN
+    out.push(`${fr(plural(ms.length, 'machine', 'machines'))}${SEP}${fr(plural(total, 'appel', 'appels'))}${SEP}${problemsText}`)
+    out.push(...hostLines)
+  }
+  const look = problems(s).slice(0, 5)
+  const newest = look[0]
+  if (newest !== undefined) {
+    const seen = (c: BridgeCall): boolean => (c.endedAt ?? c.startedAt) <= s.seenAt
+    out.push(LOOK, pipelineText(newest) + (seen(newest) ? SEP + SEEN : ''))
+    if (newest.reason !== undefined) out.push(quote(newest.reason))
+    for (const c of look.slice(1)) out.push(callText(c, true) + (seen(c) ? SEP + SEEN : ''))
+  }
+  if (sp !== null) out.push(sp)
+  for (const w of wfs) out.push(workflowText(w))
+  return out
+}
+
+/**
+ * Les tons d'une carte, lus dans son seul texte : la même fonction sert à
+ * cardLines et à parseCard. La couleur d'une machine est son rang parmi les
+ * lignes de machine en tête de carte, qui suivent hostOrder sans trou : ce
+ * rang est son hostIndex, la couleur de la bande et des lignes d'appel.
+ */
+function toneCard(texts: readonly string[]): Line[] {
+  const hosts: string[] = []
+  const indexOf: IndexOf = name => hosts.indexOf(name)
+  let head = true
+  let dim = false
+  return texts.map((t): Line => {
+    if (t === EMPTY_CARD || t === LOOK || t.startsWith(VIEW_NONE) || t.startsWith(VIEW_GONE)) {
+      if (t !== EMPTY_CARD) head = false
+      return [{ text: t, tone: 'attenue' }]
+    }
+    if (head && t.endsWith(SEP + GONE)) {
+      hosts.push(t.slice(0, t.length - SEP.length - GONE.length))
+      return [{ text: t, tone: 'attenue' }]
+    }
+    if (t.startsWith(VIEW_HEAD) && t.endsWith(VIEW_TAIL)) {
+      head = false
+      const host = t.slice(VIEW_HEAD.length, t.length - VIEW_TAIL.length)
+      return norm([
+        { text: VIEW_HEAD, tone: 'attenue' },
+        { text: host, tone: wordTone(host, indexOf, true) },
+        { text: VIEW_TAIL, tone: 'attenue' },
+      ])
+    }
+    if (t.length > QUOTE_OPEN.length + QUOTE_CLOSE.length && t.startsWith(QUOTE_OPEN) && t.endsWith(QUOTE_CLOSE)) {
+      if (dim) return [{ text: t, tone: 'attenue' }]
+      return norm([
+        { text: QUOTE_OPEN, tone: 'attenue' },
+        { text: t.slice(QUOTE_OPEN.length, t.length - QUOTE_CLOSE.length), tone: 'texte' },
+        { text: QUOTE_CLOSE, tone: 'attenue' },
+      ])
+    }
+    if (head && !SUMMARY.test(t)) {
+      const m = MACHINE_LINE.exec(t)
+      if (m !== null) hosts.push(m[1] ?? '')
+    }
+    dim = t.endsWith(SEP + SEEN)
+    return toneLine(t, indexOf)
+  })
+}
+
+/** La carte /clair (spec §4.4), calculée au moment de la commande. */
+export function cardLines(s: ClairState, args: string, _now: number): Line[] {
+  return toneCard(cardTexts(s, args))
+}
+
+/** Le texte stable de la carte, lu par le modèle : une ligne de texte par ligne, rien d'autre. */
+export function cardText(lines: Line[]): string {
+  return lines.map(textOf).join('\n')
+}
+
+// Spec §10 : CommandOutput reçoit le texte de la commande précédé du nom du plugin et de « : »
+// (relevé par la sonde de la tâche 2) ; ce préfixe n'est pas une ligne de la carte.
+const ENGINE_PREFIX = 'mode-clair: '
+
+/** Relit une carte depuis son seul texte (CommandOutput, session reprise) : parseCard(cardText(L)) == L. */
+export function parseCard(text: string): Line[] {
+  const own = text.startsWith(ENGINE_PREFIX) ? text.slice(ENGINE_PREFIX.length) : text
+  return toneCard(own.split(/\r?\n/).filter(l => l !== ''))
+}

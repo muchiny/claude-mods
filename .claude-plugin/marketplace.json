@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "muchini-mods",
+  "owner": { "name": "muchiny" },
+  "metadata": { "description": "Mods Claude Code de muchiny." },
+  "plugins": [
+    {
+      "name": "mode-clair",
+      "source": "./mode-clair",
+      "description": "Mode clair : bande Superpowers/ultracode/bridge-mcp au-dessus de la saisie et carte /clair.",
+      "version": "0.2.0"
+    }
+  ]
+}

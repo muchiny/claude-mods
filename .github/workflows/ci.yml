@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Les mods demandent Claude Code 2.1.296 ou plus récent.
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code@latest
+
+      - name: Claude Code version
+        run: claude --version
+
+      - name: Validate marketplace
+        run: claude plugin validate .
+
+      - name: Validate mode-clair
+        run: claude plugin validate mode-clair
+
+      - name: Test mode-clair
+        run: claude plugin test mode-clair
+
+  hygiene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      # Ce dépôt est public : aucun chemin personnel ni secret ne doit y entrer.
+      - name: No personal paths or secret-like strings
+        run: |
+          if grep -rInE '/home/(muchini|loic)|gho_[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9_-]{10,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----' \
+              --exclude-dir=.git --exclude-dir=node_modules --exclude=ci.yml .; then
+            echo "::error::Chemin personnel ou secret détecté"
+            exit 1
+          fi

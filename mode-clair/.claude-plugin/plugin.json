@@ -1,0 +1,14 @@
+{
+  "name": "mode-clair",
+  "version": "0.2.0",
+  "description": "Mode clair : rien au repos et aucun fond peint ; une ligne par appel à bridge-mcp (machine, vrai résultat, lecture ou modification), les workflows ultracode et les étapes Superpowers au-dessus de la saisie, et /clair en carte dans la conversation.",
+  "author": {
+    "name": "muchiny",
+    "url": "https://github.com/muchiny"
+  },
+  "homepage": "https://github.com/muchiny/claude-mods",
+  "repository": "https://github.com/muchiny/claude-mods",
+  "license": "MIT",
+  "keywords": ["clarity", "accessibility", "superpowers", "workflow", "bridge-mcp", "ssh"],
+  "types": "./types/index.d.ts"
+}

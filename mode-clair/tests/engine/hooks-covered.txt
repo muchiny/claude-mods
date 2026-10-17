@@ -1,0 +1,22 @@
+session.start :: session.start > enregistre /clair et ne pose aucune entrée de ligne d’état
+command.run{command=clair} :: /clair : command.run et CommandOutput > command.run rend la carte en texte, puis CommandOutput la dessine ligne à ligne
+tool.call{tool=Bash} :: tool.call Bash > un appel CLI réussi : fait, lecture, sur sa machine
+tool.call{tool=Bash} :: tool.call Bash > run_in_background : ignoré, rien n’est écrit
+tool.call{tool=/"^mcp__"/} :: tool.call mcp__ > en cours dès le début du tool.call, fait à la fin
+classic.PermissionDenied :: classic.PermissionDenied et texte de refus du moteur > PermissionDenied : refusé par Claude Code, avant même la fin de l’appel
+classic.Elicitation :: classic.Elicitation et classic.ElicitationResult > la ligne d’état seulement pendant l’attente, puis décliné
+classic.ElicitationResult :: classic.Elicitation et classic.ElicitationResult > accepté avec confirm = true : accord oui
+turn.complete :: turn.complete > les appels de la boucle encore en cours deviennent interrompus
+turn.complete :: ui.render AbovePrompt > un agent lancé en arrière-plan sous le plan garde l’étape dans la bande au repos, jusqu’à la fin de sa boucle
+tool.call{tool=Skill} :: tool.call Skill, Agent, Write et Edit > une session Superpowers : plan, tâches, tâche courante
+tool.call{tool=Agent} :: tool.call Skill, Agent, Write et Edit > une session Superpowers : plan, tâches, tâche courante
+tool.call{tool=Agent} :: ui.render AbovePrompt > un agent lancé en arrière-plan sous le plan garde l’étape dans la bande au repos, jusqu’à la fin de sa boucle
+tool.call{tool=Write|Edit} :: tool.call Skill, Agent, Write et Edit > Edit d’un plan : le fichier est relu avec $.fs.read
+tool.call{tool=Workflow} :: tool.call Workflow, minuteur du journal et session.append > le minuteur du journal lit le journal quand sa taille change, et seulement alors
+session.append :: tool.call Workflow, minuteur du journal et session.append > la notification de fin termine le workflow et arrête le minuteur
+ui.render{component=AbovePrompt} :: ui.render AbovePrompt > un appel en cours tient la bande sous le rendu du moteur, puis la bande se vide
+ui.render{component=ToolUse} :: ui.render des rangées d’appels > un appel seul : sa ligne avec le rendu du moteur, sur chaque surface
+ui.render{component=ToolUse} :: ui.render des rangées d’appels > pendant le formulaire, la rangée de l’appel attend ton accord, puis redevient la ligne de l’appel
+ui.render{component=ToolGroup} :: ui.render des rangées d’appels > groupe replié : la ligne du moteur, puis une ligne par appel bridge suivi
+ui.render{component=CommandOutput, props has {command=clair}} :: /clair : command.run et CommandOutput > une carte se redessine depuis son seul texte, même sans aucun état (session reprise, /clear)
+ui.render{component=SessionMode} :: ui.render SessionMode et apparence > l’étiquette clair ✗ 1 après un problème, plus rien après /clair
