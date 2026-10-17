@@ -7,10 +7,21 @@
 // machine. La carte est d'abord une suite de lignes de texte ; c'est ce qui
 // permet à parseCard de la redessiner à l'identique depuis e.props.text.
 
-import type { BridgeCall, CallState, ClairState, Line, Nature, Piece, Superpowers, Tone, Waiting, Workflow } from '../types'
+import type {
+  BridgeCall,
+  CallState,
+  ClairState,
+  Line,
+  Nature,
+  Piece,
+  Superpowers,
+  Tone,
+  Waiting,
+  Workflow,
+} from '../types'
 import { steps } from './bridge'
 import { fr } from './fr'
-import { STATE_TABLE, hostIndex, machines, problems, unseenProblems } from './state'
+import { hostIndex, machines, problems, STATE_TABLE, unseenProblems } from './state'
 import { active, currentPhase } from './workflow'
 
 export type Ctx = { now: number; columns: number; isWorking: boolean; viewAgentId?: string }
@@ -30,10 +41,20 @@ const REMOTE = fr('à distance')
 const QUIET = fr('sans nouvelles')
 const STALE = fr('abandonné')
 const WAITS = fr('attend ton accord')
-const NATURE: Readonly<Record<Nature, string>> = { lecture: 'lecture', 'peut-modifier': 'peut modifier', inconnu: 'inconnu' }
+const NATURE: Readonly<Record<Nature, string>> = {
+  lecture: 'lecture',
+  'peut-modifier': 'peut modifier',
+  inconnu: 'inconnu',
+}
 const MARK_SIGN = { ok: '✓', ko: '✗', off: '○' } as const
 const SIGNS: readonly string[] = [WAIT_SIGN, '●', '✓', '✗', '○', '?']
-const SIGN_TONE: Readonly<Record<string, Tone>> = { '●': 'accent', '✓': 'ok', '✗': 'erreur', '○': 'attenue', '?': 'attenue' }
+const SIGN_TONE: Readonly<Record<string, Tone>> = {
+  '●': 'accent',
+  '✓': 'ok',
+  '✗': 'erreur',
+  '○': 'attenue',
+  '?': 'attenue',
+}
 const WORD_TONE: ReadonlyMap<string, Tone> = new Map<string, Tone>([
   [NOTHING_RAN, 'attenue'],
   [SEE_CARD, 'attenue'],
@@ -69,14 +90,15 @@ function norm(line: readonly Piece[]): Line {
   for (const p of line) {
     if (p.text === '') continue
     const last = out[out.length - 1]
-    if (last !== undefined && sameTone(last.tone, p.tone)) out[out.length - 1] = { text: last.text + p.text, tone: last.tone }
+    if (last !== undefined && sameTone(last.tone, p.tone))
+      out[out.length - 1] = { text: last.text + p.text, tone: last.tone }
     else out.push({ text: p.text, tone: p.tone })
   }
   return out
 }
 
 function textOf(line: Line): string {
-  return line.map(p => p.text).join('')
+  return line.map((p) => p.text).join('')
 }
 
 function label(state: CallState): string {
@@ -155,7 +177,13 @@ function callText(c: BridgeCall, inCard: boolean): string {
   else parts.push(label(c.state))
   if (c.state === 'echec-machine' && c.code !== undefined) parts.push(codeText(c.code))
   // Nature : sur les états où l'appel a tourné ou a pu tourner (note sous la table §5.4).
-  if (c.state === 'fait' || c.state === 'code' || c.state === 'echec-machine' || c.state === 'delai-depasse' || c.truncated) {
+  if (
+    c.state === 'fait' ||
+    c.state === 'code' ||
+    c.state === 'echec-machine' ||
+    c.state === 'delai-depasse' ||
+    c.truncated
+  ) {
     parts.push(fr(NATURE[c.nature]))
   }
   if (!row.isCall) parts.push(NOTHING_RAN)
@@ -166,12 +194,12 @@ function callText(c: BridgeCall, inCard: boolean): string {
 
 /** fr() sur un texte qui contient des identifiants : seules les parties autour d'eux sont touchées. */
 function frAround(s: string, ids: readonly string[]): string {
-  const id = ids.find(x => x !== '' && s.includes(x))
+  const id = ids.find((x) => x !== '' && s.includes(x))
   if (id === undefined) return fr(s)
-  const others = ids.filter(x => x !== id)
+  const others = ids.filter((x) => x !== id)
   return s
     .split(id)
-    .map(part => frAround(part, others))
+    .map((part) => frAround(part, others))
     .join(id)
 }
 
@@ -184,7 +212,9 @@ function frAround(s: string, ids: readonly string[]): string {
  */
 function pipelineText(c: BridgeCall): string {
   const ids = [c.host ?? '', c.tool]
-  const parts = steps(c).map(st => (st.label === NOTHING_RAN ? NOTHING_RAN : `${MARK_SIGN[st.mark]} ${frAround(one(st.label), ids)}`))
+  const parts = steps(c).map((st) =>
+    st.label === NOTHING_RAN ? NOTHING_RAN : `${MARK_SIGN[st.mark]} ${frAround(one(st.label), ids)}`,
+  )
   if (c.truncated) parts.push(TRUNCATED)
   return parts.join(SEP)
 }
@@ -197,7 +227,7 @@ function width(text: string): number {
 }
 
 function stateIndex(s: ClairState): IndexOf {
-  return name => hostIndex(s, name)
+  return (name) => hostIndex(s, name)
 }
 
 /**
@@ -251,9 +281,16 @@ function waitingCallLine(c: BridgeCall, s: ClairState, columns: number): Line {
   const tool = [...one(c.tool)]
   const max = Number.isFinite(columns) ? Math.floor(columns) : 0
   const room = max - width(textOf([...head, ...tail])) - SEP.length
-  if (tool.length <= room) return norm([...head, { text: SEP, tone: 'attenue' }, { text: tool.join(''), tone: 'texte' }, ...tail])
+  if (tool.length <= room)
+    return norm([...head, { text: SEP, tone: 'attenue' }, { text: tool.join(''), tone: 'texte' }, ...tail])
   if (room >= 2) {
-    return norm([...head, { text: SEP, tone: 'attenue' }, { text: tool.slice(0, room - 1).join(''), tone: 'texte' }, { text: '…', tone: 'attenue' }, ...tail])
+    return norm([
+      ...head,
+      { text: SEP, tone: 'attenue' },
+      { text: tool.slice(0, room - 1).join(''), tone: 'texte' },
+      { text: '…', tone: 'attenue' },
+      ...tail,
+    ])
   }
   return fit(norm([...head, ...tail]), columns)
 }
@@ -314,9 +351,9 @@ function workflowText(w: Workflow): string {
   if (w.status === 'sans-nouvelles') parts.push(QUIET)
   const phase = currentPhase(w)
   if (phase !== null) parts.push(one(phase))
-  const running = w.agents.filter(a => a.state === 'en-cours').length
+  const running = w.agents.filter((a) => a.state === 'en-cours').length
   if (running > 0) parts.push(fr(plural(running, 'agent', 'agents')))
-  const failed = w.agents.filter(a => a.state === 'echec').length
+  const failed = w.agents.filter((a) => a.state === 'echec').length
   if (failed > 0) parts.push(`✗ ${fr(`${failed} en échec`)}`)
   return parts.join(SEP)
 }
@@ -335,7 +372,7 @@ function hostTone(s: ClairState, host: string | null): Tone {
 
 function waitingInView(s: ClairState, w: Waiting, viewAgentId: string | undefined): boolean {
   if (viewAgentId === undefined) return true
-  const c = s.calls.find(x => x.id === w.callId)
+  const c = s.calls.find((x) => x.id === w.callId)
   return c !== undefined && c.agentId === viewAgentId
 }
 
@@ -373,9 +410,12 @@ export function bandLines(s: ClairState, ctx: Ctx): Line[] {
   const w = s.waiting
   if (w !== null && waitingInView(s, w, ctx.viewAgentId)) return [fit(waitLine(s, w), ctx.columns)]
   const lines: Line[] = []
-  const run = s.calls.filter(c => c.state === 'en-cours' && (ctx.viewAgentId === undefined || c.agentId === ctx.viewAgentId))
+  const run = s.calls.filter(
+    (c) => c.state === 'en-cours' && (ctx.viewAgentId === undefined || c.agentId === ctx.viewAgentId),
+  )
   const first = run[0]
-  if (first !== undefined) lines.push(run.length === 1 ? toneLine(callText(first, false), stateIndex(s)) : runningLine(s, run))
+  if (first !== undefined)
+    lines.push(run.length === 1 ? toneLine(callText(first, false), stateIndex(s)) : runningLine(s, run))
   if (ctx.viewAgentId === undefined) {
     const wf = latest(active(s.workflows))
     if (wf !== undefined) lines.push(toneLine(workflowText(wf), NO_HOSTS))
@@ -384,7 +424,7 @@ export function bandLines(s: ClairState, ctx: Ctx): Line[] {
     const sp = ctx.isWorking || agentRuns ? spText(s.superpowers, true) : null
     if (sp !== null) lines.push(toneLine(sp, NO_HOSTS))
   }
-  return lines.slice(0, 2).map(l => fit(l, ctx.columns))
+  return lines.slice(0, 2).map((l) => fit(l, ctx.columns))
 }
 
 const EMPTY_CARD = fr('rien depuis le début de la session')
@@ -419,28 +459,32 @@ function cardTexts(s: ClairState, args: string): string[] {
   // hostIndex de sa machine (spec §4.7), même quand le plafond de 200 appels a
   // évincé tous les siens (machines() la saute alors) ; elle reste, atténuée.
   const hostLines = s.hostOrder.map((host, index) => {
-    const m = ms.find(x => x.index === index)
+    const m = ms.find((x) => x.index === index)
     return m === undefined ? `${one(host)}${SEP}${GONE}` : machineText(m)
   })
   const quote = (reason: string): string => `${QUOTE_OPEN}${one(reason)}${QUOTE_CLOSE}`
   const name = args.trim().split(/\s+/)[0] ?? ''
   if (name !== '') {
     const out = [...hostLines]
-    const m = ms.find(x => x.host === name)
+    const m = ms.find((x) => x.host === name)
     if (m === undefined) return [...out, `${s.hostOrder.includes(name) ? VIEW_GONE : VIEW_NONE}${one(name)}`]
     out.push(`${VIEW_HEAD}${one(m.host)}${VIEW_TAIL}`, callText(m.last, true), pipelineText(m.last))
     if (m.last.reason !== undefined) out.push(quote(m.last.reason))
     return out
   }
   const sp = spText(s.superpowers, false)
-  const wfs = s.workflows.filter(w => w.status === 'en-cours' || w.status === 'distant' || w.status === 'sans-nouvelles')
+  const wfs = s.workflows.filter(
+    (w) => w.status === 'en-cours' || w.status === 'distant' || w.status === 'sans-nouvelles',
+  )
   if (s.calls.length === 0 && sp === null && wfs.length === 0) return [EMPTY_CARD]
   const out: string[] = []
   if (s.calls.length > 0) {
     const unseen = unseenProblems(s)
     const total = ms.reduce((n, m) => n + m.calls, 0)
     const problemsText = unseen > 0 ? fr(plural(unseen, 'problème non vu', 'problèmes non vus')) : NONE_UNSEEN
-    out.push(`${fr(plural(ms.length, 'machine', 'machines'))}${SEP}${fr(plural(total, 'appel', 'appels'))}${SEP}${problemsText}`)
+    out.push(
+      `${fr(plural(ms.length, 'machine', 'machines'))}${SEP}${fr(plural(total, 'appel', 'appels'))}${SEP}${problemsText}`,
+    )
     out.push(...hostLines)
   }
   const look = problems(s).slice(0, 5)
@@ -464,7 +508,7 @@ function cardTexts(s: ClairState, args: string): string[] {
  */
 function toneCard(texts: readonly string[]): Line[] {
   const hosts: string[] = []
-  const indexOf: IndexOf = name => hosts.indexOf(name)
+  const indexOf: IndexOf = (name) => hosts.indexOf(name)
   let head = true
   let dim = false
   return texts.map((t): Line => {
@@ -519,5 +563,5 @@ const ENGINE_PREFIX = 'mode-clair: '
 /** Relit une carte depuis son seul texte (CommandOutput, session reprise) : parseCard(cardText(L)) == L. */
 export function parseCard(text: string): Line[] {
   const own = text.startsWith(ENGINE_PREFIX) ? text.slice(ENGINE_PREFIX.length) : text
-  return toneCard(own.split(/\r?\n/).filter(l => l !== ''))
+  return toneCard(own.split(/\r?\n/).filter((l) => l !== ''))
 }

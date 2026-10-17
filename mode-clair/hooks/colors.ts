@@ -50,12 +50,18 @@ function rgbOf(hex: string): [number, number, number] {
 }
 
 function hexOf(rgb: readonly number[]): string {
-  return `#${rgb.map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('')}`
+  return `#${rgb
+    .map((v) =>
+      Math.max(0, Math.min(255, Math.round(v)))
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}`
 }
 
 /** Teinte TSV en degrés, dans [0, 360) ; 0 pour un gris. */
 export function hue(hex: string): number {
-  const [r, g, b] = rgbOf(hex).map(v => v / 255) as [number, number, number]
+  const [r, g, b] = rgbOf(hex).map((v) => v / 255) as [number, number, number]
   const max = Math.max(r, g, b)
   const d = max - Math.min(r, g, b)
   if (d === 0) return 0

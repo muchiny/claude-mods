@@ -1,19 +1,39 @@
 import { describe, expect, test } from 'claude-code/testing'
-
-import type { BridgeCall, CallState, ClairState, Line, Superpowers, Tone, Workflow } from '../../types'
 import { steps } from '../../hooks/bridge'
 import { colorOf } from '../../hooks/colors'
 import { fr } from '../../hooks/fr'
 import { STATE_TABLE, setWaiting } from '../../hooks/state'
 import type { Ctx } from '../../hooks/view'
-import { WAIT_SIGN, bandLines, callLine, cardLines, cardText, fit, modeLabel, parseCard, pipeline, statusText } from '../../hooks/view'
+import {
+  bandLines,
+  callLine,
+  cardLines,
+  cardText,
+  fit,
+  modeLabel,
+  parseCard,
+  pipeline,
+  statusText,
+  WAIT_SIGN,
+} from '../../hooks/view'
+import type { BridgeCall, CallState, ClairState, Line, Superpowers, Tone, Workflow } from '../../types'
 
 const NBSP = '\u00A0'
 const RIEN = 'rien n’a tourné'
 // Texte réel d'un échec non traduit : refs/bridge-facts.md §1.4 (VERIFIED : ssh_output_fetch par la CLI, sortie 1).
 const OUTPUT_CACHE = 'Output cache is not available. This tool is only supported in MCP server mode.'
 // Les 7 machines réelles de l'utilisateur (instructions du serveur ssh-bridge), plus deux noms inhabituels.
-const HOSTS = ['raspberry', 'win2012', 'win2012ps', 'win2025', 'win2025ntlm', 'win2025ps', 'win2025tls', 'Pi.K3s-01', 'web-02.prod']
+const HOSTS = [
+  'raspberry',
+  'win2012',
+  'win2012ps',
+  'win2025',
+  'win2025ntlm',
+  'win2025ps',
+  'win2025tls',
+  'Pi.K3s-01',
+  'web-02.prod',
+]
 const ALL_STATES = Object.keys(STATE_TABLE) as CallState[]
 
 const call = (patch: Partial<BridgeCall> = {}): BridgeCall => ({
@@ -69,8 +89,8 @@ const workflow = (patch: Partial<Workflow> = {}): Workflow => ({
   ...patch,
 })
 
-const text = (line: Line) => line.map(p => p.text).join('')
-const width = (s: string) => [...s].filter(ch => !/[\uFE00-\uFE0F]/.test(ch)).length
+const text = (line: Line) => line.map((p) => p.text).join('')
+const width = (s: string) => [...s].filter((ch) => !/[\uFE00-\uFE0F]/.test(ch)).length
 const label = (st: CallState) => fr(STATE_TABLE[st].label)
 const CTX: Ctx = { now: 10_000, columns: 120, isWorking: true }
 const M = (i: number): Tone => ({ machine: i })
@@ -142,7 +162,14 @@ describe('callLine : une ligne par appel (spec §4.3, table §5.4)', () => {
       { text: label('delai-depasse'), tone: 'attention' },
       { text: ' · peut modifier', tone: 'attenue' },
     ])
-    const later = call({ id: 'toolu_z#0', toolUseId: 'toolu_z', host: 'win2025', state: 'injoignable', startedAt: 2_000, endedAt: 2_100 })
+    const later = call({
+      id: 'toolu_z#0',
+      toolUseId: 'toolu_z',
+      host: 'win2025',
+      state: 'injoignable',
+      startedAt: 2_000,
+      endedAt: 2_100,
+    })
     const card = cardLines(stateOf([c, later]), '', 10_000).map(text)
     expect(card[card.length - 1]).toBe(`✗ win2025 · ${label('delai-depasse')} · peut modifier`)
   })
@@ -177,7 +204,14 @@ describe('callLine : une ligne par appel (spec §4.3, table §5.4)', () => {
 // remplace la zone de saisie ; ni la bande ni la ligne d'état ne se voient, seule la ligne de
 // l'appel reste (`● raspberry · ssh_file_write`). Elle dit alors l'attente.
 describe('callLine pendant le formulaire de confirmation (« à toi » sur la ligne de l’appel)', () => {
-  const asking = call({ id: 'toolu_w#0', toolUseId: 'toolu_w', tool: 'ssh_file_write', nature: 'peut-modifier', state: 'en-cours', endedAt: undefined })
+  const asking = call({
+    id: 'toolu_w#0',
+    toolUseId: 'toolu_w',
+    tool: 'ssh_file_write',
+    nature: 'peut-modifier',
+    state: 'en-cours',
+    endedAt: undefined,
+  })
   const waiting = { tool: 'ssh_file_write', host: 'raspberry', callId: 'toolu_w#0', since: 2_000 }
 
   // §5.4 : attente « à toi », en cours
@@ -204,7 +238,14 @@ describe('callLine pendant le formulaire de confirmation (« à toi » sur la li
     expect(callLine(other, stateOf([other, asking], { waiting }), 120)).toStrictEqual(callLine(other, plain, 120))
     const fallback = stateOf([other, asking], { waiting: { ...waiting, callId: null } })
     expect(callLine(asking, fallback, 120)).toStrictEqual(callLine(asking, plain, 120))
-    const unknownHost = call({ id: 'toolu_n#0', toolUseId: 'toolu_n', host: null, tool: 'ssh_exec', state: 'en-cours', endedAt: undefined })
+    const unknownHost = call({
+      id: 'toolu_n#0',
+      toolUseId: 'toolu_n',
+      host: null,
+      tool: 'ssh_exec',
+      state: 'en-cours',
+      endedAt: undefined,
+    })
     const s = stateOf([unknownHost], { waiting: { tool: 'ssh_exec', host: null, callId: 'toolu_n#0', since: 2_000 } })
     expect(text(callLine(unknownHost, s, 120))).toBe(`${WAIT_SIGN} machine inconnue · ssh_exec · attend ton accord`)
     expect(callLine(unknownHost, s, 120)[1]).toStrictEqual({ text: ' ', tone: 'texte' })
@@ -213,8 +254,17 @@ describe('callLine pendant le formulaire de confirmation (« à toi » sur la li
 
   // §5.4 : attente « à toi » ; critère 13 (terminal étroit)
   test('40 colonnes : la machine et « attend ton accord » passent avant l’outil, coupé ; 20 colonnes : sans exception', () => {
-    const long = call({ id: 'toolu_l#0', toolUseId: 'toolu_l', host: 'win2025ntlm', tool: 'ssh_win_disk_usage', state: 'en-cours', endedAt: undefined })
-    const s = stateOf([long], { waiting: { tool: 'ssh_win_disk_usage', host: 'win2025ntlm', callId: 'toolu_l#0', since: 2_000 } })
+    const long = call({
+      id: 'toolu_l#0',
+      toolUseId: 'toolu_l',
+      host: 'win2025ntlm',
+      tool: 'ssh_win_disk_usage',
+      state: 'en-cours',
+      endedAt: undefined,
+    })
+    const s = stateOf([long], {
+      waiting: { tool: 'ssh_win_disk_usage', host: 'win2025ntlm', callId: 'toolu_l#0', since: 2_000 },
+    })
     expect(text(callLine(long, s, 120))).toBe(`${WAIT_SIGN} win2025ntlm · ssh_win_disk_usage · attend ton accord`)
     const cut = callLine(long, s, 40)
     expect(text(cut)).toBe(`${WAIT_SIGN} win2025ntlm · ssh… · attend ton accord`)
@@ -235,7 +285,7 @@ describe('callLine pendant le formulaire de confirmation (« à toi » sur la li
     const s = stateOf([call(), asking], { waiting })
     expect(text(callLine(asking, s, 48))).toBe(`${WAIT_SIGN} raspberry · ssh_file_write · attend ton accord`)
     expect(text(callLine(asking, s, 47))).toBe(`${WAIT_SIGN} raspberry · ssh_file_wri… · attend ton accord`)
-    expect(callLine(asking, s, 47).find(p => p.text.startsWith('…'))?.tone).toBe('attenue')
+    expect(callLine(asking, s, 47).find((p) => p.text.startsWith('…'))?.tone).toBe('attenue')
   })
 })
 
@@ -251,14 +301,20 @@ describe('pipeline : le pipeline réel (spec §5.1)', () => {
       // bridge.steps finit les appels qui n'ont pas tourné par l'étape { label: RIEN, mark: 'off' } :
       // c'est la conclusion du pipeline, écrite sans signe (exemple de spec §5.1).
       const st = steps(c)
-      const done = st.filter(x => x.label !== RIEN)
+      const done = st.filter((x) => x.label !== RIEN)
       const line = pipeline(c)
-      const expected = st.map(x => (x.label === RIEN ? RIEN : `${x.mark === 'ok' ? '✓' : x.mark === 'ko' ? '✗' : '○'} ${x.label}`)).join(' · ')
+      const expected = st
+        .map((x) => (x.label === RIEN ? RIEN : `${x.mark === 'ok' ? '✓' : x.mark === 'ko' ? '✗' : '○'} ${x.label}`))
+        .join(' · ')
       expect(text(line)).toBe(expected)
-      const signs = line.filter(p => p.text === '✓' || p.text === '✗' || p.text === '○')
-      expect(signs.map(p => p.tone)).toStrictEqual(done.map(x => (x.mark === 'ok' ? 'ok' : x.mark === 'ko' ? 'erreur' : 'attenue')))
+      const signs = line.filter((p) => p.text === '✓' || p.text === '✗' || p.text === '○')
+      expect(signs.map((p) => p.tone)).toStrictEqual(
+        done.map((x) => (x.mark === 'ok' ? 'ok' : x.mark === 'ko' ? 'erreur' : 'attenue')),
+      )
     }
-    expect(text(pipeline(call({ host: 'win2025', state: 'injoignable', accord: 'formulaire-oui' })))).toBe(`✓ accord · ✗ win2025 injoignable · ${RIEN}`)
+    expect(text(pipeline(call({ host: 'win2025', state: 'injoignable', accord: 'formulaire-oui' })))).toBe(
+      `✓ accord · ✗ win2025 injoignable · ${RIEN}`,
+    )
   })
 
   // §5.4 : toutes les lignes (colonne « Compté comme appel de la machine »)
@@ -340,7 +396,7 @@ describe('fit : priorité machine · état (spec §4.1, critère 13)', () => {
       expect(width(t)).toBeLessThanOrEqual(20)
       expect(t.startsWith(`${STATE_TABLE[st].sign} win2025ntlm`)).toBe(true)
       expect(line[0]?.tone).toStrictEqual(STATE_TABLE[st].tone)
-      expect(line.some(p => typeof p.tone === 'object' && p.tone.machine === 0)).toBe(true)
+      expect(line.some((p) => typeof p.tone === 'object' && p.tone.machine === 0)).toBe(true)
     }
   })
 
@@ -365,8 +421,12 @@ describe('statusText et modeLabel (spec §4.5, §4.6)', () => {
   test('ligne d’état : seulement en attente', () => {
     const running = call({ host: 'win2025', state: 'en-cours', endedAt: undefined })
     expect(statusText(stateOf([running, call({ state: 'injoignable' })]))).toBeUndefined()
-    expect(statusText(stateOf([], { waiting: { tool: 'ssh_file_write', host: 'win2025', callId: null, since: 1 } }))).toBe('win2025 attend ton accord')
-    expect(statusText(stateOf([], { waiting: { tool: 'ssh_file_write', host: null, callId: null, since: 1 } }))).toBe('ssh_file_write attend ton accord')
+    expect(
+      statusText(stateOf([], { waiting: { tool: 'ssh_file_write', host: 'win2025', callId: null, since: 1 } })),
+    ).toBe('win2025 attend ton accord')
+    expect(statusText(stateOf([], { waiting: { tool: 'ssh_file_write', host: null, callId: null, since: 1 } }))).toBe(
+      'ssh_file_write attend ton accord',
+    )
   })
 
   // §5.4 : colonne « Compté dans clair ✗ n » : injoignable, échec sur la machine, erreur d’usage
@@ -393,11 +453,19 @@ describe('bandLines : la bande au-dessus de la saisie (spec §4.2)', () => {
   // §5.4 : fait, injoignable
   test('au repos, aucune ligne : ni appel en cours ni attente (critère 1)', () => {
     expect(bandLines(stateOf([]), CTX)).toStrictEqual([])
-    const done = stateOf([call(), call({ id: 'toolu_b#0', toolUseId: 'toolu_b', host: 'win2025', state: 'injoignable' })])
+    const done = stateOf([
+      call(),
+      call({ id: 'toolu_b#0', toolUseId: 'toolu_b', host: 'win2025', state: 'injoignable' }),
+    ])
     expect(bandLines(done, CTX)).toStrictEqual([])
     expect(bandLines(stateOf([], { superpowers: plan() }), { ...CTX, isWorking: false })).toStrictEqual([])
     expect(bandLines(stateOf([], { superpowers: plan({ stage: 'fin' }) }), CTX)).toStrictEqual([])
-    expect(bandLines(stateOf([], { workflows: [workflow({ status: 'fini' }), workflow({ key: 'wf_2', status: 'sans-nouvelles' })] }), CTX)).toStrictEqual([])
+    expect(
+      bandLines(
+        stateOf([], { workflows: [workflow({ status: 'fini' }), workflow({ key: 'wf_2', status: 'sans-nouvelles' })] }),
+        CTX,
+      ),
+    ).toStrictEqual([])
   })
 
   // §5.4 : en cours
@@ -418,13 +486,20 @@ describe('bandLines : la bande au-dessus de la saisie (spec §4.2)', () => {
     ]
     const lines = bandLines(stateOf(calls), CTX)
     expect(lines.map(text)).toStrictEqual(['● 3 appels · win2025, raspberry'])
-    expect(lines[0]?.find(p => p.text === 'raspberry')?.tone).toStrictEqual(M(1))
+    expect(lines[0]?.find((p) => p.text === 'raspberry')?.tone).toStrictEqual(M(1))
   })
 
   // §5.4 : en cours
   test('rafale de plus de 10 appels d’agents de workflow : une ligne, un compte, trois machines puis +n', () => {
     const calls = Array.from({ length: 12 }, (_, i) =>
-      call({ id: `toolu_r${i}#0`, toolUseId: `toolu_r${i}`, agentId: `agent-${i % 4}`, host: HOSTS[i % 5] ?? null, state: 'en-cours', endedAt: undefined }),
+      call({
+        id: `toolu_r${i}#0`,
+        toolUseId: `toolu_r${i}`,
+        agentId: `agent-${i % 4}`,
+        host: HOSTS[i % 5] ?? null,
+        state: 'en-cours',
+        endedAt: undefined,
+      }),
     )
     const lines = bandLines(stateOf(calls), CTX)
     expect(lines.map(text)).toStrictEqual(['● 12 appels · raspberry, win2012, win2012ps +2'])
@@ -434,7 +509,14 @@ describe('bandLines : la bande au-dessus de la saisie (spec §4.2)', () => {
 
   // §5.4 : attente « à toi », en cours
   test('« à toi » passe avant tout et reste seul', () => {
-    const running = call({ id: 'toolu_w#0', toolUseId: 'toolu_w', host: 'win2025', tool: 'ssh_file_write', state: 'en-cours', endedAt: undefined })
+    const running = call({
+      id: 'toolu_w#0',
+      toolUseId: 'toolu_w',
+      host: 'win2025',
+      tool: 'ssh_file_write',
+      state: 'en-cours',
+      endedAt: undefined,
+    })
     const s = stateOf([call(), running], {
       waiting: { tool: 'ssh_file_write', host: 'win2025', callId: 'toolu_w#0', since: 2_000 },
       workflows: [workflow()],
@@ -443,20 +525,31 @@ describe('bandLines : la bande au-dessus de la saisie (spec §4.2)', () => {
     const lines = bandLines(s, CTX)
     expect(lines.map(text)).toStrictEqual([`${WAIT_SIGN} à toi${NBSP}: réponds au formulaire (win2025)`])
     expect(lines[0]?.[0]).toStrictEqual({ text: `${WAIT_SIGN} à toi`, tone: 'attention' })
-    expect(lines[0]?.find(p => p.text === 'win2025')?.tone).toStrictEqual(M(1))
+    expect(lines[0]?.find((p) => p.text === 'win2025')?.tone).toStrictEqual(M(1))
     const noHost = stateOf([], { waiting: { tool: 'ssh_file_write', host: null, callId: null, since: 2_000 } })
-    expect(bandLines(noHost, CTX).map(text)).toStrictEqual([`${WAIT_SIGN} à toi${NBSP}: réponds au formulaire (ssh_file_write)`])
+    expect(bandLines(noHost, CTX).map(text)).toStrictEqual([
+      `${WAIT_SIGN} à toi${NBSP}: réponds au formulaire (ssh_file_write)`,
+    ])
   })
 
   // §5.4 : en cours
   test('ligne 2 : workflow, sinon étape Superpowers ; un appel en cours n’est jamais masqué', () => {
     const running = call({ host: 'win2025', tool: 'ssh_win_disk_usage', state: 'en-cours', endedAt: undefined })
     const both = bandLines(stateOf([running], { workflows: [workflow()], superpowers: plan() }), CTX).map(text)
-    expect(both).toStrictEqual(['● win2025 · ssh_win_disk_usage', '● workflow mode-clair-understand · Audit · 3 agents'])
+    expect(both).toStrictEqual([
+      '● win2025 · ssh_win_disk_usage',
+      '● workflow mode-clair-understand · Audit · 3 agents',
+    ])
     const withPlan = bandLines(stateOf([running], { superpowers: plan() }), CTX).map(text)
-    expect(withPlan).toStrictEqual(['● win2025 · ssh_win_disk_usage', `plan «${NBSP}mode-clair 0.2.0 — plan d'implémentation${NBSP}» · tâche 3 sur 17`])
+    expect(withPlan).toStrictEqual([
+      '● win2025 · ssh_win_disk_usage',
+      `plan «${NBSP}mode-clair 0.2.0 — plan d'implémentation${NBSP}» · tâche 3 sur 17`,
+    ])
     const noCall = bandLines(stateOf([], { workflows: [workflow()], superpowers: plan() }), CTX).map(text)
-    expect(noCall).toStrictEqual(['● workflow mode-clair-understand · Audit · 3 agents', `plan «${NBSP}mode-clair 0.2.0 — plan d'implémentation${NBSP}» · tâche 3 sur 17`])
+    expect(noCall).toStrictEqual([
+      '● workflow mode-clair-understand · Audit · 3 agents',
+      `plan «${NBSP}mode-clair 0.2.0 — plan d'implémentation${NBSP}» · tâche 3 sur 17`,
+    ])
   })
 
   // §5.4 : aucune (ligne Superpowers, spec §5.2)
@@ -482,9 +575,13 @@ describe('bandLines : la bande au-dessus de la saisie (spec §4.2)', () => {
     const idle = { ...CTX, isWorking: false }
     const title = `plan «${NBSP}mode-clair 0.2.0 — plan d'implémentation${NBSP}»`
     const running = plan({ current: 2, runningAgents: ['af6f3b628322fc241'] })
-    expect(bandLines(stateOf([], { superpowers: running }), idle).map(text)).toStrictEqual([`${title} · tâche 2 sur 17`])
+    expect(bandLines(stateOf([], { superpowers: running }), idle).map(text)).toStrictEqual([
+      `${title} · tâche 2 sur 17`,
+    ])
     expect(bandLines(stateOf([], { superpowers: plan({ current: 2 }) }), idle)).toStrictEqual([])
-    expect(bandLines(stateOf([], { superpowers: running }), { ...idle, viewAgentId: 'af6f3b628322fc241' })).toStrictEqual([])
+    expect(
+      bandLines(stateOf([], { superpowers: running }), { ...idle, viewAgentId: 'af6f3b628322fc241' }),
+    ).toStrictEqual([])
     expect(bandLines(stateOf([], { superpowers: { ...running, isStale: true } }), idle)).toStrictEqual([])
     expect(bandLines(stateOf([], { superpowers: { ...running, stage: 'fin' } }), idle)).toStrictEqual([])
   })
@@ -501,22 +598,39 @@ describe('bandLines : la bande au-dessus de la saisie (spec §4.2)', () => {
     })
     const lines = bandLines(stateOf([], { workflows: [workflow(), failing] }), CTX)
     expect(lines.map(text)).toStrictEqual(['● workflow mode-clair-understand · Audit · 1 agent · ✗ 1 en échec'])
-    expect(lines[0]?.find(p => p.text === '✗')?.tone).toBe('erreur')
+    expect(lines[0]?.find((p) => p.text === '✗')?.tone).toBe('erreur')
     const remote = workflow({ journalPath: null, status: 'distant', agents: [] })
-    expect(bandLines(stateOf([], { workflows: [remote] }), CTX).map(text)).toStrictEqual(['● workflow mode-clair-understand · à distance'])
+    expect(bandLines(stateOf([], { workflows: [remote] }), CTX).map(text)).toStrictEqual([
+      '● workflow mode-clair-understand · à distance',
+    ])
   })
 
   // §5.4 : en cours, attente « à toi »
   test('vue d’un sous-agent : seuls ses appels et son « à toi », ni workflow ni Superpowers', () => {
-    const mine = call({ id: 'toolu_m#0', toolUseId: 'toolu_m', agentId: 'a1', host: 'win2025', state: 'en-cours', endedAt: undefined })
-    const main = call({ id: 'toolu_p#0', toolUseId: 'toolu_p', host: 'raspberry', state: 'en-cours', endedAt: undefined })
+    const mine = call({
+      id: 'toolu_m#0',
+      toolUseId: 'toolu_m',
+      agentId: 'a1',
+      host: 'win2025',
+      state: 'en-cours',
+      endedAt: undefined,
+    })
+    const main = call({
+      id: 'toolu_p#0',
+      toolUseId: 'toolu_p',
+      host: 'raspberry',
+      state: 'en-cours',
+      endedAt: undefined,
+    })
     const s = stateOf([main, mine], { workflows: [workflow()], superpowers: plan() })
     expect(bandLines(s, { ...CTX, viewAgentId: 'a1' }).map(text)).toStrictEqual(['● win2025 · ssh_disk_usage'])
     expect(bandLines(s, { ...CTX, viewAgentId: 'a2' })).toStrictEqual([])
     const waitMain = { ...s, waiting: { tool: 'ssh_exec', host: 'raspberry', callId: 'toolu_p#0', since: 2_000 } }
     expect(bandLines(waitMain, { ...CTX, viewAgentId: 'a1' }).map(text)).toStrictEqual(['● win2025 · ssh_disk_usage'])
     const waitMine = { ...s, waiting: { tool: 'ssh_exec', host: 'win2025', callId: 'toolu_m#0', since: 2_000 } }
-    expect(bandLines(waitMine, { ...CTX, viewAgentId: 'a1' }).map(text)).toStrictEqual([`${WAIT_SIGN} à toi${NBSP}: réponds au formulaire (win2025)`])
+    expect(bandLines(waitMine, { ...CTX, viewAgentId: 'a1' }).map(text)).toStrictEqual([
+      `${WAIT_SIGN} à toi${NBSP}: réponds au formulaire (win2025)`,
+    ])
   })
 
   // §5.4 : en cours
@@ -533,12 +647,28 @@ describe('bandLines : la bande au-dessus de la saisie (spec §4.2)', () => {
 
 describe('carte /clair (spec §4.4)', () => {
   const pi = call({ id: 'toolu_1#0', toolUseId: 'toolu_1', startedAt: 1_000, endedAt: 1_100 })
-  const winDown = call({ id: 'toolu_2#0', toolUseId: 'toolu_2', host: 'win2025', tool: 'ssh_win_disk_usage', state: 'injoignable', startedAt: 1_200, endedAt: 1_300 })
-  const pi2 = call({ id: 'toolu_3#0', toolUseId: 'toolu_3', tool: 'ssh_service_status', startedAt: 1_400, endedAt: 1_500 })
+  const winDown = call({
+    id: 'toolu_2#0',
+    toolUseId: 'toolu_2',
+    host: 'win2025',
+    tool: 'ssh_win_disk_usage',
+    state: 'injoignable',
+    startedAt: 1_200,
+    endedAt: 1_300,
+  })
+  const pi2 = call({
+    id: 'toolu_3#0',
+    toolUseId: 'toolu_3',
+    tool: 'ssh_service_status',
+    startedAt: 1_400,
+    endedAt: 1_500,
+  })
 
   // §5.4 : aucune (carte vide)
   test('rien dans la session : une seule ligne atténuée', () => {
-    expect(cardLines(stateOf([]), '', 10_000)).toStrictEqual([[{ text: 'rien depuis le début de la session', tone: 'attenue' }]])
+    expect(cardLines(stateOf([]), '', 10_000)).toStrictEqual([
+      [{ text: 'rien depuis le début de la session', tone: 'attenue' }],
+    ])
   })
 
   // §5.4 : fait, injoignable (colonnes « Compté dans clair ✗ n » et « Compté comme appel de la machine »)
@@ -549,10 +679,10 @@ describe('carte /clair (spec §4.4)', () => {
       'raspberry · 2 appels · ✓ ssh_service_status',
       'win2025 · 0 appel · ✗ injoignable',
     ])
-    expect(lines[0]?.find(p => p.text === '1 problème non vu')?.tone).toBe('erreur')
+    expect(lines[0]?.find((p) => p.text === '1 problème non vu')?.tone).toBe('erreur')
     expect(lines[1]?.[0]).toStrictEqual({ text: 'raspberry', tone: M(0) })
     expect(lines[2]?.[0]).toStrictEqual({ text: 'win2025', tone: M(1) })
-    expect(lines[2]?.find(p => p.text === 'injoignable')?.tone).toBe('erreur')
+    expect(lines[2]?.find((p) => p.text === 'injoignable')?.tone).toBe('erreur')
   })
 
   // §5.4 : injoignable, fait
@@ -568,7 +698,14 @@ describe('carte /clair (spec §4.4)', () => {
   // §5.4 : injoignable (colonne « Dans à regarder »)
   test('« à regarder » : 5 au plus, le plus récent en pipeline une seule fois, ceux d’avant le dernier /clair atténués', () => {
     const fails = Array.from({ length: 7 }, (_, i) =>
-      call({ id: `toolu_f${i}#0`, toolUseId: `toolu_f${i}`, host: i % 2 === 0 ? 'win2025' : 'raspberry', state: 'injoignable', startedAt: 2_000 + i * 100, endedAt: 2_050 + i * 100 }),
+      call({
+        id: `toolu_f${i}#0`,
+        toolUseId: `toolu_f${i}`,
+        host: i % 2 === 0 ? 'win2025' : 'raspberry',
+        state: 'injoignable',
+        startedAt: 2_000 + i * 100,
+        endedAt: 2_050 + i * 100,
+      }),
     )
     const s = stateOf(fails, { seenAt: 2_400 })
     const lines = cardLines(s, '', 10_000).map(text)
@@ -589,7 +726,16 @@ describe('carte /clair (spec §4.4)', () => {
 
   // §5.4 : échec (texte inconnu)
   test('la phrase brute du bridge, non traduite, entre guillemets sous le pipeline, telle quelle', () => {
-    const failed = call({ id: 'toolu_9#0', toolUseId: 'toolu_9', via: 'cli', tool: 'ssh_output_fetch', state: 'echec', reason: OUTPUT_CACHE, startedAt: 3_000, endedAt: 3_100 })
+    const failed = call({
+      id: 'toolu_9#0',
+      toolUseId: 'toolu_9',
+      via: 'cli',
+      tool: 'ssh_output_fetch',
+      state: 'echec',
+      reason: OUTPUT_CACHE,
+      startedAt: 3_000,
+      endedAt: 3_100,
+    })
     const lines = cardLines(stateOf([pi, failed]), '', 10_000)
     const at = lines.map(text).indexOf(`à regarder${NBSP}:`)
     expect(lines[at + 1]).toStrictEqual(pipeline(failed))
@@ -598,12 +744,19 @@ describe('carte /clair (spec §4.4)', () => {
       { text: OUTPUT_CACHE, tone: 'texte' },
       { text: `${NBSP}»`, tone: 'attenue' },
     ])
-    expect(lines.map(text).filter(l => l.includes(OUTPUT_CACHE))).toHaveLength(1)
+    expect(lines.map(text).filter((l) => l.includes(OUTPUT_CACHE))).toHaveLength(1)
   })
 
   // §5.4 : drapeau tronqué, fait (colonne « Dans à regarder »)
   test('un appel réussi mais tronqué, plus récent problème : « à regarder » dit « tronqué », et la relecture le garde', () => {
-    const cut = call({ id: 'toolu_c#0', toolUseId: 'toolu_c', tool: 'ssh_journal_query', truncated: true, startedAt: 2_000, endedAt: 2_100 })
+    const cut = call({
+      id: 'toolu_c#0',
+      toolUseId: 'toolu_c',
+      tool: 'ssh_journal_query',
+      truncated: true,
+      startedAt: 2_000,
+      endedAt: 2_100,
+    })
     const lines = cardLines(stateOf([pi, cut]), '', 10_000)
     const at = lines.map(text).indexOf(`à regarder${NBSP}:`)
     expect(at).toBe(2)
@@ -614,7 +767,14 @@ describe('carte /clair (spec §4.4)', () => {
     const seen = cardLines(stateOf([pi, cut], { seenAt: 2_100 }), '', 10_000)
     expect(seen[at + 1]).toStrictEqual([{ text: '✓ raspberry · tronqué · déjà vu', tone: 'attenue' }])
     expect(parseCard(cardText(seen))).toStrictEqual(seen)
-    const down = call({ id: 'toolu_d#0', toolUseId: 'toolu_d', host: 'win2025', state: 'injoignable', startedAt: 2_200, endedAt: 2_300 })
+    const down = call({
+      id: 'toolu_d#0',
+      toolUseId: 'toolu_d',
+      host: 'win2025',
+      state: 'injoignable',
+      startedAt: 2_200,
+      endedAt: 2_300,
+    })
     const older = cardLines(stateOf([pi, cut, down]), '', 10_000).map(text)
     expect(older.slice(-1)).toStrictEqual(['✓ raspberry · ssh_journal_query · lecture · tronqué'])
   })
@@ -623,7 +783,11 @@ describe('carte /clair (spec §4.4)', () => {
   test('plan Superpowers et workflows en cours, une ligne chacun ; un plan abandonné y reste', () => {
     const s = stateOf([pi], {
       superpowers: plan({ isStale: true }),
-      workflows: [workflow(), workflow({ key: 'wf_2', name: 'audit-disques', status: 'sans-nouvelles' }), workflow({ key: 'wf_3', name: 'fini', status: 'fini' })],
+      workflows: [
+        workflow(),
+        workflow({ key: 'wf_2', name: 'audit-disques', status: 'sans-nouvelles' }),
+        workflow({ key: 'wf_3', name: 'fini', status: 'fini' }),
+      ],
     })
     expect(cardLines(s, '', 10_000).slice(2).map(text)).toStrictEqual([
       `plan «${NBSP}mode-clair 0.2.0 — plan d'implémentation${NBSP}» · tâche 3 sur 17 · abandonné`,
@@ -653,10 +817,32 @@ describe('carte /clair (spec §4.4)', () => {
   // §5.4 : injoignable, fait, en cours ; spec §4.7 : l'index de couleur est rangé dans l'état (hostOrder)
   test('machine dont tous les appels sont sortis de la mémoire : sa ligne reste, atténuée, et chaque couleur = hostIndex, carte et bande', () => {
     // raspberry est apparue la première ; le plafond de 200 (state.ts, capped) a évincé tous ses appels.
-    const p1 = call({ id: 'toolu_p1#0', toolUseId: 'toolu_p1', host: 'win2025', state: 'injoignable', startedAt: 900, endedAt: 950 })
-    const p2 = call({ id: 'toolu_p2#0', toolUseId: 'toolu_p2', host: 'win2025', state: 'injoignable', startedAt: 960, endedAt: 990 })
+    const p1 = call({
+      id: 'toolu_p1#0',
+      toolUseId: 'toolu_p1',
+      host: 'win2025',
+      state: 'injoignable',
+      startedAt: 900,
+      endedAt: 950,
+    })
+    const p2 = call({
+      id: 'toolu_p2#0',
+      toolUseId: 'toolu_p2',
+      host: 'win2025',
+      state: 'injoignable',
+      startedAt: 960,
+      endedAt: 990,
+    })
     const done = call({ id: 'toolu_w#0', toolUseId: 'toolu_w', host: 'win2025', tool: 'ssh_win_disk_usage' })
-    const running = call({ id: 'toolu_r#0', toolUseId: 'toolu_r', host: 'win2025', tool: 'ssh_win_disk_usage', state: 'en-cours', startedAt: 1_500, endedAt: undefined })
+    const running = call({
+      id: 'toolu_r#0',
+      toolUseId: 'toolu_r',
+      host: 'win2025',
+      tool: 'ssh_win_disk_usage',
+      state: 'en-cours',
+      startedAt: 1_500,
+      endedAt: undefined,
+    })
     const s = stateOf([p1, p2, done, running], { hostOrder: ['raspberry', 'win2025'] })
     const lines = cardLines(s, '', 10_000)
     expect(lines.map(text)).toStrictEqual([
@@ -692,14 +878,23 @@ describe('carte /clair (spec §4.4)', () => {
     const s = stateOf(calls)
     const lines = cardLines(s, '', 10_000)
     expect(lines).toHaveLength(10)
-    HOSTS.forEach((host, i) => expect(lines[i + 1]?.[0]).toStrictEqual({ text: host, tone: M(i) }))
+    for (const [i, host] of HOSTS.entries()) expect(lines[i + 1]?.[0]).toStrictEqual({ text: host, tone: M(i) })
     expect(callLine(calls[8] as BridgeCall, s, 120)[2]).toStrictEqual({ text: 'web-02.prod', tone: M(8) })
     expect(colorOf(8)).toBe(colorOf(0))
   })
 })
 
 describe('cardText et parseCard : la carte relue depuis son seul texte', () => {
-  const failed = call({ id: 'toolu_9#0', toolUseId: 'toolu_9', via: 'cli', tool: 'ssh_output_fetch', state: 'echec', reason: OUTPUT_CACHE, startedAt: 3_000, endedAt: 3_100 })
+  const failed = call({
+    id: 'toolu_9#0',
+    toolUseId: 'toolu_9',
+    via: 'cli',
+    tool: 'ssh_output_fetch',
+    state: 'echec',
+    reason: OUTPUT_CACHE,
+    startedAt: 3_000,
+    endedAt: 3_100,
+  })
   const cases: [string, ClairState, string][] = [
     ['vide', stateOf([]), ''],
     ['plan seul', stateOf([], { superpowers: plan() }), ''],
@@ -708,17 +903,51 @@ describe('cardText et parseCard : la carte relue depuis son seul texte', () => {
       stateOf(
         [
           ...ALL_STATES.map((st, i) =>
-            call({ id: `toolu_s${i}#0`, toolUseId: `toolu_s${i}`, host: HOSTS[i % 4] ?? null, state: st, code: i, startedAt: 1_000 + i * 10, endedAt: 1_005 + i * 10 }),
+            call({
+              id: `toolu_s${i}#0`,
+              toolUseId: `toolu_s${i}`,
+              host: HOSTS[i % 4] ?? null,
+              state: st,
+              code: i,
+              startedAt: 1_000 + i * 10,
+              endedAt: 1_005 + i * 10,
+            }),
           ),
-          call({ id: 'toolu_n#0', toolUseId: 'toolu_n', host: null, state: 'machine-inconnue', startedAt: 2_000, endedAt: 2_010 }),
-          call({ id: 'toolu_t#0', toolUseId: 'toolu_t', tool: 'ssh_journal_query', truncated: true, startedAt: 2_100, endedAt: 2_110 }),
+          call({
+            id: 'toolu_n#0',
+            toolUseId: 'toolu_n',
+            host: null,
+            state: 'machine-inconnue',
+            startedAt: 2_000,
+            endedAt: 2_010,
+          }),
+          call({
+            id: 'toolu_t#0',
+            toolUseId: 'toolu_t',
+            tool: 'ssh_journal_query',
+            truncated: true,
+            startedAt: 2_100,
+            endedAt: 2_110,
+          }),
           failed,
         ],
-        { seenAt: 1_100, superpowers: plan({ isStale: true }), workflows: [workflow(), workflow({ key: 'wf_r', status: 'distant', agents: [] })] },
+        {
+          seenAt: 1_100,
+          superpowers: plan({ isStale: true }),
+          workflows: [workflow(), workflow({ key: 'wf_r', status: 'distant', agents: [] })],
+        },
       ),
       '',
     ],
-    ['neuf machines', stateOf(HOSTS.map((host, i) => call({ id: `toolu_h${i}#0`, toolUseId: `toolu_h${i}`, host, state: i % 3 === 0 ? 'injoignable' : 'fait' }))), ''],
+    [
+      'neuf machines',
+      stateOf(
+        HOSTS.map((host, i) =>
+          call({ id: `toolu_h${i}#0`, toolUseId: `toolu_h${i}`, host, state: i % 3 === 0 ? 'injoignable' : 'fait' }),
+        ),
+      ),
+      '',
+    ],
     ['vue d’une machine', stateOf([call(), failed]), 'raspberry'],
     ['machine absente', stateOf([call()]), 'nohost'],
   ]
@@ -741,8 +970,21 @@ describe('cardText et parseCard : la carte relue depuis son seul texte', () => {
 
   // §5.4 : injoignable, fait
   test('les couleurs des machines se retrouvent dans « à regarder » depuis l’ordre des lignes de machine', () => {
-    const down = call({ id: 'toolu_d#0', toolUseId: 'toolu_d', host: 'win2025', state: 'injoignable', startedAt: 1_500, endedAt: 1_600 })
-    const later = call({ id: 'toolu_e#0', toolUseId: 'toolu_e', state: 'injoignable', startedAt: 1_700, endedAt: 1_800 })
+    const down = call({
+      id: 'toolu_d#0',
+      toolUseId: 'toolu_d',
+      host: 'win2025',
+      state: 'injoignable',
+      startedAt: 1_500,
+      endedAt: 1_600,
+    })
+    const later = call({
+      id: 'toolu_e#0',
+      toolUseId: 'toolu_e',
+      state: 'injoignable',
+      startedAt: 1_700,
+      endedAt: 1_800,
+    })
     const lines = parseCard(cardText(cardLines(stateOf([call(), down, later]), '', 10_000)))
     expect(lines[2]?.[0]).toStrictEqual({ text: 'win2025', tone: M(1) })
     expect(text(lines[5] ?? [])).toBe(`✗ win2025 · injoignable · ${RIEN}`)
@@ -758,7 +1000,14 @@ describe('cardText et parseCard : la carte relue depuis son seul texte', () => {
   // §5.4 : fait, injoignable. Spec §10 : la rangée CommandOutput reçoit le texte précédé du nom du plugin et
   // de « : » (relevé par la sonde de la tâche 2 : `mode-clair-sonde: SONDE-TEXTE-BRUT ligne 1\n…` dans props.text).
   test('le nom du plugin que le moteur met devant le texte est retiré : mêmes lignes, mêmes couleurs', () => {
-    const down = call({ id: 'toolu_d#0', toolUseId: 'toolu_d', host: 'win2025', state: 'injoignable', startedAt: 1_500, endedAt: 1_600 })
+    const down = call({
+      id: 'toolu_d#0',
+      toolUseId: 'toolu_d',
+      host: 'win2025',
+      state: 'injoignable',
+      startedAt: 1_500,
+      endedAt: 1_600,
+    })
     for (const s of [stateOf([call(), down]), stateOf([])]) {
       const lines = cardLines(s, '', 10_000)
       expect(parseCard(`mode-clair: ${cardText(lines)}`)).toStrictEqual(lines)
@@ -769,21 +1018,37 @@ describe('cardText et parseCard : la carte relue depuis son seul texte', () => {
 describe('typographie du texte du mod (spec §4.1, critère 14)', () => {
   // §5.4 : toutes les lignes
   test('aucun texte du mod sans insécable devant : ; ! ni dans « », apostrophe typographique (critère 14)', () => {
-    const calls = ALL_STATES.map((st, i) => call({ id: `toolu_s${i}#0`, toolUseId: `toolu_s${i}`, host: HOSTS[i % 3] ?? null, state: st, code: i, truncated: i % 2 === 0, endedAt: 1_000 + i }))
+    const calls = ALL_STATES.map((st, i) =>
+      call({
+        id: `toolu_s${i}#0`,
+        toolUseId: `toolu_s${i}`,
+        host: HOSTS[i % 3] ?? null,
+        state: st,
+        code: i,
+        truncated: i % 2 === 0,
+        endedAt: 1_000 + i,
+      }),
+    )
     const s = stateOf(calls, { superpowers: plan({ planTitle: 'export' }), workflows: [workflow()] })
     const all = [
-      ...calls.map(c => callLine(c, s, 200)),
+      ...calls.map((c) => callLine(c, s, 200)),
       ...calls.map(pipeline),
       ...cardLines(s, '', 10_000),
       ...cardLines(s, 'raspberry', 10_000),
-      ...bandLines(stateOf([], { superpowers: plan({ planTitle: 'export' }), waiting: { tool: 'ssh_exec', host: 'raspberry', callId: null, since: 1 } }), CTX),
+      ...bandLines(
+        stateOf([], {
+          superpowers: plan({ planTitle: 'export' }),
+          waiting: { tool: 'ssh_exec', host: 'raspberry', callId: null, since: 1 },
+        }),
+        CTX,
+      ),
     ].map(text)
     for (const t of all) {
       expect(t).not.toMatch(/ [:;!]/)
       expect(t).not.toMatch(/« | »/)
       expect(t).not.toMatch(/\p{L}'\p{L}/u)
     }
-    expect(all.some(t => t.includes('\u2019'))).toBe(true)
-    expect(all.some(t => t.includes(`${NBSP}:`))).toBe(true)
+    expect(all.some((t) => t.includes('\u2019'))).toBe(true)
+    expect(all.some((t) => t.includes(`${NBSP}:`))).toBe(true)
   })
 })

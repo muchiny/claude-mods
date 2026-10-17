@@ -1,0 +1,24 @@
+{
+  "name": "claude-mods",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Mods Claude Code de muchiny : outillage de développement (lint, types, mutation).",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "biome ci .",
+    "format": "biome format --write .",
+    "typecheck": "tsc -p tsconfig.json",
+    "validate": "claude plugin validate . && claude plugin validate mode-clair",
+    "test": "claude plugin test mode-clair",
+    "mutate": "stryker run"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@stryker-mutator/core": "10.0.0",
+    "typescript": "7.0.2"
+  }
+}

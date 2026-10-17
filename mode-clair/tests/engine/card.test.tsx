@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
+import { describe, expect, test } from 'claude-code/testing'
 
 import { classify, parseMcp } from '../../hooks/bridge'
 import { colorOf } from '../../hooks/colors'
@@ -19,7 +19,12 @@ const ok = (text: string) => ({ result: { result: { content: [] }, text, isReadO
 const failed = (text: string) => ({ result: { result: text, text, isError: true as const } })
 
 async function runClair($: Engine, args = ''): Promise<string> {
-  const ran = await $.command.run({ command: 'clair', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+  const ran = await $.command.run({
+    command: 'clair',
+    args,
+    origin: { kind: 'composer' },
+    presentation: { isFullscreen: true, columns: 120 },
+  })
   return ran.text ?? ''
 }
 
@@ -36,7 +41,7 @@ function mountCard($: Engine, text: string, command = 'clair') {
 
 /** Le texte de chaque ligne de la carte, tel que le mod doit le dessiner. */
 function cardRows(text: string): string[] {
-  return parseCard(text).map(line => line.map(piece => piece.text).join(''))
+  return parseCard(text).map((line) => line.map((piece) => piece.text).join(''))
 }
 
 describe('/clair : command.run et CommandOutput', () => {
@@ -50,7 +55,7 @@ describe('/clair : command.run et CommandOutput', () => {
     expect(text).toContain('raspberry')
     expect(text).toContain('nohost')
     const ui = await mountCard($, text)
-    const drawn = (await ui.findAll({ type: 'Text' })).map(t => t.text)
+    const drawn = (await ui.findAll({ type: 'Text' })).map((t) => t.text)
     expect(cardRows(text).length).toBeGreaterThan(0)
     for (const row of cardRows(text)) expect(drawn).toContain(row)
     expect(drawn).not.toContain(ENGINE_ROW)
@@ -61,13 +66,18 @@ describe('/clair : command.run et CommandOutput', () => {
     const [parsed] = parseMcp('mcp__ssh-bridge__ssh_disk_usage', { host: 'raspberry' }, TOOLS)
     if (parsed === undefined) throw new Error('parseMcp ne reconnaît pas ssh_disk_usage')
     const outcome = classify(parsed, { isError: false, text: DF, interrupted: false, refusedByClaude: false }, TOOLS)
-    const before = finishCalls(startCalls(EMPTY, 'toolu_old', undefined, [parsed], 1_000), 'toolu_old', [outcome], 1_000)
+    const before = finishCalls(
+      startCalls(EMPTY, 'toolu_old', undefined, [parsed], 1_000),
+      'toolu_old',
+      [outcome],
+      1_000,
+    )
     const text = cardText(cardLines(before, '', 1_000))
     const w = world(on)
     const ui = await mountCard($, text)
-    const drawn = (await ui.findAll({ type: 'Text' })).map(t => t.text)
+    const drawn = (await ui.findAll({ type: 'Text' })).map((t) => t.text)
     for (const row of cardRows(text)) expect(drawn).toContain(row)
-    expect(drawn.some(t => t.includes('raspberry'))).toBe(true)
+    expect(drawn.some((t) => t.includes('raspberry'))).toBe(true)
     expect(w.state).toBeUndefined()
     expect(w.drawn).toHaveLength(0)
     await ui.unmount()
@@ -115,9 +125,9 @@ describe('/clair : command.run et CommandOutput', () => {
     const text = await runClair($)
     const ui = await mountCard($, `mode-clair: ${text}`)
     const texts = await ui.findAll({ type: 'Text' })
-    for (const row of cardRows(text)) expect(texts.map(t => t.text)).toContain(row)
-    expect(texts.filter(t => t.text.includes('mode-clair'))).toHaveLength(0)
-    expect(texts.filter(t => t.text === 'raspberry').map(t => t.props.color)).toContain(colorOf(0))
+    for (const row of cardRows(text)) expect(texts.map((t) => t.text)).toContain(row)
+    expect(texts.filter((t) => t.text.includes('mode-clair'))).toHaveLength(0)
+    expect(texts.filter((t) => t.text === 'raspberry').map((t) => t.props.color)).toContain(colorOf(0))
     await ui.unmount()
   })
 
@@ -134,9 +144,13 @@ describe('/clair : command.run et CommandOutput', () => {
       viewport: { columns: 30, rows: 40 },
       props: { command: 'clair', args: '', text, isErrored: false },
     })
-    const drawn = (await ui.findAll({ type: 'Text' })).map(t => t.text)
-    const fitted = parseCard(text).map(line => fit(line, 30).map(piece => piece.text).join(''))
-    expect(fitted.filter(row => row.endsWith('…')).length).toBeGreaterThan(0)
+    const drawn = (await ui.findAll({ type: 'Text' })).map((t) => t.text)
+    const fitted = parseCard(text).map((line) =>
+      fit(line, 30)
+        .map((piece) => piece.text)
+        .join(''),
+    )
+    expect(fitted.filter((row) => row.endsWith('…')).length).toBeGreaterThan(0)
     for (const row of fitted) expect(drawn).toContain(row)
     for (const t of drawn) expect([...t].length).toBeLessThanOrEqual(30)
     await ui.unmount()

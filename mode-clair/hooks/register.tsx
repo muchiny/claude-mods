@@ -5,20 +5,62 @@
 // Le mod n'observe que : chaque hook rend next(e) inchangé, chaque .catch retombe sur next(e).
 // Un rendu n'écrit jamais l'état (D:3488) ; un dispatch lit un seul instant (D:3472).
 
-import { atom, read, update } from 'claude-code'
 import type { ElementConstructor, EngineInterface, Register, TextProps, Timer, ToolCallResult } from 'claude-code'
+import { atom, read, update } from 'claude-code'
 
 import type { BridgeCall, ClairState, Line, Tone, Workflow } from '../types'
-import { classify, hasBackgroundTask, isBridgeServer, parseCli, parseConfirmation, parseMcp, runResultOf, sessionFromCreate } from './bridge'
 import type { ParsedCall } from './bridge'
+import {
+  classify,
+  hasBackgroundTask,
+  isBridgeServer,
+  parseCli,
+  parseConfirmation,
+  parseMcp,
+  runResultOf,
+  sessionFromCreate,
+} from './bridge'
 import { colorOf } from './colors'
 import { fr } from './fr'
-import { EMPTY, callsOf, closeWaiting, dropCalls, finishCalls, interruptOpen, recordAccord, refuseByClaude, rememberSession } from './state'
-import { markSeen, setWaiting, startCalls, waitingFor, withSuperpowers, withWorkflows } from './state'
-import { STALE_MS, expire, onAgent, onAgentDone, onAgentLaunched, onDocWrite, onSkill, runningAgentOf } from './superpowers'
+import {
+  callsOf,
+  closeWaiting,
+  dropCalls,
+  EMPTY,
+  finishCalls,
+  interruptOpen,
+  markSeen,
+  recordAccord,
+  refuseByClaude,
+  rememberSession,
+  setWaiting,
+  startCalls,
+  waitingFor,
+  withSuperpowers,
+  withWorkflows,
+} from './state'
+import {
+  expire,
+  onAgent,
+  onAgentDone,
+  onAgentLaunched,
+  onDocWrite,
+  onSkill,
+  runningAgentOf,
+  STALE_MS,
+} from './superpowers'
 import { TOOLS } from './tools.generated'
 import { bandLines, callLine, cardLines, cardText, fit, modeLabel, parseCard, statusText } from './view'
-import { MAX_JOURNAL_BYTES, active, doneNotice, endWorkflow, foldJournal, parseMeta, quiet, startWorkflow } from './workflow'
+import {
+  active,
+  doneNotice,
+  endWorkflow,
+  foldJournal,
+  MAX_JOURNAL_BYTES,
+  parseMeta,
+  quiet,
+  startWorkflow,
+} from './workflow'
 
 const STATE = atom({ plugin: 'mode-clair', key: 'state' } as const, EMPTY, { shape: 'clair/0.2' })
 const ROWS = { plugin: 'mode-clair', key: 'rows' } as const
@@ -33,7 +75,7 @@ let journalTimer: Timer | null = null
 let staleTimer: Timer | null = null
 const journalSizes = new Map<string, number>()
 
-export const register: Register = on => {
+export const register: Register = (on) => {
   on('session.start', async ($, e, next) => {
     const description = fr('Carte du mode clair : machines, problèmes, plan et workflows en cours')
     await $.command.register({ name: 'clair', description, argumentHint: '[machine]' })
@@ -49,7 +91,7 @@ export const register: Register = on => {
   on('command.run', { command: 'clair' }, async ($, e) => {
     const now = await $.clock.now()
     const text = cardText(cardLines(await read($, STATE), e.args, now))
-    await write($, s => markSeen(s, now))
+    await write($, (s) => markSeen(s, now))
     return { text }
   }).catch(() => ({ text: fr('la carte /clair n’a pas pu être calculée') }))
 
@@ -58,33 +100,49 @@ export const register: Register = on => {
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const parsed = e.run_in_background === true ? [] : parseCli(e.command, TOOLS)
     if (parsed.length === 0) return next(e)
-    return track($, e.tool_use_id, e.agentId, parsed, () => next(e), () => next.signal.aborted)
+    return track(
+      $,
+      e.tool_use_id,
+      e.agentId,
+      parsed,
+      () => next(e),
+      () => next.signal.aborted,
+    )
   }).catch(($, e, next) => next(e))
 
   on('tool.call', { tool: /^mcp__/ }, async ($, e, next) => {
     const { tool, tool_use_id, agentId, ...input } = e
     const parsed = parseMcp(tool, input, TOOLS)
     if (parsed.length === 0) return next(e)
-    return track($, tool_use_id, agentId, parsed, () => next(e), () => next.signal.aborted)
+    return track(
+      $,
+      tool_use_id,
+      agentId,
+      parsed,
+      () => next(e),
+      () => next.signal.aborted,
+    )
   }).catch(($, e, next) => next(e))
 
   on('classic.PermissionDenied', async ($, e, next) => {
     const now = await $.clock.now()
-    await write($, s => refuseByClaude(s, e.tool_use_id, now))
+    await write($, (s) => refuseByClaude(s, e.tool_use_id, now))
     return next(e)
   }).catch(($, e, next) => next(e))
 
   // Le formulaire ne porte aucun tool_use_id (D:3978-3998) : waitingFor retrouve l'appel.
   on('classic.Elicitation', async ($, e, next) => {
     const now = await $.clock.now()
-    if (isBridgeServer(e.mcp_server_name)) await write($, s => setWaiting(s, waitingFor(s, parseConfirmation(e.message), now)))
+    if (isBridgeServer(e.mcp_server_name))
+      await write($, (s) => setWaiting(s, waitingFor(s, parseConfirmation(e.message), now)))
     return next(e)
   }).catch(($, e, next) => next(e))
 
   // Accord seulement sur `accept` avec `confirm: true` (refs/bridge-facts.md §5.5).
   on('classic.ElicitationResult', async ($, e, next) => {
     const granted = e.action === 'accept' && e.content?.confirm === true
-    if (isBridgeServer(e.mcp_server_name)) await write($, s => setWaiting(recordAccord(s, s.waiting?.callId ?? null, granted), null))
+    if (isBridgeServer(e.mcp_server_name))
+      await write($, (s) => setWaiting(recordAccord(s, s.waiting?.callId ?? null, granted), null))
     return next(e)
   }).catch(($, e, next) => next(e))
 
@@ -92,7 +150,9 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     const now = await $.clock.now()
     const id = e.agentId
-    const after = await write($, s => withSuperpowers(interruptOpen(s, id, now), sp => (id === undefined ? sp : onAgentDone(sp, id, now))))
+    const after = await write($, (s) =>
+      withSuperpowers(interruptOpen(s, id, now), (sp) => (id === undefined ? sp : onAgentDone(sp, id, now))),
+    )
     if (id !== undefined) armStale($, after, now)
     return next(e)
   }).catch(($, e, next) => next(e))
@@ -103,19 +163,19 @@ export const register: Register = on => {
     const ran = await next(e)
     if (runResultOf(ran, false, false).isError) return ran
     const now = await $.clock.now()
-    armStale($, await write($, s => withSuperpowers(s, sp => onSkill(sp, e.skill, now))), now)
+    armStale($, await write($, (s) => withSuperpowers(s, (sp) => onSkill(sp, e.skill, now))), now)
     return ran
   }).catch(($, e, next) => next(e))
 
   // Un agent lancé en arrière-plan (async_launched) reste suivi jusqu'au turn.complete de sa boucle.
   on('tool.call', { tool: 'Agent' }, async ($, e, next) => {
     const now = await $.clock.now()
-    armStale($, await write($, s => withSuperpowers(s, sp => onAgent(sp, e.description, e.prompt, now))), now)
+    armStale($, await write($, (s) => withSuperpowers(s, (sp) => onAgent(sp, e.description, e.prompt, now))), now)
     const ran = await next(e)
     const id = runningAgentOf(ran.result)
     if (id === null) return ran
     const at = await $.clock.now()
-    armStale($, await write($, s => withSuperpowers(s, sp => onAgentLaunched(sp, id, at))), at)
+    armStale($, await write($, (s) => withSuperpowers(s, (sp) => onAgentLaunched(sp, id, at))), at)
     return ran
   }).catch(($, e, next) => next(e))
 
@@ -124,9 +184,13 @@ export const register: Register = on => {
     const ran = await next(e)
     const now = await $.clock.now()
     const s = await read($, STATE)
-    if (runResultOf(ran, false, false).isError || withSuperpowers(s, sp => onDocWrite(sp, e.file_path, null, now)) === s) return ran
+    if (
+      runResultOf(ran, false, false).isError ||
+      withSuperpowers(s, (sp) => onDocWrite(sp, e.file_path, null, now)) === s
+    )
+      return ran
     const text = e.tool === 'Write' ? e.content : await attempt($.fs.read(e.file_path))
-    armStale($, await write($, s => withSuperpowers(s, sp => onDocWrite(sp, e.file_path, text, now))), now)
+    armStale($, await write($, (s) => withSuperpowers(s, (sp) => onDocWrite(sp, e.file_path, text, now))), now)
     return ran
   }).catch(($, e, next) => next(e))
 
@@ -141,18 +205,30 @@ export const register: Register = on => {
     const meta = inline ?? (script === null ? null : parseMeta(script))
     const remote = r.status === 'remote_launched'
     const journalPath = !remote && r.transcriptDir !== undefined ? `${r.transcriptDir}/journal.jsonl` : null
-    const w = { key: r.runId ?? r.taskId, toolUseId: e.tool_use_id, name: meta?.name ?? e.name ?? r.workflowName ?? '', phases: meta?.phases ?? [], journalPath, remote }
+    const w = {
+      key: r.runId ?? r.taskId,
+      toolUseId: e.tool_use_id,
+      name: meta?.name ?? e.name ?? r.workflowName ?? '',
+      phases: meta?.phases ?? [],
+      journalPath,
+      remote,
+    }
     const now = await $.clock.now()
-    armJournal($, await write($, s => withWorkflows(s, list => startWorkflow(list, w, now))))
+    armJournal($, await write($, (s) => withWorkflows(s, (list) => startWorkflow(list, w, now))))
     return ran
   }).catch(($, e, next) => next(e))
 
   on('session.append', async ($, e, next) => {
     const stored = await next(e)
-    const blocks = Array.isArray(e.message.content) ? e.message.content : [{ type: 'text', text: String(e.message.content) }]
-    const done = doneNotice(blocks.map(b => (typeof b.text === 'string' ? b.text : '')).join('\n'))
+    const blocks = Array.isArray(e.message.content)
+      ? e.message.content
+      : [{ type: 'text', text: String(e.message.content) }]
+    const done = doneNotice(blocks.map((b) => (typeof b.text === 'string' ? b.text : '')).join('\n'))
     if (done === null) return stored
-    if (polled(await write($, s => withWorkflows(s, list => endWorkflow(list, done.key, done.status)))).length === 0) stopJournal()
+    if (
+      polled(await write($, (s) => withWorkflows(s, (list) => endWorkflow(list, done.key, done.status)))).length === 0
+    )
+      stopJournal()
     return stored
   }).catch(($, e, next) => next(e))
 
@@ -160,7 +236,12 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
-    const ctx = { now: await $.clock.now(), columns: e.props.bodyColumns, isWorking: e.props.isWorking, viewAgentId: e.props.view.agentId }
+    const ctx = {
+      now: await $.clock.now(),
+      columns: e.props.bodyColumns,
+      isWorking: e.props.isWorking,
+      viewAgentId: e.props.view.agentId,
+    }
     const lines = bandLines(await read($, STATE), ctx)
     if (lines.length === 0) return next(e)
     const { Box, Text } = $.ui.resolve(e)
@@ -170,7 +251,9 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column">
         {own}
-        <Box flexDirection="column" width={e.props.bodyColumns}>{lines.map((line, i) => draw(Text, line, `b${i}`))}</Box>
+        <Box flexDirection="column" width={e.props.bodyColumns}>
+          {lines.map((line, i) => draw(Text, line, `b${i}`))}
+        </Box>
       </Box>
     )
   }).catch(($, e, next) => next(e))
@@ -183,18 +266,30 @@ export const register: Register = on => {
     const s = await read($, STATE)
     const { Box, Text } = $.ui.resolve(e)
     const own = await next(e)
-    return <Box flexDirection="column">{own}{rows.map((c, i) => draw(Text, callLine(c, s, e.viewport?.columns ?? 80), `u${i}`))}</Box>
+    return (
+      <Box flexDirection="column">
+        {own}
+        {rows.map((c, i) => draw(Text, callLine(c, s, e.viewport?.columns ?? 80), `u${i}`))}
+      </Box>
+    )
   }).catch(($, e, next) => next(e))
 
   // Groupe replié : la ligne du moteur, puis une ligne par appel bridge suivi ; déplié : le moteur.
   on('ui.render', { component: 'ToolGroup' }, async ($, e, next) => {
-    const ids = e.props.isExpanded ? [] : e.props.calls.flatMap(c => (c.tool_use_id === undefined ? [] : [c.tool_use_id]))
-    const rows = (await Promise.all(ids.map(id => rowsOf($, id)))).flat()
+    const ids = e.props.isExpanded
+      ? []
+      : e.props.calls.flatMap((c) => (c.tool_use_id === undefined ? [] : [c.tool_use_id]))
+    const rows = (await Promise.all(ids.map((id) => rowsOf($, id)))).flat()
     if (rows.length === 0) return next(e)
     const s = await read($, STATE)
     const { Box, Text } = $.ui.resolve(e)
     const own = await next(e)
-    return <Box flexDirection="column">{own}{rows.map((c, i) => draw(Text, callLine(c, s, e.viewport?.columns ?? 80), `g${i}`))}</Box>
+    return (
+      <Box flexDirection="column">
+        {own}
+        {rows.map((c, i) => draw(Text, callLine(c, s, e.viewport?.columns ?? 80), `g${i}`))}
+      </Box>
+    )
   }).catch(($, e, next) => next(e))
 
   // La carte /clair se redessine depuis son seul texte, jamais l'état vivant (spec §4.4).
@@ -202,7 +297,11 @@ export const register: Register = on => {
     const lines = parseCard(e.props.text)
     if (lines.length === 0) return next(e)
     const { Box, Text } = $.ui.resolve(e)
-    return <Box flexDirection="column">{lines.map((line, i) => draw(Text, fit(line, e.viewport?.columns ?? 80), `c${i}`))}</Box>
+    return (
+      <Box flexDirection="column">
+        {lines.map((line, i) => draw(Text, fit(line, e.viewport?.columns ?? 80), `c${i}`))}
+      </Box>
+    )
   }).catch(($, e, next) => next(e))
 
   on('ui.render', { component: 'SessionMode' }, async ($, e, next) => {
@@ -214,16 +313,29 @@ export const register: Register = on => {
 
 // Écrire l'état seulement si le réducteur change quelque chose ; puis les membres `rows`
 // des appels touchés (et `alsoRows`) ; puis la ligne d'état si son texte change.
-async function write($: Engine, change: (s: ClairState) => ClairState, alsoRows: readonly string[] = []): Promise<ClairState> {
+async function write(
+  $: Engine,
+  change: (s: ClairState) => ClairState,
+  alsoRows: readonly string[] = [],
+): Promise<ClairState> {
   const seen = await read($, STATE)
   let before = seen
-  const after = change(seen) === seen ? seen : await update($, STATE, s => change((before = s)))
+  const after =
+    change(seen) === seen
+      ? seen
+      : await update($, STATE, (s) => {
+          before = s
+          return change(s)
+        })
   const ids = new Set(alsoRows)
   const old = new Set(before.calls)
   for (const c of after.calls) if (!old.has(c)) ids.add(c.toolUseId)
   for (const id of ids) await $.state.set({ ...ROWS, id }, callsOf(after, id))
   const text = statusText(after)
-  if (text !== shownStatus) $.ui.status((shownStatus = text))
+  if (text !== shownStatus) {
+    shownStatus = text
+    $.ui.status(text)
+  }
   return after
 }
 
@@ -239,7 +351,7 @@ async function track(
   isAborted: () => boolean,
 ): Promise<ToolCallResult> {
   const startedAt = await $.clock.now()
-  await write($, s => startCalls(s, toolUseId, agentId, parsed, startedAt))
+  await write($, (s) => startCalls(s, toolUseId, agentId, parsed, startedAt))
   let ran: ToolCallResult | undefined
   try {
     ran = await run()
@@ -247,12 +359,20 @@ async function track(
   } finally {
     const endedAt = await $.clock.now()
     const result = runResultOf(ran, isAborted(), false)
-    const created = parsed.some(p => p.tool === 'ssh_session_create') ? sessionFromCreate(result.text) : null
+    const created = parsed.some((p) => p.tool === 'ssh_session_create') ? sessionFromCreate(result.text) : null
     const settle = (s: ClairState): ClairState => {
-      const closed = closeWaiting(finishCalls(s, toolUseId, parsed.map(p => classify(p, result, TOOLS)), endedAt), toolUseId)
+      const closed = closeWaiting(
+        finishCalls(
+          s,
+          toolUseId,
+          parsed.map((p) => classify(p, result, TOOLS)),
+          endedAt,
+        ),
+        toolUseId,
+      )
       return created === null ? closed : rememberSession(closed, created.id, created.host)
     }
-    if (hasBackgroundTask(ran?.result)) await write($, s => dropCalls(s, toolUseId), [toolUseId])
+    if (hasBackgroundTask(ran?.result)) await write($, (s) => dropCalls(s, toolUseId), [toolUseId])
     else await write($, settle)
   }
 }
@@ -263,22 +383,26 @@ async function track(
 function armStale($: Engine, s: ClairState, now: number): void {
   staleTimer?.cancel()
   const sp = s.superpowers
-  staleTimer = sp === null || sp.isStale ? null : $.clock.after(Math.max(1, sp.lastEventAt + STALE_MS - now), () => void expireNow($).catch(() => undefined))
+  staleTimer =
+    sp === null || sp.isStale
+      ? null
+      : $.clock.after(Math.max(1, sp.lastEventAt + STALE_MS - now), () => void expireNow($).catch(() => undefined))
 }
 
 async function expireNow($: Engine): Promise<void> {
   const now = await $.clock.now()
-  armStale($, await write($, s => withSuperpowers(s, sp => expire(sp, now))), now)
+  armStale($, await write($, (s) => withSuperpowers(s, (sp) => expire(sp, now))), now)
 }
 
 // Journal des workflows : un minuteur tant qu'un workflow local est actif ; stat à chaque
 // tic, lecture seulement si la taille a changé (spec §5.3). Le tic rattrape son propre rejet.
 function polled(s: ClairState): Workflow[] {
-  return active(s.workflows).filter(w => w.journalPath !== null)
+  return active(s.workflows).filter((w) => w.journalPath !== null)
 }
 
 function armJournal($: Engine, s: ClairState): void {
-  if (journalTimer === null && polled(s).length > 0) journalTimer = $.clock.every(JOURNAL_MS, () => void tick($).catch(() => undefined))
+  if (journalTimer === null && polled(s).length > 0)
+    journalTimer = $.clock.every(JOURNAL_MS, () => void tick($).catch(() => undefined))
 }
 
 function stopJournal(): void {
@@ -301,8 +425,9 @@ async function tick($: Engine): Promise<void> {
     journalSizes.set(w.key, stat.size)
     texts.set(w.key, text)
   }
-  const fold = (ws: Workflow[]) => (texts.size === 0 ? ws : ws.map(w => (texts.has(w.key) ? foldJournal(w, texts.get(w.key) ?? '', now) : w)))
-  const after = await write($, s => withWorkflows(s, ws => quiet(fold(ws), now, w => mtimes.get(w.key) ?? null)))
+  const fold = (ws: Workflow[]) =>
+    texts.size === 0 ? ws : ws.map((w) => (texts.has(w.key) ? foldJournal(w, texts.get(w.key) ?? '', now) : w))
+  const after = await write($, (s) => withWorkflows(s, (ws) => quiet(fold(ws), now, (w) => mtimes.get(w.key) ?? null)))
   if (polled(after).length === 0) stopJournal()
 }
 
@@ -315,8 +440,16 @@ async function rowsOf($: Engine, toolUseId: string): Promise<BridgeCall[]> {
 // Une Line devient un Text par morceau, chacun coupé en fin de ligne, tons du contrat :
 // ok success, erreur error, attention warning, accent claude, atténué dimColor, machine sa couleur.
 function draw(Text: TextTag, line: Line, key: string) {
-  const pieces = line.map((piece, i) => <Text key={`${key}.${i}`} wrap="truncate-end" {...toneProps(piece.tone)}>{piece.text}</Text>)
-  return <Text key={key} wrap="truncate-end">{pieces}</Text>
+  const pieces = line.map((piece, i) => (
+    <Text key={`${key}.${i}`} wrap="truncate-end" {...toneProps(piece.tone)}>
+      {piece.text}
+    </Text>
+  ))
+  return (
+    <Text key={key} wrap="truncate-end">
+      {pieces}
+    </Text>
+  )
 }
 
 function toneProps(tone: Tone): Pick<TextProps, 'color' | 'dimColor'> {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { PALETTE, THEME_STATE_HUES, colorOf, deltaE, deuteranopia, hue, quantize256 } from '../../hooks/colors'
+import { colorOf, deltaE, deuteranopia, hue, PALETTE, quantize256, THEME_STATE_HUES } from '../../hooks/colors'
 
 // Couleurs d'état du thème (succès, erreur, attention), les mêmes que THEME_STATE_COLORS de colors.ts :
 // relevées dans la rangée « Profondeur de couleur effective » du §10 du spec, ou leur repli.
@@ -15,7 +15,8 @@ const hueGap = (a: number, b: number) => {
 }
 const pairs = (list: readonly string[]) => {
   const out: [string, string][] = []
-  for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) out.push([list[i] as string, list[j] as string])
+  for (let i = 0; i < list.length; i++)
+    for (let j = i + 1; j < list.length; j++) out.push([list[i] as string, list[j] as string])
   return out
 }
 
@@ -73,7 +74,12 @@ describe('la palette des machines (spec §4.7)', () => {
   test('les deux verts, les plus proches du vert de succès du thème, sont les deux dernières couleurs', () => {
     const success = THEME_STATE_HUES[0] as number
     const byCloseness = PALETTE.map((c, i) => ({ i, gap: hueGap(hue(c), success) })).sort((x, y) => x.gap - y.gap)
-    expect(byCloseness.slice(0, 2).map(e => e.i).sort()).toEqual([6, 7])
+    expect(
+      byCloseness
+        .slice(0, 2)
+        .map((e) => e.i)
+        .sort(),
+    ).toEqual([6, 7])
   })
 
   test('sous deutéranopie, les 8 restent distinctes deux à deux (ΔE ≥ 10)', () => {

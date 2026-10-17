@@ -1,18 +1,17 @@
 import { describe, expect, test } from 'claude-code/testing'
-
-import type { Workflow } from '../../types'
 import {
-  MAX_JOURNAL_BYTES,
-  QUIET_MS,
   active,
   currentPhase,
   doneNotice,
   endWorkflow,
   foldJournal,
+  MAX_JOURNAL_BYTES,
   parseMeta,
+  QUIET_MS,
   quiet,
   startWorkflow,
 } from '../../hooks/workflow'
+import type { Workflow } from '../../types'
 
 // Bloc meta réel (script mode-clair-understand-wf_2f1d0568-7cc.js de la session 533d49a4, en tête de fichier).
 const SCRIPT_UNDERSTAND = [
@@ -38,27 +37,41 @@ const SCRIPT_REFS = [
 
 // Lignes réelles du journal wf_2f1d0568-7cc (session 533d49a4), champ result raccourci.
 const LAUNCHED = '{"type":"launched"}'
-const UI = '{"type":"started","key":"v2:06261fd506bb15b3851fc8ce548be8d649349cdeb1c0c905a39a515bef804566","agentId":"af7d9e0fa88200f5e","label":"audit:ui","phase":"Audit"}'
-const LOGIC = '{"type":"started","key":"v2:27b7af3fc7367bda47af957cbe4bc982fba2e17fc8c53dc56f947ca501e8f73a","agentId":"ab6c88883bf7c997a","label":"audit:logic","phase":"Audit"}'
-const TESTS = '{"type":"started","key":"v2:677122bbe0854d6362484803c7d6298bb4c9f68a1388f2233bca8c1de043ee1e","agentId":"a643351dfadae7d20","label":"audit:tests","phase":"Audit"}'
-const API = '{"type":"started","key":"v2:605eddb026e3517dc5be3032f883af5cbcebfeec50a209b4b320ad39d099321e","agentId":"a8d2e8fe38b37af93","label":"audit:api","phase":"Audit"}'
-const UI_DONE = '{"type":"result","key":"v2:06261fd506bb15b3851fc8ce548be8d649349cdeb1c0c905a39a515bef804566","agentId":"af7d9e0fa88200f5e","result":{"summary":"Read-only audit of how mode-clair renders."}}'
-const VERIFY_UI = '{"type":"started","key":"v2:244cc83a38b54a9d86270c659bd6427951d34523fdcdaa9d27bb6f82ee6510ff","agentId":"a03cabb04186f20e4","label":"verify:ui","phase":"Verify"}'
-const TESTS_DONE = '{"type":"result","key":"v2:677122bbe0854d6362484803c7d6298bb4c9f68a1388f2233bca8c1de043ee1e","agentId":"a643351dfadae7d20","result":{"summary":"I audited the mode-clair tests read-only."}}'
+const UI =
+  '{"type":"started","key":"v2:06261fd506bb15b3851fc8ce548be8d649349cdeb1c0c905a39a515bef804566","agentId":"af7d9e0fa88200f5e","label":"audit:ui","phase":"Audit"}'
+const LOGIC =
+  '{"type":"started","key":"v2:27b7af3fc7367bda47af957cbe4bc982fba2e17fc8c53dc56f947ca501e8f73a","agentId":"ab6c88883bf7c997a","label":"audit:logic","phase":"Audit"}'
+const TESTS =
+  '{"type":"started","key":"v2:677122bbe0854d6362484803c7d6298bb4c9f68a1388f2233bca8c1de043ee1e","agentId":"a643351dfadae7d20","label":"audit:tests","phase":"Audit"}'
+const API =
+  '{"type":"started","key":"v2:605eddb026e3517dc5be3032f883af5cbcebfeec50a209b4b320ad39d099321e","agentId":"a8d2e8fe38b37af93","label":"audit:api","phase":"Audit"}'
+const UI_DONE =
+  '{"type":"result","key":"v2:06261fd506bb15b3851fc8ce548be8d649349cdeb1c0c905a39a515bef804566","agentId":"af7d9e0fa88200f5e","result":{"summary":"Read-only audit of how mode-clair renders."}}'
+const VERIFY_UI =
+  '{"type":"started","key":"v2:244cc83a38b54a9d86270c659bd6427951d34523fdcdaa9d27bb6f82ee6510ff","agentId":"a03cabb04186f20e4","label":"verify:ui","phase":"Verify"}'
+const TESTS_DONE =
+  '{"type":"result","key":"v2:677122bbe0854d6362484803c7d6298bb4c9f68a1388f2233bca8c1de043ee1e","agentId":"a643351dfadae7d20","result":{"summary":"I audited the mode-clair tests read-only."}}'
 
 // Lignes réelles du journal wf_35661d33-c4c (session 533d49a4) : un résultat en texte.
-const REFS_CODE = '{"type":"started","key":"v2:b3a26a4ee33b6f0ec77d99d5327eb77cf9db7c552e73d3aca6c3636cba9e69fb","agentId":"a81c0e0e2aa190334","label":"refs:code","phase":"Gather"}'
-const REFS_CODE_DONE = '{"type":"result","key":"v2:b3a26a4ee33b6f0ec77d99d5327eb77cf9db7c552e73d3aca6c3636cba9e69fb","agentId":"a81c0e0e2aa190334","result":"/tmp/claude-1000/-home-user-bridge-mcp/11111111-2222-4333-8444-555555555555/scratchpad/refs/existing-code.md (1446 lines)"}'
+const REFS_CODE =
+  '{"type":"started","key":"v2:b3a26a4ee33b6f0ec77d99d5327eb77cf9db7c552e73d3aca6c3636cba9e69fb","agentId":"a81c0e0e2aa190334","label":"refs:code","phase":"Gather"}'
+const REFS_CODE_DONE =
+  '{"type":"result","key":"v2:b3a26a4ee33b6f0ec77d99d5327eb77cf9db7c552e73d3aca6c3636cba9e69fb","agentId":"a81c0e0e2aa190334","result":"/tmp/claude-1000/-home-user-bridge-mcp/11111111-2222-4333-8444-555555555555/scratchpad/refs/existing-code.md (1446 lines)"}'
 
 // Lignes réelles du journal wf_294c310e-183 (session bridge-mcp 50452de4, lignes 14-17) : deux agents en échec.
-const FIX = '{"type":"started","key":"v2:d4eb17cf20881e2f2d66c99e69cfc27847566ce08bb7228e119cdc3be13efc79","agentId":"a703094f7912c6ca0","label":"fix:r1","phase":"Fix"}'
-const FIX_FAILED = '{"type":"failed","key":"v2:d4eb17cf20881e2f2d66c99e69cfc27847566ce08bb7228e119cdc3be13efc79","agentId":"a703094f7912c6ca0"}'
-const E2E = '{"type":"started","key":"v2:f2eb9498c34621d2d877188ce3fdd2dc88a6e32cee04a9d63417bfd3ca95e511","agentId":"a041c4196e3684a6a","label":"e2e","phase":"E2E"}'
-const E2E_FAILED = '{"type":"failed","key":"v2:f2eb9498c34621d2d877188ce3fdd2dc88a6e32cee04a9d63417bfd3ca95e511","agentId":"a041c4196e3684a6a"}'
+const FIX =
+  '{"type":"started","key":"v2:d4eb17cf20881e2f2d66c99e69cfc27847566ce08bb7228e119cdc3be13efc79","agentId":"a703094f7912c6ca0","label":"fix:r1","phase":"Fix"}'
+const FIX_FAILED =
+  '{"type":"failed","key":"v2:d4eb17cf20881e2f2d66c99e69cfc27847566ce08bb7228e119cdc3be13efc79","agentId":"a703094f7912c6ca0"}'
+const E2E =
+  '{"type":"started","key":"v2:f2eb9498c34621d2d877188ce3fdd2dc88a6e32cee04a9d63417bfd3ca95e511","agentId":"a041c4196e3684a6a","label":"e2e","phase":"E2E"}'
+const E2E_FAILED =
+  '{"type":"failed","key":"v2:f2eb9498c34621d2d877188ce3fdd2dc88a6e32cee04a9d63417bfd3ca95e511","agentId":"a041c4196e3684a6a"}'
 
-const lines = (...rows: string[]): string => rows.map(r => r + '\n').join('')
+const lines = (...rows: string[]): string => rows.map((r) => r + '\n').join('')
 
-const JOURNAL = '/home/user/.claude/projects/-home-user-bridge-mcp/11111111-2222-4333-8444-555555555555/subagents/workflows/wf_2f1d0568-7cc/journal.jsonl'
+const JOURNAL =
+  '/home/user/.claude/projects/-home-user-bridge-mcp/11111111-2222-4333-8444-555555555555/subagents/workflows/wf_2f1d0568-7cc/journal.jsonl'
 const UNDERSTAND = {
   key: 'wf_2f1d0568-7cc',
   toolUseId: 'toolu_01MyTHb2wVWnW2Mw3gnCBgxh',
@@ -72,7 +85,8 @@ const SPEC_REVIEW = {
   toolUseId: 'toolu_01XB63a8sbmBJCsZYiaAraWY',
   name: 'mode-clair-spec-review',
   phases: ['Review'],
-  journalPath: '/home/user/.claude/projects/-home-user-bridge-mcp/11111111-2222-4333-8444-555555555555/subagents/workflows/wf_0f41829b-6d3/journal.jsonl',
+  journalPath:
+    '/home/user/.claude/projects/-home-user-bridge-mcp/11111111-2222-4333-8444-555555555555/subagents/workflows/wf_0f41829b-6d3/journal.jsonl',
   remote: false,
 }
 
@@ -97,11 +111,17 @@ describe('workflow : le bloc meta', () => {
   test('sans bloc meta : null ; bloc sans nom ni phases : rien d’inventé', () => {
     expect(parseMeta("const MOD = '/home/user/claude-mods/plugins/mode-clair'")).toBeNull()
     expect(parseMeta('')).toBeNull()
-    expect(parseMeta("export const meta = { description: 'trouver ce qui remplit les disques' }")).toStrictEqual({ name: null, phases: [] })
+    expect(parseMeta("export const meta = { description: 'trouver ce qui remplit les disques' }")).toStrictEqual({
+      name: null,
+      phases: [],
+    })
   })
 
   test('un bloc meta jamais refermé ne fait pas planter', () => {
-    expect(parseMeta("export const meta = {\n  name: 'mode-clair-understand',\n  phases: [")).toStrictEqual({ name: null, phases: [] })
+    expect(parseMeta("export const meta = {\n  name: 'mode-clair-understand',\n  phases: [")).toStrictEqual({
+      name: null,
+      phases: [],
+    })
   })
 })
 
@@ -124,15 +144,22 @@ describe('workflow : lancement', () => {
   })
 
   test('un workflow lancé à distance est « distant »', () => {
-    const remote = { key: 'wc4qc70s7', toolUseId: 'toolu_01ENS9FnS8Gf6wM9N3FbdNEk', name: 'mode-clair-plan-draft', phases: [], journalPath: null, remote: true }
+    const remote = {
+      key: 'wc4qc70s7',
+      toolUseId: 'toolu_01ENS9FnS8Gf6wM9N3FbdNEk',
+      name: 'mode-clair-plan-draft',
+      phases: [],
+      journalPath: null,
+      remote: true,
+    }
     expect(startWorkflow([], remote, 1_000)[0]?.status).toBe('distant')
   })
 
   test('plusieurs workflows coexistent, le plus récent en dernier ; une même clé remplace l’ancienne entrée', () => {
     const two = startWorkflow(startWorkflow([], UNDERSTAND, 1_000), SPEC_REVIEW, 2_000)
-    expect(two.map(w => w.key)).toStrictEqual(['wf_2f1d0568-7cc', 'wf_0f41829b-6d3'])
+    expect(two.map((w) => w.key)).toStrictEqual(['wf_2f1d0568-7cc', 'wf_0f41829b-6d3'])
     const again = startWorkflow(two, UNDERSTAND, 3_000)
-    expect(again.map(w => w.key)).toStrictEqual(['wf_0f41829b-6d3', 'wf_2f1d0568-7cc'])
+    expect(again.map((w) => w.key)).toStrictEqual(['wf_0f41829b-6d3', 'wf_2f1d0568-7cc'])
     expect(again[1]?.startedAt).toBe(3_000)
   })
 })
@@ -157,7 +184,7 @@ describe('workflow : le journal', () => {
     const first = lines(LAUNCHED, UI, TESTS)
     const w1 = foldJournal(understand(), first, 2_000)
     const w2 = foldJournal(w1, first + lines(UI_DONE, TESTS_DONE), 3_000)
-    expect(w2.agents.map(a => `${a.label}:${a.state}`)).toStrictEqual(['audit:ui:fait', 'audit:tests:fait'])
+    expect(w2.agents.map((a) => `${a.label}:${a.state}`)).toStrictEqual(['audit:ui:fait', 'audit:tests:fait'])
     expect(w2.consumed).toBe((first + lines(UI_DONE, TESTS_DONE)).length)
     expect(foldJournal(w2, first + lines(UI_DONE, TESTS_DONE), 4_000)).toBe(w2)
   })
@@ -168,19 +195,20 @@ describe('workflow : le journal', () => {
     expect(w1.consumed).toBe(lines(LAUNCHED, UI).length)
     expect(w1.agents).toHaveLength(1)
     const w2 = foldJournal(w1, lines(LAUNCHED, UI, LOGIC), 3_000)
-    expect(w2.agents.map(a => a.label)).toStrictEqual(['audit:ui', 'audit:logic'])
+    expect(w2.agents.map((a) => a.label)).toStrictEqual(['audit:ui', 'audit:logic'])
     const none = understand()
     expect(foldJournal(none, LAUNCHED.slice(0, 10), 2_000)).toBe(none)
   })
 
   test('lignes failed réelles : agents en échec ; un résultat en texte termine l’agent', () => {
     const w = foldJournal(understand(), lines(FIX, FIX_FAILED, E2E, E2E_FAILED, REFS_CODE, REFS_CODE_DONE), 2_000)
-    expect(w.agents.map(a => `${a.label}:${a.state}`)).toStrictEqual(['fix:r1:echec', 'e2e:echec', 'refs:code:fait'])
+    expect(w.agents.map((a) => `${a.label}:${a.state}`)).toStrictEqual(['fix:r1:echec', 'e2e:echec', 'refs:code:fait'])
     expect(currentPhase(w)).toBe('Gather')
   })
 
   test('ligne illisible, type inconnu, agent jamais lancé, doublon : sautés sans planter', () => {
-    const noLabel = '{"type":"started","key":"v2:06261fd506bb15b3851fc8ce548be8d649349cdeb1c0c905a39a515bef804566","agentId":"af7d9e0fa88200f5e"}'
+    const noLabel =
+      '{"type":"started","key":"v2:06261fd506bb15b3851fc8ce548be8d649349cdeb1c0c905a39a515bef804566","agentId":"af7d9e0fa88200f5e"}'
     const text = lines(
       'not json',
       '',
@@ -193,7 +221,9 @@ describe('workflow : le journal', () => {
       TESTS_DONE,
     )
     const w = foldJournal(understand(), text, 2_000)
-    expect(w.agents).toStrictEqual([{ id: 'af7d9e0fa88200f5e', label: 'af7d9e0fa88200f5e', phase: null, state: 'en-cours' }])
+    expect(w.agents).toStrictEqual([
+      { id: 'af7d9e0fa88200f5e', label: 'af7d9e0fa88200f5e', phase: null, state: 'en-cours' },
+    ])
     expect(w.consumed).toBe(text.length)
     expect(currentPhase(w)).toBeNull()
   })
@@ -201,7 +231,7 @@ describe('workflow : le journal', () => {
   test('journal plus court que ce qui a été lu : relu depuis le début', () => {
     const w1 = foldJournal(understand(), lines(LAUNCHED, UI, LOGIC, TESTS), 2_000)
     const w2 = foldJournal(w1, lines(FIX), 3_000)
-    expect(w2.agents.map(a => a.label)).toStrictEqual(['fix:r1'])
+    expect(w2.agents.map((a) => a.label)).toStrictEqual(['fix:r1'])
     expect(w2.consumed).toBe(lines(FIX).length)
     const w3 = foldJournal(w1, FIX.slice(0, 20), 3_000)
     expect(w3.agents).toStrictEqual([])
@@ -218,10 +248,12 @@ describe('workflow : le journal', () => {
   test('la phase en cours : la dernière commencée qui a un agent en cours, sinon la dernière commencée', () => {
     const w = foldJournal(understand(), lines(UI, LOGIC, VERIFY_UI), 2_000)
     expect(currentPhase(w)).toBe('Verify')
-    const verifyDone = '{"type":"result","key":"v2:244cc83a38b54a9d86270c659bd6427951d34523fdcdaa9d27bb6f82ee6510ff","agentId":"a03cabb04186f20e4","result":{"verdicts":[]}}'
+    const verifyDone =
+      '{"type":"result","key":"v2:244cc83a38b54a9d86270c659bd6427951d34523fdcdaa9d27bb6f82ee6510ff","agentId":"a03cabb04186f20e4","result":{"verdicts":[]}}'
     const w2 = foldJournal(w, lines(UI, LOGIC, VERIFY_UI, verifyDone), 3_000)
     expect(currentPhase(w2)).toBe('Audit')
-    const logicDone = '{"type":"result","key":"v2:27b7af3fc7367bda47af957cbe4bc982fba2e17fc8c53dc56f947ca501e8f73a","agentId":"ab6c88883bf7c997a","result":{"summary":"done"}}'
+    const logicDone =
+      '{"type":"result","key":"v2:27b7af3fc7367bda47af957cbe4bc982fba2e17fc8c53dc56f947ca501e8f73a","agentId":"ab6c88883bf7c997a","result":{"summary":"done"}}'
     const w3 = foldJournal(w2, lines(UI, LOGIC, VERIFY_UI, verifyDone, UI_DONE, logicDone), 4_000)
     expect(currentPhase(w3)).toBe('Verify')
     expect(currentPhase(understand())).toBeNull()
@@ -284,8 +316,8 @@ describe('workflow : fin, silence, liste active', () => {
     expect(notice).toStrictEqual({ key: 'toolu_01MyTHb2wVWnW2Mw3gnCBgxh', status: 'fini' })
     const list = startWorkflow(startWorkflow([], UNDERSTAND, 1_000), SPEC_REVIEW, 2_000)
     const ended = endWorkflow(list, 'toolu_01MyTHb2wVWnW2Mw3gnCBgxh', 'fini')
-    expect(ended.map(w => w.status)).toStrictEqual(['fini', 'en-cours'])
-    expect(active(ended).map(w => w.key)).toStrictEqual(['wf_0f41829b-6d3'])
+    expect(ended.map((w) => w.status)).toStrictEqual(['fini', 'en-cours'])
+    expect(active(ended).map((w) => w.key)).toStrictEqual(['wf_0f41829b-6d3'])
   })
 
   test('failed, killed, stopped : échec ou arrêté (notifications réelles)', () => {
@@ -327,7 +359,11 @@ describe('workflow : fin, silence, liste active', () => {
     }
     expect(quiet(list, 1_000 + QUIET_MS - 1, none)).toBe(list)
     expect(asked).toStrictEqual(['wf_2f1d0568-7cc'])
-    expect(quiet(list, 1_000 + QUIET_MS, none).map(w => w.status)).toStrictEqual(['sans-nouvelles', 'distant', 'fini'])
+    expect(quiet(list, 1_000 + QUIET_MS, none).map((w) => w.status)).toStrictEqual([
+      'sans-nouvelles',
+      'distant',
+      'fini',
+    ])
     expect(quiet(list, 1_000 + QUIET_MS, () => 1_000 + 60_000)).toBe(list)
     expect(quiet(list, 1_000 + QUIET_MS, () => 500)[0]?.status).toBe('sans-nouvelles')
   })
@@ -335,7 +371,7 @@ describe('workflow : fin, silence, liste active', () => {
   test('active : en cours et distant seulement', () => {
     const statuses = ['en-cours', 'fini', 'echec', 'arrete', 'sans-nouvelles', 'distant'] as const
     const list = statuses.map((status, i): Workflow => ({ ...understand(), key: `w${i}`, status }))
-    expect(active(list).map(w => w.status)).toStrictEqual(['en-cours', 'distant'])
+    expect(active(list).map((w) => w.status)).toStrictEqual(['en-cours', 'distant'])
   })
 
   test('constantes : 30 minutes, 4 Mio', () => {

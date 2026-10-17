@@ -20,5 +20,5 @@ export const RECORDED_REFUSALS: readonly string[] = [
  * (trois au plus, sans les nombres écrits par `seq`), séparées par des retours à la ligne.
  */
 export const RECORDED_PERSISTED: readonly string[] = [
-  "<persisted-output>\nOutput too large (575.1KB). Full output saved to: /home/user/.claude/projects/-var-tmp-mode-clair-paint-cwd/bbbbbbbb-cccc-4ddd-8eee-ffffffffffff/tool-results/bwo71rhn2.txt\nPreview (first 2KB):",
+  '<persisted-output>\nOutput too large (575.1KB). Full output saved to: /home/user/.claude/projects/-var-tmp-mode-clair-paint-cwd/bbbbbbbb-cccc-4ddd-8eee-ffffffffffff/tool-results/bwo71rhn2.txt\nPreview (first 2KB):',
 ]

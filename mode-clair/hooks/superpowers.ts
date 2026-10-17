@@ -48,7 +48,16 @@ function stageOfSkill(skill: string): Stage | null {
 }
 
 function fresh(stage: Stage, now: number): Superpowers {
-  return { stage, planTitle: null, planPath: null, tasks: 0, current: null, lastEventAt: now, isStale: false, runningAgents: [] }
+  return {
+    stage,
+    planTitle: null,
+    planPath: null,
+    tasks: 0,
+    current: null,
+    lastEventAt: now,
+    isStale: false,
+    runningAgents: [],
+  }
 }
 
 /** Un skill invoqué. Un skill qui n'est pas une étape rend la même référence. */
@@ -147,12 +156,13 @@ export function runningAgentOf(result: unknown): string | null {
  * ce même appel) : ajouté une fois. Hors du plan, déjà suivi, ou aucun état : même référence.
  */
 export function onAgentLaunched(sp: Superpowers | null, agentId: string, now: number): Superpowers | null {
-  if (sp === null || (sp.stage !== 'taches' && sp.stage !== 'relecture') || sp.runningAgents.includes(agentId)) return sp
+  if (sp === null || (sp.stage !== 'taches' && sp.stage !== 'relecture') || sp.runningAgents.includes(agentId))
+    return sp
   return { ...sp, runningAgents: [...sp.runningAgents, agentId], lastEventAt: now, isStale: false }
 }
 
 /** La fin de la boucle d'un agent (turn.complete avec son agentId) : retiré ; même référence s'il n'était pas suivi. */
 export function onAgentDone(sp: Superpowers | null, agentId: string, now: number): Superpowers | null {
   if (sp === null || !sp.runningAgents.includes(agentId)) return sp
-  return { ...sp, runningAgents: sp.runningAgents.filter(id => id !== agentId), lastEventAt: now, isStale: false }
+  return { ...sp, runningAgents: sp.runningAgents.filter((id) => id !== agentId), lastEventAt: now, isStale: false }
 }

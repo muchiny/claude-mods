@@ -2,7 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import type { ParsedCall } from '../../hooks/bridge'
 import { hasBackgroundTask, parseConfirmation, runResultOf, sessionFromCreate } from '../../hooks/bridge'
-import { EMPTY, closeWaiting, dropCalls, finishCalls, setWaiting, startCalls, waitingFor } from '../../hooks/state'
+import { closeWaiting, dropCalls, EMPTY, finishCalls, setWaiting, startCalls, waitingFor } from '../../hooks/state'
 
 // Ce que register.tsx lisait lui-même en 0.1.0 et que la tâche 11 sort en fonctions pures
 // (spec §6 : register.tsx sans règle métier) : le résultat d'un tool.call, le formulaire de
@@ -19,15 +19,18 @@ const SSH_REFUSED = 'SSH connection failed to raspberry: Connection refused (os 
 // refs/bridge-facts.md §5.2 : les deux messages exacts du formulaire.
 const CONFIRM_EXEC =
   'Confirm destructive operation: `ssh_exec`\n\n**Arguments:**\n```json\n{"command":"systemctl restart nginx","host":"raspberry"}\n```\n\n**Command:**\n```sh\nsystemctl restart nginx\n```\n\nProceed?'
-const CONFIRM_KILL = 'Confirm destructive operation: `ssh_process_kill`\n\n**Arguments:**\n```json\n{"host":"raspberry","pid":1234}\n```\n\nProceed?'
+const CONFIRM_KILL =
+  'Confirm destructive operation: `ssh_process_kill`\n\n**Arguments:**\n```json\n{"host":"raspberry","pid":1234}\n```\n\nProceed?'
 // refs/bridge-facts.md §5.1 : sans arguments, le résumé vaut `(no arguments)`.
-const CONFIRM_NO_ARGS = 'Confirm destructive operation: `ssh_exec`\n\n**Arguments:**\n```json\n(no arguments)\n```\n\nProceed?'
+const CONFIRM_NO_ARGS =
+  'Confirm destructive operation: `ssh_exec`\n\n**Arguments:**\n```json\n(no arguments)\n```\n\nProceed?'
 // refs/bridge-facts.md §5.1, constructeur appliqué tel quel : résumé trié coupé à 300 caractères
 // suivis de `… (truncated)` ; une commande de 320 caractères pousse "host" au-delà de la coupe (§5.3).
 const LONG = 'x'.repeat(320)
 const CONFIRM_CUT = `Confirm destructive operation: \`ssh_exec\`\n\n**Arguments:**\n\`\`\`json\n${JSON.stringify({ command: LONG, host: 'raspberry' }).slice(0, 300)}… (truncated)\n\`\`\`\n\n**Command:**\n\`\`\`sh\n${LONG}\n\`\`\`\n\nProceed?`
 // refs/bridge-facts.md §5.1, `named` : un nom hors [A-Za-z0-9_.-] passe en bloc clôturé, sans info.
-const CONFIRM_FENCED = 'Confirm destructive operation: \n```\nmon outil\n```\n\n**Arguments:**\n```json\n(no arguments)\n```\n\nProceed?'
+const CONFIRM_FENCED =
+  'Confirm destructive operation: \n```\nmon outil\n```\n\n**Arguments:**\n```json\n(no arguments)\n```\n\nProceed?'
 // SessionInfo de ssh_session_create et réponse de ssh_session_exec (refs/bridge-facts.md §6.1 ;
 // champs de src/ssh/session.rs:72-78 ; id UUID v4, src/ssh/session.rs:345).
 const SESSION = '7f6d1c2e-3b4a-4c5d-8e9f-0a1b2c3d4e5f'
@@ -54,20 +57,37 @@ const call = (via: 'cli' | 'mcp', tool: string, host: string | null): ParsedCall
 
 describe('runResultOf : le résultat du moteur tel que classify le lit', () => {
   test('un résultat réussi : son texte, ni erreur, ni interruption ; le refus donné par l’appelant est gardé', () => {
-    expect(runResultOf(OK, false, false)).toStrictEqual({ isError: false, text: DF, interrupted: false, refusedByClaude: false })
+    expect(runResultOf(OK, false, false)).toStrictEqual({
+      isError: false,
+      text: DF,
+      interrupted: false,
+      refusedByClaude: false,
+    })
     expect(runResultOf(OK, false, true).refusedByClaude).toBe(true)
   })
 
   test('un résultat en erreur : isError, le texte que le modèle a lu', () => {
-    expect(runResultOf(FAILED, false, false)).toStrictEqual({ isError: true, text: SSH_REFUSED, interrupted: false, refusedByClaude: false })
+    expect(runResultOf(FAILED, false, false)).toStrictEqual({
+      isError: true,
+      text: SSH_REFUSED,
+      interrupted: false,
+      refusedByClaude: false,
+    })
   })
 
   test('le deny d’un hook : erreur, refus de Claude Code, son texte', () => {
-    expect(runResultOf(DENIED, false, false)).toStrictEqual({ isError: true, text: DENIED.deny, interrupted: false, refusedByClaude: true })
+    expect(runResultOf(DENIED, false, false)).toStrictEqual({
+      isError: true,
+      text: DENIED.deny,
+      interrupted: false,
+      refusedByClaude: true,
+    })
   })
 
   test('sans text : stdout puis stderr d’un résultat Bash, une chaîne telle quelle, sinon rien', () => {
-    expect(runResultOf({ result: { stdout: DF, stderr: CLI_LOG, interrupted: false } }, false, false).text).toBe(`${DF}\n${CLI_LOG}`)
+    expect(runResultOf({ result: { stdout: DF, stderr: CLI_LOG, interrupted: false } }, false, false).text).toBe(
+      `${DF}\n${CLI_LOG}`,
+    )
     expect(runResultOf({ result: { stdout: DF, interrupted: false } }, false, false).text).toBe(DF)
     expect(runResultOf({ isError: true, result: SSH_REFUSED }, false, false).text).toBe(SSH_REFUSED)
     expect(runResultOf({ result: undefined }, false, false).text).toBe('')
@@ -75,12 +95,21 @@ describe('runResultOf : le résultat du moteur tel que classify le lit', () => {
 
   test('interrompu : next.signal.aborted, ou interrupted du résultat Bash', () => {
     expect(runResultOf(OK, true, false).interrupted).toBe(true)
-    expect(runResultOf({ result: { stdout: '', stderr: '', interrupted: true }, text: '' }, false, false).interrupted).toBe(true)
-    expect(runResultOf({ result: { stdout: '', stderr: '', interrupted: false }, text: '' }, false, false).interrupted).toBe(false)
+    expect(
+      runResultOf({ result: { stdout: '', stderr: '', interrupted: true }, text: '' }, false, false).interrupted,
+    ).toBe(true)
+    expect(
+      runResultOf({ result: { stdout: '', stderr: '', interrupted: false }, text: '' }, false, false).interrupted,
+    ).toBe(false)
   })
 
   test('le cœur a rejeté (aucun résultat) : erreur interrompue, sans texte', () => {
-    expect(runResultOf(undefined, false, false)).toStrictEqual({ isError: true, text: '', interrupted: true, refusedByClaude: false })
+    expect(runResultOf(undefined, false, false)).toStrictEqual({
+      isError: true,
+      text: '',
+      interrupted: true,
+      refusedByClaude: false,
+    })
     expect(runResultOf(undefined, false, true).refusedByClaude).toBe(true)
   })
 })
@@ -133,7 +162,7 @@ describe('dropCalls : appel passé en arrière-plan', () => {
     const parsed = [call('cli', 'ssh_disk_usage', 'raspberry')]
     const s = startCalls(startCalls(EMPTY, 'toolu_bg', undefined, parsed, 1_000), 'toolu_fg', undefined, parsed, 1_000)
     const after = dropCalls(s, 'toolu_bg')
-    expect(after.calls.map(c => c.toolUseId)).toEqual(['toolu_fg'])
+    expect(after.calls.map((c) => c.toolUseId)).toEqual(['toolu_fg'])
     expect(after.hostOrder).toEqual(['raspberry'])
   })
 
@@ -180,7 +209,12 @@ describe('waitingFor : l’appel qu’attend le formulaire', () => {
       callId: 'toolu_b#0',
       since: 5_000,
     })
-    expect(waitingFor(two, { tool: null, host: null }, 5_000)).toStrictEqual({ tool: 'ssh_disk_usage', host: 'win2025', callId: 'toolu_b#0', since: 5_000 })
+    expect(waitingFor(two, { tool: null, host: null }, 5_000)).toStrictEqual({
+      tool: 'ssh_disk_usage',
+      host: 'win2025',
+      callId: 'toolu_b#0',
+      since: 5_000,
+    })
   })
 
   test('un appel CLI ou terminé n’est jamais attendu', () => {
@@ -191,8 +225,18 @@ describe('waitingFor : l’appel qu’attend le formulaire', () => {
       [{ state: 'fait', truncated: false }],
       3_000,
     )
-    expect(waitingFor(done, { tool: 'ssh_exec', host: 'raspberry' }, 5_000)).toStrictEqual({ tool: 'ssh_exec', host: 'raspberry', callId: null, since: 5_000 })
-    expect(waitingFor(done, { tool: null, host: null }, 5_000)).toStrictEqual({ tool: '', host: null, callId: null, since: 5_000 })
+    expect(waitingFor(done, { tool: 'ssh_exec', host: 'raspberry' }, 5_000)).toStrictEqual({
+      tool: 'ssh_exec',
+      host: 'raspberry',
+      callId: null,
+      since: 5_000,
+    })
+    expect(waitingFor(done, { tool: null, host: null }, 5_000)).toStrictEqual({
+      tool: '',
+      host: null,
+      callId: null,
+      since: 5_000,
+    })
   })
 })
 

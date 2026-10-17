@@ -50,15 +50,41 @@ claude --plugin-dir ./claude-mods/mode-clair
 
 ## Développement
 
+Node 22 ou plus récent, puis `npm ci`.
+
 ```bash
-claude plugin validate .            # la marketplace
-claude plugin validate mode-clair   # le mod
-claude plugin test mode-clair       # les tests (aucune connexion requise)
+npm run lint        # Biome : lint, format, tri des imports (biome ci)
+npm run typecheck   # tsc --noEmit, types de l'API des mods dans dev/claude-code.d.ts
+npm run validate    # claude plugin validate (marketplace et mod)
+npm test            # claude plugin test mode-clair
+npm run format      # applique le format Biome
 ```
 
-La CI (`.github/workflows/ci.yml`) rejoue ces trois commandes sur chaque push
-et chaque pull request, et vérifie qu'aucun chemin personnel ni secret n'entre
-dans ce dépôt public.
+### Mutation testing
+
+[Stryker](https://stryker-mutator.io) mesure si les tests voient vraiment un changement de comportement :
+
+```bash
+npx stryker run --mutate "mode-clair/hooks/colors.ts" --concurrency 4
+```
+
+`claude plugin test` n'expose pas l'environnement aux modules, donc Stryker ne peut pas activer ses
+mutants lui-même. `dev/stryker-test.sh` travaille sur une copie jetable du mod dans `/var/tmp` en y
+inscrivant le mutant actif. Compte environ 4,5 s par mutant ; le module `bridge.ts` seul en a 1 656.
+`register.tsx` (le branchement des événements) est exclu : le moteur lit les noms d'événements de
+`on()` dans la source, et Stryker les enveloppe dans un ternaire, ce qui empêche le module de se charger.
+La CI le lance chaque lundi et à la demande (`.github/workflows/mutation.yml`), un job par module,
+et publie le rapport HTML en artefact.
+
+### CI
+
+`.github/workflows/ci.yml`, à chaque push et pull request :
+
+| Job | Contrôle |
+| --- | --- |
+| `static` | Biome (`--error-on-warnings`), `tsc`, `npm audit` (échec à partir de « high ») |
+| `mod` | `claude plugin validate` (marketplace et mod), `claude plugin test` |
+| `hygiene` | aucun chemin personnel ni secret dans ce dépôt public |
 
 Pour écrire un autre mod, ajoute un dossier à la racine avec son
 `.claude-plugin/plugin.json`, puis déclare-le dans
@@ -66,8 +92,8 @@ Pour écrire un autre mod, ajoute un dossier à la racine avec son
 
 ## Contribuer
 
-Issues et pull requests bienvenues. Avant de proposer un changement, lance les
-trois commandes ci-dessus : elles doivent passer. Les fixtures de test doivent
+Issues et pull requests bienvenues. Avant de proposer un changement, lance
+`npm run lint`, `npm run typecheck`, `npm run validate` et `npm test` : elles doivent passer. Les fixtures de test doivent
 rester anonymes (`/home/user`, hôtes fictifs).
 
 ## Licence

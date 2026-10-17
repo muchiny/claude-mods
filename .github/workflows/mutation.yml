@@ -1,0 +1,45 @@
+name: Mutation testing
+
+# Long (≈ 3 900 mutants, une exécution de `claude plugin test` chacun) : hebdomadaire et à la demande,
+# jamais à chaque push. Un job par module pour répartir la charge.
+# register.tsx est exclu : le moteur lit les noms d'événements de `on()` dans la source, et
+# l'instrumentation de Stryker les enveloppe dans un ternaire (le module ne se charge plus).
+on:
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mutate:
+    name: mutate ${{ matrix.file }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        file: [bridge.ts, colors.ts, fr.ts, state.ts, superpowers.ts, view.ts, workflow.ts]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code@latest
+
+      - name: Stryker
+        run: npx stryker run --mutate "mode-clair/hooks/${{ matrix.file }}" --concurrency 3 --reporters clear-text,html,json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutation-${{ matrix.file }}
+          path: reports/mutation
+          if-no-files-found: ignore

@@ -1,9 +1,9 @@
-import { describe, expect, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
+import { describe, expect, test } from 'claude-code/testing'
 
 import { colorOf } from '../../hooks/colors'
 import { WAIT_SIGN } from '../../hooks/view'
-import { ENGINE_ROW, PLUGIN, SURFACES, lastState, world, writeFile } from './world'
+import { ENGINE_ROW, lastState, PLUGIN, SURFACES, world, writeFile } from './world'
 
 // --- Fixtures réelles (sources : voir tests/engine/events.test.tsx) -------------------
 
@@ -21,7 +21,8 @@ const PLAN_PATH = '/home/user/claude-mods-0.2/docs/superpowers/plans/2026-10-15-
 const PLAN_3 = '# Exemple\n\n### T1 — Première\n\n### T2 — Deuxième\n\n### T3 — Troisième\n'
 // Bloc meta (D:17484) et journal réel (quatre premières lignes de wf_0f41829b-6d3/journal.jsonl,
 // chacune finie par son retour à la ligne).
-const SCRIPT = "export const meta = { name: 'audit-disques', description: 'faire de la place', phases: [{ title: 'Review' }] }"
+const SCRIPT =
+  "export const meta = { name: 'audit-disques', description: 'faire de la place', phases: [{ title: 'Review' }] }"
 const WF_DIR =
   '/home/user/.claude/projects/-home-user-bridge-mcp/11111111-2222-4333-8444-555555555555/subagents/workflows/wf_0f41829b-6d3'
 const JOURNAL_4 = [
@@ -50,21 +51,52 @@ const AGENT_LAUNCHED = {
   prompt: 'You are implementing Task 3',
   outputFile: '/tmp/claude-1000/tasks/af6f3b628322fc241.output',
 } as const
-const AGENT_COMPLETED = { status: 'completed', agentId: AGENT_ID, content: [{ type: 'text', text: 'DONE' }], prompt: 'You are implementing Task 3' } as const
-const agentEnd = { answer: 'DONE', durationMs: 4_000, isAborted: false, turnId: 'turn_a3', reason: 'answer', agentId: AGENT_ID } as const
+const AGENT_COMPLETED = {
+  status: 'completed',
+  agentId: AGENT_ID,
+  content: [{ type: 'text', text: 'DONE' }],
+  prompt: 'You are implementing Task 3',
+} as const
+const agentEnd = {
+  answer: 'DONE',
+  durationMs: 4_000,
+  isAborted: false,
+  turnId: 'turn_a3',
+  reason: 'answer',
+  agentId: AGENT_ID,
+} as const
 
 const ok = (text: string) => ({ result: { result: { content: [] }, text, isReadOnly: true as const } })
 const failed = (text: string) => ({ result: { result: text, text, isError: true as const } })
 
-const BAND = { hasSurvey: false, isWorking: true, maxRows: 12, bodyColumns: 120, scroll: { bodyRows: 12, offset: 0 }, view: {} }
+const BAND = {
+  hasSurvey: false,
+  isWorking: true,
+  maxRows: 12,
+  bodyColumns: 120,
+  scroll: { bodyRows: 12, offset: 0 },
+  view: {},
+}
 
 function mountBand($: Engine, props: Partial<typeof BAND> & { view?: { agentId?: string } } = {}) {
   return $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, ...props } })
 }
 
 function mountGroup($: Engine, ids: (string | undefined)[], isExpanded: boolean) {
-  const calls = ids.map(id => ({ tool_use_id: id, tool: 'Bash', input: {}, isRunning: false, isErrored: false, isInterrupted: false }))
-  return $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'ToolGroup', props: { calls, isActive: false, isExpanded } })
+  const calls = ids.map((id) => ({
+    tool_use_id: id,
+    tool: 'Bash',
+    input: {},
+    isRunning: false,
+    isErrored: false,
+    isInterrupted: false,
+  }))
+  return $.ui.mount({
+    plugin: PLUGIN,
+    surface: 'terminal',
+    component: 'ToolGroup',
+    props: { calls, isActive: false, isExpanded },
+  })
 }
 
 /** La rangée d'un appel seul, où le mod met sa ligne : spec §10, « ToolResult levé ou non sous les lignes d'un groupe déplié ». */
@@ -87,7 +119,12 @@ async function superpowersTask($: Engine): Promise<void> {
   await $.tool.call({ tool: 'Skill', tool_use_id: 'toolu_s1', skill: 'superpowers:writing-plans' })
   await $.tool.call({ tool: 'Write', tool_use_id: 'toolu_w1', file_path: PLAN_PATH, content: PLAN_3 })
   await $.tool.call({ tool: 'Skill', tool_use_id: 'toolu_s2', skill: 'superpowers:subagent-driven-development' })
-  await $.tool.call({ tool: 'Agent', tool_use_id: 'toolu_a1', description: 'Implement Task 2', prompt: 'You are implementing Task 2' })
+  await $.tool.call({
+    tool: 'Agent',
+    tool_use_id: 'toolu_a1',
+    description: 'Implement Task 2',
+    prompt: 'You are implementing Task 2',
+  })
 }
 
 // --- La bande au-dessus de la saisie --------------------------------------------------------
@@ -151,8 +188,16 @@ describe('ui.render AbovePrompt', () => {
 
   test('un appel en arrière-plan ne tient jamais la bande', async ($, on) => {
     const w = world(on)
-    w.answers.set('toolu_bg', { result: { result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b1' }, text: '' }, afterMs: 1_000 })
-    const pending = $.tool.call({ tool: 'Bash', tool_use_id: 'toolu_bg', command: 'bridge-mcp tool ssh_disk_usage host=raspberry', run_in_background: true })
+    w.answers.set('toolu_bg', {
+      result: { result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b1' }, text: '' },
+      afterMs: 1_000,
+    })
+    const pending = $.tool.call({
+      tool: 'Bash',
+      tool_use_id: 'toolu_bg',
+      command: 'bridge-mcp tool ssh_disk_usage host=raspberry',
+      run_in_background: true,
+    })
     await w.clock.settle()
     const ui = await mountBand($)
     expect(await ui.findAll({ type: 'Text' })).toHaveLength(1)
@@ -198,7 +243,12 @@ describe('ui.render AbovePrompt', () => {
     const w = world(on)
     await superpowersTask($)
     w.answers.set('toolu_a3', { result: { result: AGENT_LAUNCHED, text: 'Async agent launched successfully.' } })
-    await $.tool.call({ tool: 'Agent', tool_use_id: 'toolu_a3', description: 'Implement Task 3', prompt: 'You are implementing Task 3' })
+    await $.tool.call({
+      tool: 'Agent',
+      tool_use_id: 'toolu_a3',
+      description: 'Implement Task 3',
+      prompt: 'You are implementing Task 3',
+    })
     const ui = await mountBand($, { isWorking: false })
     expect(await ui.find({ type: 'Text', text: /tâche 3 sur 3/ })).toBeDefined()
     await $.turn.complete(agentEnd)
@@ -211,7 +261,12 @@ describe('ui.render AbovePrompt', () => {
     const w = world(on)
     await superpowersTask($)
     w.answers.set('toolu_a3', { result: { result: AGENT_COMPLETED, text: 'DONE' }, afterMs: 1_000 })
-    const pending = $.tool.call({ tool: 'Agent', tool_use_id: 'toolu_a3', description: 'Implement Task 3', prompt: 'You are implementing Task 3' })
+    const pending = $.tool.call({
+      tool: 'Agent',
+      tool_use_id: 'toolu_a3',
+      description: 'Implement Task 3',
+      prompt: 'You are implementing Task 3',
+    })
     await w.clock.settle()
     await $.turn.complete(agentEnd)
     await w.clock.advance(1_000)
@@ -257,7 +312,12 @@ describe('ui.render AbovePrompt', () => {
   test('« à toi » prend la première ligne pendant le formulaire', async ($, on) => {
     const w = world(on)
     w.answers.set('toolu_f', { ...ok('active'), afterMs: 1_000 })
-    const pending = $.tool.call({ tool: 'mcp__ssh-bridge__ssh_exec', tool_use_id: 'toolu_f', host: 'raspberry', command: 'systemctl restart nginx' })
+    const pending = $.tool.call({
+      tool: 'mcp__ssh-bridge__ssh_exec',
+      tool_use_id: 'toolu_f',
+      host: 'raspberry',
+      command: 'systemctl restart nginx',
+    })
     await w.clock.settle()
     await $.classic.Elicitation({ mcp_server_name: 'ssh-bridge', message: CONFIRM_EXEC, mode: 'form' })
     const ui = await mountBand($)
@@ -282,7 +342,7 @@ describe('ui.render des rangées d’appels', () => {
       expect(await ui.find({ type: 'Text', text: ENGINE_ROW })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: /liste noire/ })).toBeUndefined()
       // Variante R2 : la ligne du mod sous la rangée de l'appel dessinée par le moteur (ordre du document).
-      const order = (await ui.findAll({ type: 'Text' })).map(t => t.text)
+      const order = (await ui.findAll({ type: 'Text' })).map((t) => t.text)
       expect(order[0]).toBe(ENGINE_ROW)
       expect(order[1]).toMatch(/raspberry.*ssh_disk_usage/)
       await ui.unmount()
@@ -293,7 +353,11 @@ describe('ui.render des rangées d’appels', () => {
   test('une rangée suivie suit son appel : en cours, puis injoignable quand il se termine', async ($, on) => {
     const w = world(on)
     w.answers.set('toolu_run', { ...failed(SSH_REFUSED), afterMs: 1_000 })
-    const pending = $.tool.call({ tool: 'mcp__ssh-bridge__ssh_disk_usage', tool_use_id: 'toolu_run', host: 'raspberry' })
+    const pending = $.tool.call({
+      tool: 'mcp__ssh-bridge__ssh_disk_usage',
+      tool_use_id: 'toolu_run',
+      host: 'raspberry',
+    })
     await w.clock.settle()
     const ui = await mountRow($, 'terminal', 'toolu_run', 'mcp__ssh-bridge__ssh_disk_usage')
     expect(await ui.find({ type: 'Text', text: /^● raspberry · ssh_disk_usage/ })).toBeDefined()
@@ -309,12 +373,19 @@ describe('ui.render des rangées d’appels', () => {
   test('pendant le formulaire, la rangée de l’appel attend ton accord, puis redevient la ligne de l’appel', async ($, on) => {
     const w = world(on)
     w.answers.set('toolu_f', { ...ok('active'), afterMs: 1_000 })
-    const pending = $.tool.call({ tool: 'mcp__ssh-bridge__ssh_exec', tool_use_id: 'toolu_f', host: 'raspberry', command: 'systemctl restart nginx' })
+    const pending = $.tool.call({
+      tool: 'mcp__ssh-bridge__ssh_exec',
+      tool_use_id: 'toolu_f',
+      host: 'raspberry',
+      command: 'systemctl restart nginx',
+    })
     await w.clock.settle()
     const ui = await mountRow($, 'terminal', 'toolu_f', 'mcp__ssh-bridge__ssh_exec')
     expect(await ui.find({ type: 'Text', text: /^● raspberry · ssh_exec$/ })).toBeDefined()
     await $.classic.Elicitation({ mcp_server_name: 'ssh-bridge', message: CONFIRM_EXEC, mode: 'form' })
-    expect(await ui.find({ type: 'Text', text: new RegExp(`^${WAIT_SIGN} raspberry · ssh_exec · attend ton accord$`) })).toBeDefined()
+    expect(
+      await ui.find({ type: 'Text', text: new RegExp(`^${WAIT_SIGN} raspberry · ssh_exec · attend ton accord$`) }),
+    ).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^●/ })).toBeUndefined()
     await $.classic.ElicitationResult({ mcp_server_name: 'ssh-bridge', action: 'accept', content: { confirm: true } })
     expect(await ui.find({ type: 'Text', text: /^● raspberry · ssh_exec$/ })).toBeDefined()
@@ -328,7 +399,12 @@ describe('ui.render des rangées d’appels', () => {
   test('un refus de la liste noire : refusé, sur sa machine', async ($, on) => {
     const w = world(on)
     w.answers.set('toolu_deny', failed(DENIED))
-    await $.tool.call({ tool: 'mcp__ssh-bridge__ssh_exec', tool_use_id: 'toolu_deny', host: 'raspberry', command: 'shutdown now' })
+    await $.tool.call({
+      tool: 'mcp__ssh-bridge__ssh_exec',
+      tool_use_id: 'toolu_deny',
+      host: 'raspberry',
+      command: 'shutdown now',
+    })
     const ui = await mountRow($, 'terminal', 'toolu_deny', 'mcp__ssh-bridge__ssh_exec')
     expect(await ui.find({ type: 'Text', text: /raspberry.*refusé/ })).toBeDefined()
     await ui.unmount()
@@ -345,8 +421,8 @@ describe('ui.render des rangées d’appels', () => {
     expect(await other.findAll({ type: 'Text' })).toHaveLength(1)
     expect(await tracked.find({ type: 'Text', text: ENGINE_ROW })).toBeDefined()
     // Témoin : une rangée suivie lit l'état, elle est redessinée après l'écriture ; l'autre ne l'est pas.
-    expect(w.drawn.filter(d => d.endsWith(':toolu_b')).length).toBeGreaterThan(1)
-    expect(w.drawn.filter(d => d.endsWith(':toolu_other'))).toHaveLength(1)
+    expect(w.drawn.filter((d) => d.endsWith(':toolu_b')).length).toBeGreaterThan(1)
+    expect(w.drawn.filter((d) => d.endsWith(':toolu_other'))).toHaveLength(1)
     await other.unmount()
     await tracked.unmount()
   })
@@ -354,9 +430,15 @@ describe('ui.render des rangées d’appels', () => {
   test('groupe replié : la ligne du moteur, puis une ligne par appel bridge suivi', async ($, on) => {
     const w = world(on)
     w.answers.set('toolu_cli', { result: { result: { stdout: DF, stderr: '', interrupted: false }, text: DF } })
-    w.answers.set('toolu_ls', { result: { result: { stdout: 'README.md', stderr: '', interrupted: false }, text: 'README.md' } })
+    w.answers.set('toolu_ls', {
+      result: { result: { stdout: 'README.md', stderr: '', interrupted: false }, text: 'README.md' },
+    })
     w.answers.set('toolu_mcp', ok(DF))
-    await $.tool.call({ tool: 'Bash', tool_use_id: 'toolu_cli', command: 'bridge-mcp tool ssh_disk_usage host=raspberry' })
+    await $.tool.call({
+      tool: 'Bash',
+      tool_use_id: 'toolu_cli',
+      command: 'bridge-mcp tool ssh_disk_usage host=raspberry',
+    })
     await $.tool.call({ tool: 'Bash', tool_use_id: 'toolu_ls', command: 'ls' })
     await $.tool.call({ tool: 'mcp__ssh-bridge__ssh_disk_usage', tool_use_id: 'toolu_mcp', host: 'raspberry' })
     const ui = await mountGroup($, ['toolu_cli', 'toolu_ls', 'toolu_mcp'], false)
@@ -386,13 +468,15 @@ describe('ui.render des rangées d’appels', () => {
 
   test('groupe sans appel bridge : le moteur seul, sans lire l’état', async ($, on) => {
     const w = world(on)
-    w.answers.set('toolu_ls', { result: { result: { stdout: 'README.md', stderr: '', interrupted: false }, text: 'README.md' } })
+    w.answers.set('toolu_ls', {
+      result: { result: { stdout: 'README.md', stderr: '', interrupted: false }, text: 'README.md' },
+    })
     w.answers.set('toolu_c', ok(DF))
     await $.tool.call({ tool: 'Bash', tool_use_id: 'toolu_ls', command: 'ls' })
     const ui = await mountGroup($, ['toolu_ls'], false)
     await $.tool.call({ tool: 'mcp__ssh-bridge__ssh_disk_usage', tool_use_id: 'toolu_c', host: 'raspberry' })
     expect(await ui.findAll({ type: 'Text' })).toHaveLength(1)
-    expect(w.drawn.filter(d => d.startsWith('ToolGroup:'))).toHaveLength(1)
+    expect(w.drawn.filter((d) => d.startsWith('ToolGroup:'))).toHaveLength(1)
     await ui.unmount()
   })
 })
@@ -409,7 +493,12 @@ describe('ui.render SessionMode et apparence', () => {
     await $.tool.call({ tool: 'mcp__ssh-bridge__ssh_disk_usage', tool_use_id: 'toolu_down', host: 'raspberry' })
     const ui = await mountMode($)
     expect(await ui.find({ type: 'Text', text: /clair ✗ 1/ })).toBeDefined()
-    await $.command.run({ command: 'clair', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 120 } })
+    await $.command.run({
+      command: 'clair',
+      args: '',
+      origin: { kind: 'composer' },
+      presentation: { isFullscreen: true, columns: 120 },
+    })
     expect(await ui.find({ type: 'Text', text: /clair ✗/ })).toBeUndefined()
     await ui.unmount()
   })
@@ -425,7 +514,7 @@ describe('ui.render SessionMode et apparence', () => {
     await pending
     const row = await mountRow($, 'terminal', 'toolu_1', 'mcp__ssh-bridge__ssh_disk_usage')
     texts.push(...(await row.findAll({ type: 'Text' })))
-    const mine = texts.filter(t => t.text !== ENGINE_ROW)
+    const mine = texts.filter((t) => t.text !== ENGINE_ROW)
     expect(mine.length).toBeGreaterThan(0)
     for (const t of mine) {
       expect(t.props.wrap).toBe('truncate-end')
@@ -434,7 +523,7 @@ describe('ui.render SessionMode et apparence', () => {
       expect(t.props.bold).toBeUndefined()
       expect(t.props.weight).toBeUndefined()
     }
-    expect(mine.filter(t => t.text === 'raspberry').map(t => t.props.color)).toContain(colorOf(0))
+    expect(mine.filter((t) => t.text === 'raspberry').map((t) => t.props.color)).toContain(colorOf(0))
     await band.unmount()
     await row.unmount()
   })

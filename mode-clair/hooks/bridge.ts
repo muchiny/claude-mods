@@ -10,19 +10,19 @@ import type { ToolInfo } from './tools.generated'
 export type ParsedCall = {
   via: Via
   tool: string
-  host: string | null          // null = machine inconnue
+  host: string | null // null = machine inconnue
   nature: Nature
-  accordByOption: boolean      // --yes
-  ownsExit: boolean            // CLI : segment bridge qui est la dernière commande simple de la ligne
-  inLoop: boolean              // CLI : segment dans for/while
-  sessionId?: string           // ssh_session_exec
+  accordByOption: boolean // --yes
+  ownsExit: boolean // CLI : segment bridge qui est la dernière commande simple de la ligne
+  inLoop: boolean // CLI : segment dans for/while
+  sessionId?: string // ssh_session_exec
 }
 
 export type RunResult = {
   isError: boolean
-  text: string                 // texte tel que le modèle l'a lu (tool.call result.text), ANSI compris
-  interrupted: boolean         // next.signal.aborted, ou interrupted du résultat Bash
-  refusedByClaude: boolean     // deny d'un hook, PermissionDenied, ou texte de refus du moteur
+  text: string // texte tel que le modèle l'a lu (tool.call result.text), ANSI compris
+  interrupted: boolean // next.signal.aborted, ou interrupted du résultat Bash
+  refusedByClaude: boolean // deny d'un hook, PermissionDenied, ou texte de refus du moteur
 }
 export type Outcome = { state: CallState; code?: number; truncated: boolean; reason?: string }
 
@@ -361,7 +361,7 @@ function callsOf(base: Base, tool: string, args: Record<string, unknown>, info: 
   if (base.inLoop) return [one(null)]
   if (info?.multi === true) {
     const hosts = args['hosts']
-    return Array.isArray(hosts) && hosts.length > 0 ? hosts.map(h => one(literal(h))) : [one(null)]
+    return Array.isArray(hosts) && hosts.length > 0 ? hosts.map((h) => one(literal(h))) : [one(null)]
   }
   return [one(literal(args['host']))]
 }
@@ -385,7 +385,12 @@ function toolArgs(words: readonly string[], jsonArgs: string | null): Record<str
 }
 
 /** Les appels d'un segment dont le mot programme est bridge-mcp ; `rest` = les mots qui le suivent. */
-function cliCalls(rest: readonly string[], ownsExit: boolean, inLoop: boolean, tools: Readonly<Record<string, ToolInfo>>): ParsedCall[] {
+function cliCalls(
+  rest: readonly string[],
+  ownsExit: boolean,
+  inLoop: boolean,
+  tools: Readonly<Record<string, ToolInfo>>,
+): ParsedCall[] {
   const f: Flags = { yes: false, dryRun: false, help: false, jsonArgs: null }
   let i = 0
   while (i < rest.length && isOption(rest[i] ?? '')) i = readOption(rest, i, GLOBAL_VALUED, f)
@@ -493,6 +498,7 @@ type Step = { label: string; mark: 'ok' | 'ko' | 'off' }
 type JsonObject = Record<string, unknown>
 
 /** Couleurs SGR du journal de bridge-mcp (bridge-facts §0.1.1). */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: l'ESC (0x1b) ouvre les séquences SGR, c'est voulu
 const ANSI_SGR = /\x1b\[[0-9;]*m/g
 /** Ligne du journal tracing de bridge-mcp, couleur retirée (amendement A3, bridge-facts §0.1.1). */
 const TRACING_LINE = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z\s+(TRACE|DEBUG|INFO|WARN|ERROR)\s/
@@ -525,9 +531,7 @@ const ENGINE_REFUSAL_PREFIXES: readonly string[] = [
  * le spec §10, ligne « Marque de sortie Bash persistée par Claude Code », dans l'ordre de
  * RECORDED_PERSISTED. Cherché sur toute ligne utile d'un appel CLI (spec §5.1, drapeau tronqué).
  */
-const ENGINE_PERSISTED_PREFIXES: readonly string[] = [
-  '<persisted-output>',
-]
+const ENGINE_PERSISTED_PREFIXES: readonly string[] = ['<persisted-output>']
 
 function literalPatterns(prefixes: readonly string[], anchor: '^' | ''): RegExp[] {
   const patterns: RegExp[] = []
@@ -566,7 +570,10 @@ export const BRIDGE_TEXTS: readonly { re: RegExp; state: CallState }[] = [
   // §3.8 : réponse au formulaire
   { re: /^User (declined execution of|cancelled confirmation for) destructive tool `/, state: 'decline' },
   { re: /^Confirmation for destructive tool `[^`]+` was not granted;/, state: 'confirmation-impossible' },
-  { re: /^Tool `[^`]+` is destructive and `require_elicitation_on_destructive` is enabled, but /, state: 'confirmation-impossible' },
+  {
+    re: /^Tool `[^`]+` is destructive and `require_elicitation_on_destructive` is enabled, but /,
+    state: 'confirmation-impossible',
+  },
   { re: /^Could not build a confirmation prompt for `/, state: 'confirmation-impossible' },
   // §3.5 : authentification SSH et WinRM, clé d'hôte
   { re: /^SSH authentication failed for /, state: 'acces-refuse' },
@@ -588,8 +595,8 @@ export function usefulLines(text: string): string[] {
   return text
     .replace(ANSI_SGR, '')
     .split('\n')
-    .map(line => line.trim())
-    .filter(line => line !== '' && !TRACING_LINE.test(line))
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && !TRACING_LINE.test(line))
 }
 
 /** Première ligne utile, sans le préfixe `Error: ` de la CLI (bridge-facts §3, conventions). */
@@ -598,7 +605,7 @@ function headOf(lines: readonly string[]): string {
 }
 
 function tableState(head: string): CallState | undefined {
-  return BRIDGE_TEXTS.find(row => row.re.test(head))?.state
+  return BRIDGE_TEXTS.find((row) => row.re.test(head))?.state
 }
 
 function objectOf(value: unknown): JsonObject | null {
@@ -607,7 +614,7 @@ function objectOf(value: unknown): JsonObject | null {
 
 /** Le JSON qui commence à la première ligne ouverte par `{` et va jusqu'à la fin, s'il se lit. */
 function jsonIn(lines: readonly string[]): JsonObject | null {
-  const at = lines.findIndex(line => line.startsWith('{'))
+  const at = lines.findIndex((line) => line.startsWith('{'))
   if (at < 0) return null
   try {
     return objectOf(JSON.parse(lines.slice(at).join('\n')))
@@ -642,7 +649,7 @@ function hostEntry(lines: readonly string[], host: string | null): JsonObject | 
 
 function hasTruncation(lines: readonly string[], via: Via): boolean {
   const marks = via === 'cli' ? TRUNCATION_MARKS.concat(ENGINE_PERSISTED_TEXTS) : TRUNCATION_MARKS
-  return lines.some(line => marks.some(mark => mark.test(line)))
+  return lines.some((line) => marks.some((mark) => mark.test(line)))
 }
 
 /** Code distant d'un appel qui a tourné : `[exit:N]` pour tout outil, `"exit_code":N` pour un outil codeWithoutError à un seul hôte. */
@@ -723,11 +730,16 @@ function classifyCli(p: ParsedCall, lines: readonly string[], isError: boolean, 
     case 3:
       return { state: tableState(headOf(body)) === 'machine-inconnue' ? 'machine-inconnue' : 'injoignable', truncated }
     case 4:
-      return { state: tableState(headOf(body)) === 'confirmation-manquante' ? 'confirmation-manquante' : 'refuse', truncated }
+      return {
+        state: tableState(headOf(body)) === 'confirmation-manquante' ? 'confirmation-manquante' : 'refuse',
+        truncated,
+      }
     case 5:
       return { state: 'erreur-config', truncated }
     case 6:
-      return info?.codeWithoutError === true ? codeOutcome(remoteCode(body, info), truncated) : ranAndFailed(body, truncated)
+      return info?.codeWithoutError === true
+        ? codeOutcome(remoteCode(body, info), truncated)
+        : ranAndFailed(body, truncated)
     default:
       return failed(headOf(body), truncated)
   }
@@ -748,7 +760,7 @@ function classifyMcp(p: ParsedCall, lines: readonly string[], isError: boolean, 
  */
 export function classify(p: ParsedCall, r: RunResult, tools: Readonly<Record<string, ToolInfo>>): Outcome {
   const lines = usefulLines(r.text)
-  if (r.refusedByClaude || ENGINE_REFUSAL_TEXTS.some(re => re.test(headOf(lines)))) {
+  if (r.refusedByClaude || ENGINE_REFUSAL_TEXTS.some((re) => re.test(headOf(lines)))) {
     return { state: 'refuse-claude', truncated: false }
   }
   if (r.interrupted) return { state: 'interrompu', truncated: false }
@@ -763,23 +775,30 @@ export function classify(p: ParsedCall, r: RunResult, tools: Readonly<Record<str
 const NOTHING_RAN: Step = { label: 'rien n’a tourné', mark: 'off' }
 
 /** États décidés avant l'accord ou à sa place : aucune étape « accord » devant eux. */
-const BEFORE_ACCORD: readonly CallState[] = ['refuse-claude', 'decline', 'confirmation-impossible', 'confirmation-manquante']
+const BEFORE_ACCORD: readonly CallState[] = [
+  'refuse-claude',
+  'decline',
+  'confirmation-impossible',
+  'confirmation-manquante',
+]
 
 /** Étape qui a décidé du résultat, par état ; `rien n’a tourné` suit les états où rien n'a tourné. */
 const DECISIVE: Readonly<Record<CallState, (host: string, code: number | undefined) => Step[]>> = {
-  'en-cours': host => [{ label: `${host} en cours`, mark: 'off' }],
-  fait: host => [{ label: host, mark: 'ok' }],
+  'en-cours': (host) => [{ label: `${host} en cours`, mark: 'off' }],
+  fait: (host) => [{ label: host, mark: 'ok' }],
   code: (host, code) => [{ label: `${host} code ${code ?? '?'}`, mark: 'ok' }],
-  injoignable: host => [{ label: `${host} injoignable`, mark: 'ko' }, NOTHING_RAN],
-  'machine-inconnue': host => [{ label: `${host} inconnue`, mark: 'ko' }, NOTHING_RAN],
+  injoignable: (host) => [{ label: `${host} injoignable`, mark: 'ko' }, NOTHING_RAN],
+  'machine-inconnue': (host) => [{ label: `${host} inconnue`, mark: 'ko' }, NOTHING_RAN],
   refuse: () => [{ label: 'refusé par le bridge', mark: 'ko' }, NOTHING_RAN],
   limite: () => [{ label: 'limité par le bridge', mark: 'ko' }, NOTHING_RAN],
   'confirmation-impossible': () => [{ label: 'confirmation impossible', mark: 'ko' }, NOTHING_RAN],
   'confirmation-manquante': () => [{ label: 'confirmation manquante', mark: 'ko' }, NOTHING_RAN],
-  'echec-machine': (host, code) => [{ label: code === undefined ? `${host} échec` : `${host} code ${code}`, mark: 'ko' }],
+  'echec-machine': (host, code) => [
+    { label: code === undefined ? `${host} échec` : `${host} code ${code}`, mark: 'ko' },
+  ],
   echec: () => [{ label: 'échec', mark: 'ko' }],
-  'acces-refuse': host => [{ label: `${host} accès refusé`, mark: 'ko' }, NOTHING_RAN],
-  'delai-depasse': host => [{ label: `${host} délai dépassé`, mark: 'ko' }],
+  'acces-refuse': (host) => [{ label: `${host} accès refusé`, mark: 'ko' }, NOTHING_RAN],
+  'delai-depasse': (host) => [{ label: `${host} délai dépassé`, mark: 'ko' }],
   'erreur-usage': () => [{ label: 'erreur d’usage', mark: 'ko' }, NOTHING_RAN],
   'erreur-config': () => [{ label: 'erreur de config', mark: 'ko' }, NOTHING_RAN],
   'refuse-claude': () => [{ label: 'refusé par Claude Code', mark: 'off' }, NOTHING_RAN],

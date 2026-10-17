@@ -2,11 +2,17 @@
 // Fixtures : textes copiés de docs/superpowers/plans/refs/bridge-facts.md (section citée à chaque
 // fois) ; textes du moteur recopiés du spec §10 dans ./engine-texts.
 import { describe, expect, test } from 'claude-code/testing'
-
-import type { BridgeCall, CallState } from '../../types'
 import type { ParsedCall, RunResult } from '../../hooks/bridge'
-import { BRIDGE_TEXTS, ENGINE_PERSISTED_TEXTS, ENGINE_REFUSAL_TEXTS, classify, steps, usefulLines } from '../../hooks/bridge'
+import {
+  BRIDGE_TEXTS,
+  classify,
+  ENGINE_PERSISTED_TEXTS,
+  ENGINE_REFUSAL_TEXTS,
+  steps,
+  usefulLines,
+} from '../../hooks/bridge'
 import { TOOLS } from '../../hooks/tools.generated'
+import type { BridgeCall, CallState } from '../../types'
 import { RECORDED_PERSISTED, RECORDED_REFUSALS } from './engine-texts'
 
 /** bridge-facts §0.1.1 : une ligne de journal brute (octets ANSI), puis deux lignes déjà sans couleur. */
@@ -43,46 +49,107 @@ const ko = (text: string): RunResult => ({ isError: true, text, interrupted: fal
 
 /** Au moins une fixture par ligne de BRIDGE_TEXTS : [source dans bridge-facts, texte, état attendu]. */
 const FIXTURES: readonly [string, string, CallState][] = [
-  ['§3.1 barrière --yes', 'Command denied: `ssh_exec` is annotated destructive and stdin is not a terminal, so there is nobody to confirm with. Pass --yes to confirm in advance, or set security.require_elicitation_on_destructive: false to disable this gate entirely.', 'confirmation-manquante'],
+  [
+    '§3.1 barrière --yes',
+    'Command denied: `ssh_exec` is annotated destructive and stdin is not a terminal, so there is nobody to confirm with. Pass --yes to confirm in advance, or set security.require_elicitation_on_destructive: false to disable this gate entirely.',
+    'confirmation-manquante',
+  ],
   ['§3.1 liste noire', 'Command denied: Command matches blacklist pattern: \\bshutdown\\b', 'refuse'],
   ['§3.1 liste blanche', 'Command denied: Command not in whitelist (standard mode)', 'refuse'],
   ['§3.2 hôte inconnu', 'Unknown host: nohost', 'machine-inconnue'],
   ['§3.2 hôtes inconnus (multi)', 'MCP invalid request: Unknown hosts: a, b', 'machine-inconnue'],
-  ['§3.4 argument inconnu', 'MCP invalid request: Unknown argument `hostt` for tool `ssh_service_status`. Did you mean `host`? Call mcp_describe_tool (or `bridge-mcp describe-tool ssh_service_status`) to list valid arguments.', 'erreur-usage'],
-  ['§3.4 champ inconnu', 'MCP invalid request: unknown field `bogus`, expected one of `host`, `service`, `timeout_seconds`, `max_output`, `save_output`', 'erreur-usage'],
+  [
+    '§3.4 argument inconnu',
+    'MCP invalid request: Unknown argument `hostt` for tool `ssh_service_status`. Did you mean `host`? Call mcp_describe_tool (or `bridge-mcp describe-tool ssh_service_status`) to list valid arguments.',
+    'erreur-usage',
+  ],
+  [
+    '§3.4 champ inconnu',
+    'MCP invalid request: unknown field `bogus`, expected one of `host`, `service`, `timeout_seconds`, `max_output`, `save_output`',
+    'erreur-usage',
+  ],
   ['§3.4 champ manquant', 'MCP invalid request: missing field `service`', 'erreur-usage'],
   ['§3.4 paramètre manquant', 'MCP missing parameter: arguments', 'erreur-usage'],
-  ['§3.4 outil inconnu en MCP', 'Unknown tool: ssh_nope. Use mcp_search_tools to discover valid names.', 'erreur-usage'],
-  ['§3.4 groupe désactivé en MCP', 'Tool `ssh_k8s_get` is registered but its group `kubernetes` is not enabled. Enable it under `tool_groups.groups` in config.yaml, or run `bridge-mcp validate` to see which groups are active.', 'erreur-usage'],
-  ['§3.4 enveloppe mcp_call_tool', 'mcp_call_tool: missing arguments — expected {"name": "<tool>", "arguments": {…}}', 'erreur-usage'],
+  [
+    '§3.4 outil inconnu en MCP',
+    'Unknown tool: ssh_nope. Use mcp_search_tools to discover valid names.',
+    'erreur-usage',
+  ],
+  [
+    '§3.4 groupe désactivé en MCP',
+    'Tool `ssh_k8s_get` is registered but its group `kubernetes` is not enabled. Enable it under `tool_groups.groups` in config.yaml, or run `bridge-mcp validate` to see which groups are active.',
+    'erreur-usage',
+  ],
+  [
+    '§3.4 enveloppe mcp_call_tool',
+    'mcp_call_tool: missing arguments — expected {"name": "<tool>", "arguments": {…}}',
+    'erreur-usage',
+  ],
   ['§1.2 erreur clap', "error: unexpected argument '/tmp' found", 'erreur-usage'],
   ['§2.2 configuration illisible', 'Failed to load config from /tmp/…/all-groups.yaml', 'erreur-config'],
-  ['§3.3 limite par hôte', "Rate limit exceeded for host 'raspberry'. Please wait before sending more requests.", 'limite'],
+  [
+    '§3.3 limite par hôte',
+    "Rate limit exceeded for host 'raspberry'. Please wait before sending more requests.",
+    'limite',
+  ],
   ['§3.3 limite dans le JSON multi', 'Rate limit exceeded', 'limite'],
   ['§3.8 decline', 'User declined execution of destructive tool `ssh_exec`.', 'decline'],
   ['§3.8 cancel', 'User cancelled confirmation for destructive tool `ssh_exec`.', 'decline'],
-  ['§3.8 non accordé', 'Confirmation for destructive tool `ssh_exec` was not granted; the operation was not run.', 'confirmation-impossible'],
-  ['§3.8 sans session', 'Tool `ssh_exec` is destructive and `require_elicitation_on_destructive` is enabled, but no session context is available — the operation cannot be confirmed.', 'confirmation-impossible'],
-  ['§3.8 capacité non déclarée', 'Tool `ssh_exec` is destructive and `require_elicitation_on_destructive` is enabled, but the client did not declare the `elicitation` capability on this request. Either declare it in `_meta` or set `security.require_elicitation_on_destructive: false`.', 'confirmation-impossible'],
-  ['§3.8 formulaire impossible', 'Could not build a confirmation prompt for `ssh_exec`; the operation was not run.', 'confirmation-impossible'],
-  ['§3.5 authentification SSH', 'SSH authentication failed for nobody@raspberry: authentication failed', 'acces-refuse'],
+  [
+    '§3.8 non accordé',
+    'Confirmation for destructive tool `ssh_exec` was not granted; the operation was not run.',
+    'confirmation-impossible',
+  ],
+  [
+    '§3.8 sans session',
+    'Tool `ssh_exec` is destructive and `require_elicitation_on_destructive` is enabled, but no session context is available — the operation cannot be confirmed.',
+    'confirmation-impossible',
+  ],
+  [
+    '§3.8 capacité non déclarée',
+    'Tool `ssh_exec` is destructive and `require_elicitation_on_destructive` is enabled, but the client did not declare the `elicitation` capability on this request. Either declare it in `_meta` or set `security.require_elicitation_on_destructive: false`.',
+    'confirmation-impossible',
+  ],
+  [
+    '§3.8 formulaire impossible',
+    'Could not build a confirmation prompt for `ssh_exec`; the operation was not run.',
+    'confirmation-impossible',
+  ],
+  [
+    '§3.5 authentification SSH',
+    'SSH authentication failed for nobody@raspberry: authentication failed',
+    'acces-refuse',
+  ],
   ['§3.5 authentification WinRM', 'SSH authentication failed for unknown@WinRM', 'acces-refuse'],
   // §3.5 : seul le format est relevé (src/error.rs:37, :44) ; ses champs restent tels quels, seul l'hôte est rempli.
   ['§3.5 clé d’hôte changée', 'SSH host key mismatch for raspberry: expected {expected}, got {actual}', 'acces-refuse'],
   ['§3.5 clé d’hôte inconnue', 'SSH host key unknown for raspberry (fingerprint: {fingerprint})', 'acces-refuse'],
   ['§3.5 connexion refusée', 'SSH connection failed to raspberry: Connection refused (os error 111)', 'injoignable'],
   ['§3.5 délai de connexion', 'SSH connection failed to raspberry: Connection timeout after 10s', 'injoignable'],
-  ['§2.3 WinRM injoignable', 'SSH command execution failed: WinRM HTTP error: error sending request for url (http://127.0.0.1:55985/wsman)', 'injoignable'],
+  [
+    '§2.3 WinRM injoignable',
+    'SSH command execution failed: WinRM HTTP error: error sending request for url (http://127.0.0.1:55985/wsman)',
+    'injoignable',
+  ],
   ['§3.6 délai de commande', 'SSH command timeout after 60s', 'delai-depasse'],
   ['§3.6 annulation', 'Request cancelled by client', 'interrompu'],
-  ['§3.7 outil Windows sur Linux', "Tool 'ssh_win_disk_usage' is only available on Windows hosts. Use Linux-specific tools instead.", 'erreur-usage'],
-  ['§3.7 outil Linux sur Windows', "Tool 'ssh_disk_usage' is not available on Windows hosts. Use Windows-specific tools instead.", 'erreur-usage'],
+  [
+    '§3.7 outil Windows sur Linux',
+    "Tool 'ssh_win_disk_usage' is only available on Windows hosts. Use Linux-specific tools instead.",
+    'erreur-usage',
+  ],
+  [
+    '§3.7 outil Linux sur Windows',
+    "Tool 'ssh_disk_usage' is not available on Windows hosts. Use Windows-specific tools instead.",
+    'erreur-usage',
+  ],
   ['§3.7 sudo sur Windows', "'sudo' is not supported on Windows host 'win2025'.", 'erreur-usage'],
   ['§3.7 sudo sans shell POSIX', "'sudo' requires a POSIX shell; host 'win2025' uses 'powershell'.", 'erreur-usage'],
 ]
 
 /** bridge-facts §3.10 : bloc de la sous-commande exec. */
-const EXEC_BLOCK_OK = 'Host: raspberry\nCommand: uptime\nExit code: 0\nDuration: 412ms\n\n--- STDOUT ---\n 10:00:01 up 3 days, …'
+const EXEC_BLOCK_OK =
+  'Host: raspberry\nCommand: uptime\nExit code: 0\nDuration: 412ms\n\n--- STDOUT ---\n 10:00:01 up 3 days, …'
 
 /** bridge-facts §6.1 : JSON de ssh_exec_multi (ordre des champs de la structure), deux hôtes. */
 const MULTI_JSON =
@@ -96,7 +163,10 @@ describe('usefulLines', () => {
   })
 
   test('couleurs ANSI retirées, journal et lignes vides sautés, Exit code gardé (A3)', () => {
-    expect(usefulLines(`${bash(3, '', 'Error: Unknown host: nohost')}\n`)).toEqual(['Exit code 3', 'Error: Unknown host: nohost'])
+    expect(usefulLines(`${bash(3, '', 'Error: Unknown host: nohost')}\n`)).toEqual([
+      'Exit code 3',
+      'Error: Unknown host: nohost',
+    ])
   })
 
   test('une heure en tête de ligne qui n’est pas du journal reste (bridge-facts §3.10)', () => {
@@ -115,12 +185,17 @@ describe('table des textes du bridge, première ligne utile seulement', () => {
   for (const [source, text, state] of FIXTURES) {
     test(`${source} → ${state}`, () => {
       expect(classify(mcp('ssh_service_status'), ko(text), TOOLS)).toEqual({ state, truncated: false })
-      expect(classify(cli('ssh_service_status'), ko(bash(1, `Error: ${text}`)), TOOLS)).toEqual({ state, truncated: false })
+      expect(classify(cli('ssh_service_status'), ko(bash(1, `Error: ${text}`)), TOOLS)).toEqual({
+        state,
+        truncated: false,
+      })
     })
   }
 
   test('chaque ligne de la table est la première à répondre pour au moins une fixture', () => {
-    const answered = BRIDGE_TEXTS.map(row => FIXTURES.some(([, text]) => BRIDGE_TEXTS.find(r => r.re.test(text)) === row))
+    const answered = BRIDGE_TEXTS.map((row) =>
+      FIXTURES.some(([, text]) => BRIDGE_TEXTS.find((r) => r.re.test(text)) === row),
+    )
     expect(answered).toEqual(BRIDGE_TEXTS.map(() => true))
     expect(BRIDGE_TEXTS).toHaveLength(24)
   })
@@ -150,7 +225,10 @@ describe('CLI, sous-commande tool : codes de sortie (A3, A4, A7)', () => {
 
   test('3 : Unknown host → machine inconnue (§3.2)', () => {
     const r = ko(bash(3, 'Error: Unknown host: nohost'))
-    expect(classify(cli('ssh_service_status', { host: 'nohost' }), r, TOOLS)).toEqual({ state: 'machine-inconnue', truncated: false })
+    expect(classify(cli('ssh_service_status', { host: 'nohost' }), r, TOOLS)).toEqual({
+      state: 'machine-inconnue',
+      truncated: false,
+    })
   })
 
   test('3 : connexion SSH impossible → injoignable (§3.5)', () => {
@@ -187,7 +265,11 @@ describe('CLI, sous-commande tool : codes de sortie (A3, A4, A7)', () => {
 
   test('6 sur ssh_session_exec : code N lu dans "exit_code" (§6.1)', () => {
     const r = ko(bash(6, '{"cwd":"/home/pi","exit_code":2,"output":"","session_id":"s1"}'))
-    expect(classify(cli('ssh_session_exec', { host: null }), r, TOOLS)).toEqual({ state: 'code', code: 2, truncated: false })
+    expect(classify(cli('ssh_session_exec', { host: null }), r, TOOLS)).toEqual({
+      state: 'code',
+      code: 2,
+      truncated: false,
+    })
   })
 
   test('6 sur un outil codeWithoutError sans code lisible → code inconnu', () => {
@@ -197,7 +279,12 @@ describe('CLI, sous-commande tool : codes de sortie (A3, A4, A7)', () => {
 
   test('6 sur un autre outil → échec sur la machine, avec le code et la ligne qui suit (§6.3)', () => {
     const r = ko(bash(6, '[exit:1]', 'partial output'))
-    expect(classify(cli('ssh_tail'), r, TOOLS)).toEqual({ state: 'echec-machine', code: 1, truncated: false, reason: 'partial output' })
+    expect(classify(cli('ssh_tail'), r, TOOLS)).toEqual({
+      state: 'echec-machine',
+      code: 1,
+      truncated: false,
+      reason: 'partial output',
+    })
   })
 
   test('6 sur un autre outil, sans [exit:N] → échec sur la machine sans code', () => {
@@ -206,8 +293,16 @@ describe('CLI, sous-commande tool : codes de sortie (A3, A4, A7)', () => {
   })
 
   test('1 : cas WinRM observé, journal en couleur avant Error → injoignable (§2.3, A3)', () => {
-    const r = ko(bash(1, 'Error: SSH command execution failed: WinRM HTTP error: error sending request for url (http://127.0.0.1:55985/wsman)'))
-    expect(classify(cli('ssh_win_disk_usage', { host: 'win2025' }), r, TOOLS)).toEqual({ state: 'injoignable', truncated: false })
+    const r = ko(
+      bash(
+        1,
+        'Error: SSH command execution failed: WinRM HTTP error: error sending request for url (http://127.0.0.1:55985/wsman)',
+      ),
+    )
+    expect(classify(cli('ssh_win_disk_usage', { host: 'win2025' }), r, TOOLS)).toEqual({
+      state: 'injoignable',
+      truncated: false,
+    })
   })
 
   test('1 : la CLI passée par le démon ne déclare pas elicitation → confirmation impossible (§0.1.10, §3.8)', () => {
@@ -217,7 +312,10 @@ describe('CLI, sous-commande tool : codes de sortie (A3, A4, A7)', () => {
         'Error: Tool `ssh_exec` is destructive and `require_elicitation_on_destructive` is enabled, but the client did not declare the `elicitation` capability on this request. Either declare it in `_meta` or set `security.require_elicitation_on_destructive: false`.',
       ),
     )
-    expect(classify(cli('ssh_exec', { accordByOption: true }), r, TOOLS)).toEqual({ state: 'confirmation-impossible', truncated: false })
+    expect(classify(cli('ssh_exec', { accordByOption: true }), r, TOOLS)).toEqual({
+      state: 'confirmation-impossible',
+      truncated: false,
+    })
   })
 
   test('1 : texte inconnu → échec, raison = première ligne utile brute (§1.4)', () => {
@@ -230,7 +328,10 @@ describe('CLI, sous-commande tool : codes de sortie (A3, A4, A7)', () => {
   })
 
   test('erreur sans ligne Exit code → lue comme une sortie 1', () => {
-    expect(classify(cli('ssh_service_status'), ko('Error: Unknown host: nohost'), TOOLS)).toEqual({ state: 'machine-inconnue', truncated: false })
+    expect(classify(cli('ssh_service_status'), ko('Error: Unknown host: nohost'), TOOLS)).toEqual({
+      state: 'machine-inconnue',
+      truncated: false,
+    })
   })
 
   test('0 : [exit:N] sans erreur → code N (ssh_service_status, A7, §6.2, §3.9)', () => {
@@ -239,7 +340,10 @@ describe('CLI, sous-commande tool : codes de sortie (A3, A4, A7)', () => {
   })
 
   test('0 : sortie ordinaire → fait (§1.4)', () => {
-    expect(classify(cli('ssh_history', { host: null }), ok('No command history available.'), TOOLS)).toEqual({ state: 'fait', truncated: false })
+    expect(classify(cli('ssh_history', { host: null }), ok('No command history available.'), TOOLS)).toEqual({
+      state: 'fait',
+      truncated: false,
+    })
   })
 
   test('--json : le texte est lu dans content[].text (§1.4, exemple relevé)', () => {
@@ -262,7 +366,16 @@ describe('CLI, sous-commande tool : codes de sortie (A3, A4, A7)', () => {
   })
 
   test('--json et sortie 6 : [exit:N] lu dans content[].text (§1.4, §3.9)', () => {
-    const json = ['{', '  "content": [', '    {', '      "type": "text",', '      "text": "[exit:1]\\npartial output"', '    }', '  ]', '}']
+    const json = [
+      '{',
+      '  "content": [',
+      '    {',
+      '      "type": "text",',
+      '      "text": "[exit:1]\\npartial output"',
+      '    }',
+      '  ]',
+      '}',
+    ]
     expect(classify(cli('ssh_exec'), ko(bash(6, ...json)), TOOLS)).toEqual({ state: 'code', code: 1, truncated: false })
   })
 
@@ -274,7 +387,10 @@ describe('CLI, sous-commande tool : codes de sortie (A3, A4, A7)', () => {
 describe('CLI : segments qui ne possèdent pas le code de sortie', () => {
   test('segment bridge qui n’est pas la dernière commande simple → incertain', () => {
     const r = ko(bash(3, 'Error: Unknown host: nohost'))
-    expect(classify(cli('ssh_service_status', { ownsExit: false }), r, TOOLS)).toEqual({ state: 'incertain', truncated: false })
+    expect(classify(cli('ssh_service_status', { ownsExit: false }), r, TOOLS)).toEqual({
+      state: 'incertain',
+      truncated: false,
+    })
   })
 
   test('segment dans une boucle → incertain, même s’il est le dernier', () => {
@@ -313,7 +429,12 @@ describe('CLI, exec, upload, download : seule la table des textes (A4)', () => {
   })
 
   test('exec --json : "exit_code" → code N (§1.4)', () => {
-    const r = ko(bash(1, '{"command":"uptime","exit_code":2,"host":"raspberry","output":"Host: raspberry\\nCommand: uptime\\nExit code: 2\\nDuration: 412ms"}'))
+    const r = ko(
+      bash(
+        1,
+        '{"command":"uptime","exit_code":2,"host":"raspberry","output":"Host: raspberry\\nCommand: uptime\\nExit code: 2\\nDuration: 412ms"}',
+      ),
+    )
     expect(classify(cli('exec'), r, TOOLS)).toEqual({ state: 'code', code: 2, truncated: false })
   })
 
@@ -328,7 +449,9 @@ describe('CLI, exec, upload, download : seule la table des textes (A4)', () => {
   })
 
   test('exec, erreur clap, sortie 2 → erreur d’usage par le texte (§1.2)', () => {
-    expect(classify(cli('exec', { host: 'nohost' }), ko(bash(2, "error: unexpected argument '/tmp' found")), TOOLS)).toEqual({
+    expect(
+      classify(cli('exec', { host: 'nohost' }), ko(bash(2, "error: unexpected argument '/tmp' found")), TOOLS),
+    ).toEqual({
       state: 'erreur-usage',
       truncated: false,
     })
@@ -347,7 +470,11 @@ describe('MCP (règle 3, A7)', () => {
   })
 
   test('[exit:N] seul, stdout et stderr vides → échec sur la machine sans raison (§3.9)', () => {
-    expect(classify(mcp('ssh_k8s_get'), ko('[exit:1]\n'), TOOLS)).toEqual({ state: 'echec-machine', code: 1, truncated: false })
+    expect(classify(mcp('ssh_k8s_get'), ko('[exit:1]\n'), TOOLS)).toEqual({
+      state: 'echec-machine',
+      code: 1,
+      truncated: false,
+    })
   })
 
   test('[exit:N] sans isError → code N (ssh_service_status, A7, §6.2)', () => {
@@ -356,12 +483,20 @@ describe('MCP (règle 3, A7)', () => {
   })
 
   test('ssh_exec réussi avec [exit:N] → code N (§6.1)', () => {
-    expect(classify(mcp('ssh_exec'), ok('[exit:1]\npartial output'), TOOLS)).toEqual({ state: 'code', code: 1, truncated: false })
+    expect(classify(mcp('ssh_exec'), ok('[exit:1]\npartial output'), TOOLS)).toEqual({
+      state: 'code',
+      code: 1,
+      truncated: false,
+    })
   })
 
   test('ssh_session_exec : "exit_code" non nul → code N, nul ou null → fait (§6.1)', () => {
     const json = (code: string) => ok(`{"cwd":"/home/pi","exit_code":${code},"output":"","session_id":"s1"}`)
-    expect(classify(mcp('ssh_session_exec', null), json('2'), TOOLS)).toEqual({ state: 'code', code: 2, truncated: false })
+    expect(classify(mcp('ssh_session_exec', null), json('2'), TOOLS)).toEqual({
+      state: 'code',
+      code: 2,
+      truncated: false,
+    })
     expect(classify(mcp('ssh_session_exec', null), json('0'), TOOLS)).toEqual({ state: 'fait', truncated: false })
     expect(classify(mcp('ssh_session_exec', null), json('null'), TOOLS)).toEqual({ state: 'fait', truncated: false })
   })
@@ -372,7 +507,9 @@ describe('MCP (règle 3, A7)', () => {
   })
 
   test('isError, texte inconnu → échec, raison = première ligne brute (§3.5)', () => {
-    expect(classify(mcp('ssh_win_disk_usage', 'win2025ps'), ko('SSH command execution failed: pipeline stopped'), TOOLS)).toEqual({
+    expect(
+      classify(mcp('ssh_win_disk_usage', 'win2025ps'), ko('SSH command execution failed: pipeline stopped'), TOOLS),
+    ).toEqual({
       state: 'echec',
       truncated: false,
       reason: 'SSH command execution failed: pipeline stopped',
@@ -384,23 +521,37 @@ describe('MCP (règle 3, A7)', () => {
   })
 
   test('ssh_exec_multi : raspberry lit son code, win2025 son erreur (§6.1, §2.3)', () => {
-    expect(classify(mcp('ssh_exec_multi', 'raspberry'), ok(MULTI_JSON), TOOLS)).toEqual({ state: 'code', code: 2, truncated: false })
-    expect(classify(mcp('ssh_exec_multi', 'win2025'), ok(MULTI_JSON), TOOLS)).toEqual({ state: 'injoignable', truncated: false })
+    expect(classify(mcp('ssh_exec_multi', 'raspberry'), ok(MULTI_JSON), TOOLS)).toEqual({
+      state: 'code',
+      code: 2,
+      truncated: false,
+    })
+    expect(classify(mcp('ssh_exec_multi', 'win2025'), ok(MULTI_JSON), TOOLS)).toEqual({
+      state: 'injoignable',
+      truncated: false,
+    })
   })
 
   test('ssh_exec_multi : un hôte absent de results ne reprend pas le code d’un autre', () => {
-    expect(classify(mcp('ssh_exec_multi', 'pi-absent'), ok(MULTI_JSON), TOOLS)).toEqual({ state: 'fait', truncated: false })
+    expect(classify(mcp('ssh_exec_multi', 'pi-absent'), ok(MULTI_JSON), TOOLS)).toEqual({
+      state: 'fait',
+      truncated: false,
+    })
     expect(classify(mcp('ssh_exec_multi', null), ok(MULTI_JSON), TOOLS)).toEqual({ state: 'fait', truncated: false })
   })
 
   test('ssh_exec_multi : la forme courte "Rate limit exceeded" dans l’entrée d’un hôte → limité (§3.3, §6.1)', () => {
-    const json = '{"total_hosts":1,"succeeded":0,"failed":1,"results":[{"host":"raspberry","success":false,"error":"Rate limit exceeded"}]}'
+    const json =
+      '{"total_hosts":1,"succeeded":0,"failed":1,"results":[{"host":"raspberry","success":false,"error":"Rate limit exceeded"}]}'
     expect(classify(mcp('ssh_exec_multi'), ok(json), TOOLS)).toEqual({ state: 'limite', truncated: false })
     expect(classify(cli('ssh_exec_multi'), ok(json), TOOLS)).toEqual({ state: 'limite', truncated: false })
   })
 
   test('ssh_exec_multi : un JSON coupé ne fait pas planter le classement', () => {
-    expect(classify(mcp('ssh_exec_multi'), ok('{"total_hosts":2,"succeeded":0,'), TOOLS)).toEqual({ state: 'fait', truncated: false })
+    expect(classify(mcp('ssh_exec_multi'), ok('{"total_hosts":2,"succeeded":0,'), TOOLS)).toEqual({
+      state: 'fait',
+      truncated: false,
+    })
   })
 })
 
@@ -410,7 +561,10 @@ describe('règles 0 et 1 : refus de Claude Code, interruption', () => {
   test('refusé par Claude Code passe avant tout texte, en CLI comme en MCP (A2)', () => {
     const r: RunResult = { isError: true, text: denied, interrupted: false, refusedByClaude: true }
     expect(classify(mcp('ssh_exec'), r, TOOLS)).toEqual({ state: 'refuse-claude', truncated: false })
-    expect(classify(cli('ssh_exec', { ownsExit: false }), r, TOOLS)).toEqual({ state: 'refuse-claude', truncated: false })
+    expect(classify(cli('ssh_exec', { ownsExit: false }), r, TOOLS)).toEqual({
+      state: 'refuse-claude',
+      truncated: false,
+    })
   })
 
   test('le texte de refus relevé au dialogue et au classifieur suffit (spec §10, A2)', () => {
@@ -418,7 +572,10 @@ describe('règles 0 et 1 : refus de Claude Code, interruption', () => {
     expect(ENGINE_REFUSAL_TEXTS).toHaveLength(RECORDED_REFUSALS.length)
     for (const text of RECORDED_REFUSALS) {
       expect(classify(mcp('ssh_exec'), ko(text), TOOLS)).toEqual({ state: 'refuse-claude', truncated: false })
-      expect(classify(cli('ssh_exec', { ownsExit: false }), ko(text), TOOLS)).toEqual({ state: 'refuse-claude', truncated: false })
+      expect(classify(cli('ssh_exec', { ownsExit: false }), ko(text), TOOLS)).toEqual({
+        state: 'refuse-claude',
+        truncated: false,
+      })
     }
   })
 
@@ -440,7 +597,8 @@ describe('règles 0 et 1 : refus de Claude Code, interruption', () => {
 
 describe('drapeau tronqué, que l’appel réussisse ou non (bridge-facts §4)', () => {
   test('CLI sans cache : --- [truncated: … (§4.1)', () => {
-    const text = '<first lines>\n\n--- [truncated: 5234 lines total, 4410 lines omitted, 412345 → 39980 chars] ---\n\n<last lines>'
+    const text =
+      '<first lines>\n\n--- [truncated: 5234 lines total, 4410 lines omitted, 412345 → 39980 chars] ---\n\n<last lines>'
     expect(classify(cli('ssh_journal_query'), ok(text), TOOLS)).toEqual({ state: 'fait', truncated: true })
   })
 
@@ -457,8 +615,14 @@ describe('drapeau tronqué, que l’appel réussisse ou non (bridge-facts §4)',
   })
 
   test('limite du transport SSH, sur un appel en échec (§4.3, §3.9)', () => {
-    const text = '[exit:1]\npartial output\n\n--- [output stopped at the 10485760 byte transport limit; the command produced 52428800 bytes] ---\n'
-    expect(classify(mcp('ssh_k8s_get'), ko(text), TOOLS)).toEqual({ state: 'echec-machine', code: 1, truncated: true, reason: 'partial output' })
+    const text =
+      '[exit:1]\npartial output\n\n--- [output stopped at the 10485760 byte transport limit; the command produced 52428800 bytes] ---\n'
+    expect(classify(mcp('ssh_k8s_get'), ko(text), TOOLS)).toEqual({
+      state: 'echec-machine',
+      code: 1,
+      truncated: true,
+      reason: 'partial output',
+    })
   })
 
   test('l’en-tête de page de ssh_output_fetch n’est pas une troncature (§4.4)', () => {
@@ -493,13 +657,29 @@ describe('steps : pipeline réel (spec §5.1)', () => {
   })
   const NOTHING = { label: 'rien n’a tourné', mark: 'off' }
   const STATES: readonly CallState[] = [
-    'en-cours', 'fait', 'code', 'injoignable', 'machine-inconnue', 'refuse', 'limite',
-    'confirmation-impossible', 'confirmation-manquante', 'echec-machine', 'echec', 'acces-refuse',
-    'delai-depasse', 'erreur-usage', 'erreur-config', 'refuse-claude', 'decline', 'interrompu', 'incertain',
+    'en-cours',
+    'fait',
+    'code',
+    'injoignable',
+    'machine-inconnue',
+    'refuse',
+    'limite',
+    'confirmation-impossible',
+    'confirmation-manquante',
+    'echec-machine',
+    'echec',
+    'acces-refuse',
+    'delai-depasse',
+    'erreur-usage',
+    'erreur-config',
+    'refuse-claude',
+    'decline',
+    'interrompu',
+    'incertain',
   ]
 
   test('une étape décisive par état, sans accord (table de §5.4)', () => {
-    const got = Object.fromEntries(STATES.map(state => [state, steps(call({ state, code: 3 }))]))
+    const got = Object.fromEntries(STATES.map((state) => [state, steps(call({ state, code: 3 }))]))
     expect(got).toEqual({
       'en-cours': [{ label: 'raspberry en cours', mark: 'off' }],
       fait: [{ label: 'raspberry', mark: 'ok' }],
@@ -546,7 +726,10 @@ describe('steps : pipeline réel (spec §5.1)', () => {
   })
 
   test('aucune étape accord devant un refus de Claude Code ou une confirmation manquante', () => {
-    expect(steps(call({ state: 'refuse-claude', accord: 'option' }))).toEqual([{ label: 'refusé par Claude Code', mark: 'off' }, NOTHING])
+    expect(steps(call({ state: 'refuse-claude', accord: 'option' }))).toEqual([
+      { label: 'refusé par Claude Code', mark: 'off' },
+      NOTHING,
+    ])
     expect(steps(call({ state: 'confirmation-manquante', accord: 'formulaire-oui' }))).toEqual([
       { label: 'confirmation manquante', mark: 'ko' },
       NOTHING,
@@ -556,16 +739,19 @@ describe('steps : pipeline réel (spec §5.1)', () => {
   test('code inconnu et machine inconnue', () => {
     expect(steps(call({ state: 'code' }))).toEqual([{ label: 'raspberry code ?', mark: 'ok' }])
     expect(steps(call({ state: 'echec-machine' }))).toEqual([{ label: 'raspberry échec', mark: 'ko' }])
-    expect(steps(call({ host: null, state: 'injoignable' }))).toEqual([{ label: 'machine injoignable', mark: 'ko' }, NOTHING])
+    expect(steps(call({ host: null, state: 'injoignable' }))).toEqual([
+      { label: 'machine injoignable', mark: 'ko' },
+      NOTHING,
+    ])
   })
 
   test('aucune étape ✓ ou ✗ après un ✗, pour tout état et tout accord', () => {
     for (const state of STATES) {
       for (const accord of ['aucun', 'option', 'formulaire-oui', 'formulaire-non'] as const) {
-        const marks = steps(call({ state, accord, code: 1 })).map(s => s.mark)
+        const marks = steps(call({ state, accord, code: 1 })).map((s) => s.mark)
         const firstKo = marks.indexOf('ko')
         const after = firstKo < 0 ? [] : marks.slice(firstKo + 1)
-        expect(after.filter(m => m !== 'off')).toEqual([])
+        expect(after.filter((m) => m !== 'off')).toEqual([])
       }
     }
   })

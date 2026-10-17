@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
+import { describe, expect, test } from 'claude-code/testing'
 
 import { STALE_MS } from '../../hooks/superpowers'
 import { RECORDED_REFUSALS } from '../pure/engine-texts'
@@ -23,7 +23,8 @@ const SSH_REFUSED = 'SSH connection failed to raspberry: Connection refused (os 
 const CONFIRM_EXEC =
   'Confirm destructive operation: `ssh_exec`\n\n**Arguments:**\n```json\n{"command":"systemctl restart nginx","host":"raspberry"}\n```\n\n**Command:**\n```sh\nsystemctl restart nginx\n```\n\nProceed?'
 // refs/bridge-facts.md §5.1 : sans arguments lisibles, le résumé vaut `(no arguments)`.
-const CONFIRM_NO_ARGS = 'Confirm destructive operation: `ssh_exec`\n\n**Arguments:**\n```json\n(no arguments)\n```\n\nProceed?'
+const CONFIRM_NO_ARGS =
+  'Confirm destructive operation: `ssh_exec`\n\n**Arguments:**\n```json\n(no arguments)\n```\n\nProceed?'
 // refs/bridge-facts.md §3.8 : refus au formulaire, et accord sans `confirm: true`.
 const DECLINED = 'User declined execution of destructive tool `ssh_exec`.'
 const CANCELLED = 'User cancelled confirmation for destructive tool `ssh_exec`.'
@@ -41,7 +42,8 @@ const PLAN_PATH = '/home/user/claude-mods-0.2/docs/superpowers/plans/2026-10-15-
 const PLAN_3 = '# Exemple\n\n### T1 — Première\n\n### T2 — Deuxième\n\n### T3 — Troisième\n'
 const PLAN_4 = `${PLAN_3}\n### T4 — Quatrième\n`
 // Bloc meta d'un script Workflow (D:17484).
-const SCRIPT = "export const meta = { name: 'audit-disques', description: 'faire de la place', phases: [{ title: 'Review' }] }"
+const SCRIPT =
+  "export const meta = { name: 'audit-disques', description: 'faire de la place', phases: [{ title: 'Review' }] }"
 // Journal réel : les quatre premières lignes de ce fichier, chacune finie par son retour à la ligne
 // (JSONL ; foldJournal ne lit que les lignes complètes), relevé le 2026-10-15.
 const WF_DIR =
@@ -84,7 +86,12 @@ function refuseStateWrites(on: On): { arm: (n: number) => void; refused: () => n
     refused += 1
     return { deny: 'écriture refusée par le test' }
   })
-  return { arm: n => void (left = n), refused: () => refused }
+  return {
+    arm: (n) => {
+      left = n
+    },
+    refused: () => refused,
+  }
 }
 
 // --- Session --------------------------------------------------------------------
@@ -94,7 +101,7 @@ describe('session.start', () => {
     const w = world(on)
     await $.session.start({ cwd: '/home/user', surface: null, isInteractive: true })
     expect(w.commands).toEqual(['clair'])
-    expect(w.status.filter(t => t !== undefined)).toHaveLength(0)
+    expect(w.status.filter((t) => t !== undefined)).toHaveLength(0)
   })
 })
 
@@ -103,14 +110,24 @@ describe('session.start', () => {
 describe('tool.call Bash', () => {
   test('un appel CLI réussi : fait, lecture, sur sa machine', async ($, on) => {
     const w = world(on)
-    w.answers.set('toolu_cli', { result: { result: { stdout: DF, stderr: CLI_LOG, interrupted: false }, text: `${CLI_LOG}\n${DF}` } })
-    await $.tool.call({ tool: 'Bash', tool_use_id: 'toolu_cli', command: 'bridge-mcp tool ssh_disk_usage host=raspberry' })
-    expect(w.rows.get('toolu_cli')).toMatchObject([{ via: 'cli', tool: 'ssh_disk_usage', host: 'raspberry', nature: 'lecture', state: 'fait' }])
+    w.answers.set('toolu_cli', {
+      result: { result: { stdout: DF, stderr: CLI_LOG, interrupted: false }, text: `${CLI_LOG}\n${DF}` },
+    })
+    await $.tool.call({
+      tool: 'Bash',
+      tool_use_id: 'toolu_cli',
+      command: 'bridge-mcp tool ssh_disk_usage host=raspberry',
+    })
+    expect(w.rows.get('toolu_cli')).toMatchObject([
+      { via: 'cli', tool: 'ssh_disk_usage', host: 'raspberry', nature: 'lecture', state: 'fait' },
+    ])
   })
 
   test('une commande qui n’appelle pas le bridge ne laisse aucune trace', async ($, on) => {
     const w = world(on)
-    w.answers.set('toolu_ls', { result: { result: { stdout: 'README.md', stderr: '', interrupted: false }, text: 'README.md' } })
+    w.answers.set('toolu_ls', {
+      result: { result: { stdout: 'README.md', stderr: '', interrupted: false }, text: 'README.md' },
+    })
     await $.tool.call({ tool: 'Bash', tool_use_id: 'toolu_ls', command: 'ls' })
     expect(w.rows.size).toBe(0)
     expect(w.state).toBeUndefined()
@@ -119,14 +136,26 @@ describe('tool.call Bash', () => {
   test('un code de sortie de la CLI arrive avec son texte : machine inconnue', async ($, on) => {
     const w = world(on)
     w.answers.set('toolu_nohost', failed(CLI_UNKNOWN_HOST))
-    await $.tool.call({ tool: 'Bash', tool_use_id: 'toolu_nohost', command: 'bridge-mcp tool ssh_disk_usage host=nohost' })
+    await $.tool.call({
+      tool: 'Bash',
+      tool_use_id: 'toolu_nohost',
+      command: 'bridge-mcp tool ssh_disk_usage host=nohost',
+    })
     expect(w.rows.get('toolu_nohost')).toMatchObject([{ host: 'nohost', state: 'machine-inconnue' }])
   })
 
   test('run_in_background : ignoré, rien n’est écrit', async ($, on) => {
     const w = world(on)
-    w.answers.set('toolu_bg', { result: { result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b1' }, text: '' }, afterMs: 1_000 })
-    const pending = $.tool.call({ tool: 'Bash', tool_use_id: 'toolu_bg', command: 'bridge-mcp tool ssh_disk_usage host=raspberry', run_in_background: true })
+    w.answers.set('toolu_bg', {
+      result: { result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b1' }, text: '' },
+      afterMs: 1_000,
+    })
+    const pending = $.tool.call({
+      tool: 'Bash',
+      tool_use_id: 'toolu_bg',
+      command: 'bridge-mcp tool ssh_disk_usage host=raspberry',
+      run_in_background: true,
+    })
     await w.clock.settle()
     expect(w.state).toBeUndefined()
     await w.clock.advance(1_000)
@@ -137,8 +166,17 @@ describe('tool.call Bash', () => {
 
   test('passé en arrière-plan en cours de route (backgroundTaskId) : l’appel est retiré', async ($, on) => {
     const w = world(on)
-    w.answers.set('toolu_auto', { result: { result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b2', timedOutAfterMs: 120_000 }, text: '' } })
-    await $.tool.call({ tool: 'Bash', tool_use_id: 'toolu_auto', command: 'bridge-mcp tool ssh_disk_usage host=raspberry' })
+    w.answers.set('toolu_auto', {
+      result: {
+        result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'b2', timedOutAfterMs: 120_000 },
+        text: '',
+      },
+    })
+    await $.tool.call({
+      tool: 'Bash',
+      tool_use_id: 'toolu_auto',
+      command: 'bridge-mcp tool ssh_disk_usage host=raspberry',
+    })
     expect(w.rows.get('toolu_auto')).toEqual([])
     expect(lastState(w)?.calls).toHaveLength(0)
   })
@@ -152,7 +190,9 @@ describe('tool.call mcp__', () => {
     w.answers.set('toolu_m', { ...ok(DF), afterMs: 1_000 })
     const pending = $.tool.call({ tool: 'mcp__ssh-bridge__ssh_disk_usage', tool_use_id: 'toolu_m', host: 'raspberry' })
     await w.clock.settle()
-    expect(w.rows.get('toolu_m')).toMatchObject([{ via: 'mcp', tool: 'ssh_disk_usage', host: 'raspberry', state: 'en-cours' }])
+    expect(w.rows.get('toolu_m')).toMatchObject([
+      { via: 'mcp', tool: 'ssh_disk_usage', host: 'raspberry', state: 'en-cours' },
+    ])
     await w.clock.advance(1_000)
     await pending
     expect(w.rows.get('toolu_m')).toMatchObject([{ state: 'fait', nature: 'lecture' }])
@@ -162,19 +202,26 @@ describe('tool.call mcp__', () => {
     const w = world(on)
     const hosts = ['raspberry', 'win2012', 'win2025', 'win2025ntlm', 'win2025tls']
     for (const host of hosts) w.answers.set(`toolu_${host}`, { ...ok(DF), afterMs: 1_000 })
-    const pending = hosts.map(host => $.tool.call({ tool: 'mcp__ssh-bridge__ssh_disk_usage', tool_use_id: `toolu_${host}`, host }))
+    const pending = hosts.map((host) =>
+      $.tool.call({ tool: 'mcp__ssh-bridge__ssh_disk_usage', tool_use_id: `toolu_${host}`, host }),
+    )
     await w.clock.settle()
-    expect(lastState(w)?.calls.filter(c => c.state === 'en-cours')).toHaveLength(5)
+    expect(lastState(w)?.calls.filter((c) => c.state === 'en-cours')).toHaveLength(5)
     await w.clock.advance(1_000)
     await Promise.all(pending)
-    expect(lastState(w)?.calls.filter(c => c.state === 'fait')).toHaveLength(5)
+    expect(lastState(w)?.calls.filter((c) => c.state === 'fait')).toHaveLength(5)
     for (const host of hosts) expect(w.rows.get(`toolu_${host}`)).toMatchObject([{ host, state: 'fait' }])
   })
 
   test('mode progressif : mcp_call_tool donne le vrai outil et la machine', async ($, on) => {
     const w = world(on)
     w.answers.set('toolu_p', ok(DF))
-    await $.tool.call({ tool: 'mcp__ssh-bridge__mcp_call_tool', tool_use_id: 'toolu_p', name: 'ssh_disk_usage', arguments: { host: 'raspberry' } })
+    await $.tool.call({
+      tool: 'mcp__ssh-bridge__mcp_call_tool',
+      tool_use_id: 'toolu_p',
+      name: 'ssh_disk_usage',
+      arguments: { host: 'raspberry' },
+    })
     expect(w.rows.get('toolu_p')).toMatchObject([{ tool: 'ssh_disk_usage', host: 'raspberry' }])
   })
 
@@ -211,7 +258,12 @@ describe('tool.call mcp__', () => {
     w.answers.set('toolu_sc', ok(SESSION_INFO))
     w.answers.set('toolu_se', ok(SESSION_EXEC))
     await $.tool.call({ tool: 'mcp__ssh-bridge__ssh_session_create', tool_use_id: 'toolu_sc', host: 'raspberry' })
-    await $.tool.call({ tool: 'mcp__ssh-bridge__ssh_session_exec', tool_use_id: 'toolu_se', session_id: SESSION, command: 'uptime' })
+    await $.tool.call({
+      tool: 'mcp__ssh-bridge__ssh_session_exec',
+      tool_use_id: 'toolu_se',
+      session_id: SESSION,
+      command: 'uptime',
+    })
     expect(lastState(w)?.sessions).toEqual({ [SESSION]: 'raspberry' })
     expect(w.rows.get('toolu_se')).toMatchObject([{ tool: 'ssh_session_exec', host: 'raspberry' }])
   })
@@ -223,7 +275,12 @@ describe('classic.PermissionDenied et texte de refus du moteur', () => {
   test('PermissionDenied : refusé par Claude Code, avant même la fin de l’appel', async ($, on) => {
     const w = world(on)
     w.answers.set('toolu_cls', { ...failed(CLASSIFIER_REFUSAL), afterMs: 1_000 })
-    const pending = $.tool.call({ tool: 'mcp__ssh-bridge__ssh_exec', tool_use_id: 'toolu_cls', host: 'raspberry', command: 'systemctl restart nginx' })
+    const pending = $.tool.call({
+      tool: 'mcp__ssh-bridge__ssh_exec',
+      tool_use_id: 'toolu_cls',
+      host: 'raspberry',
+      command: 'systemctl restart nginx',
+    })
     await w.clock.settle()
     await $.classic.PermissionDenied({
       tool_name: 'mcp__ssh-bridge__ssh_exec',
@@ -240,7 +297,12 @@ describe('classic.PermissionDenied et texte de refus du moteur', () => {
   test('le texte du refus au dialogue suffit : refusé par Claude Code', async ($, on) => {
     const w = world(on)
     w.answers.set('toolu_dlg', failed(DIALOG_REFUSAL))
-    await $.tool.call({ tool: 'mcp__ssh-bridge__ssh_exec', tool_use_id: 'toolu_dlg', host: 'raspberry', command: 'systemctl restart nginx' })
+    await $.tool.call({
+      tool: 'mcp__ssh-bridge__ssh_exec',
+      tool_use_id: 'toolu_dlg',
+      host: 'raspberry',
+      command: 'systemctl restart nginx',
+    })
     expect(w.rows.get('toolu_dlg')).toMatchObject([{ state: 'refuse-claude' }])
   })
 })
@@ -251,9 +313,14 @@ describe('classic.Elicitation et classic.ElicitationResult', () => {
   test('la ligne d’état seulement pendant l’attente, puis décliné', async ($, on) => {
     const w = world(on)
     w.answers.set('toolu_f', { ...failed(DECLINED), afterMs: 1_000 })
-    const pending = $.tool.call({ tool: 'mcp__ssh-bridge__ssh_exec', tool_use_id: 'toolu_f', host: 'raspberry', command: 'systemctl restart nginx' })
+    const pending = $.tool.call({
+      tool: 'mcp__ssh-bridge__ssh_exec',
+      tool_use_id: 'toolu_f',
+      host: 'raspberry',
+      command: 'systemctl restart nginx',
+    })
     await w.clock.settle()
-    expect(w.status.filter(t => t !== undefined)).toHaveLength(0)
+    expect(w.status.filter((t) => t !== undefined)).toHaveLength(0)
     await $.classic.Elicitation({ mcp_server_name: 'ssh-bridge', message: CONFIRM_EXEC, mode: 'form' })
     expect(lastState(w)?.waiting).toMatchObject({ tool: 'ssh_exec', host: 'raspberry', callId: 'toolu_f#0' })
     expect(w.status.at(-1)).toMatch(/raspberry attend ton accord/)
@@ -270,11 +337,21 @@ describe('classic.Elicitation et classic.ElicitationResult', () => {
   test('Échap sur le formulaire (cancel, content null) : décliné, accord non, « à toi » effacé', async ($, on) => {
     const w = world(on)
     w.answers.set('toolu_esc', { ...failed(CANCELLED), afterMs: 1_000 })
-    const pending = $.tool.call({ tool: 'mcp__ssh-bridge__ssh_exec', tool_use_id: 'toolu_esc', host: 'raspberry', command: 'systemctl restart nginx' })
+    const pending = $.tool.call({
+      tool: 'mcp__ssh-bridge__ssh_exec',
+      tool_use_id: 'toolu_esc',
+      host: 'raspberry',
+      command: 'systemctl restart nginx',
+    })
     await w.clock.settle()
     await $.classic.Elicitation({ mcp_server_name: 'ssh-bridge', message: CONFIRM_EXEC, mode: 'form' })
     expect(w.status.at(-1)).toMatch(/raspberry attend ton accord/)
-    await $.classic.ElicitationResult({ mcp_server_name: 'ssh-bridge', mode: 'form', action: 'cancel', content: null as never })
+    await $.classic.ElicitationResult({
+      mcp_server_name: 'ssh-bridge',
+      mode: 'form',
+      action: 'cancel',
+      content: null as never,
+    })
     expect(lastState(w)?.waiting).toBeNull()
     expect(w.status.at(-1)).toBeUndefined()
     await w.clock.advance(1_000)
@@ -285,7 +362,12 @@ describe('classic.Elicitation et classic.ElicitationResult', () => {
   test('accepté avec confirm = true : accord oui', async ($, on) => {
     const w = world(on)
     w.answers.set('toolu_a', { ...ok('active'), afterMs: 1_000 })
-    const pending = $.tool.call({ tool: 'mcp__ssh-bridge__ssh_exec', tool_use_id: 'toolu_a', host: 'raspberry', command: 'systemctl restart nginx' })
+    const pending = $.tool.call({
+      tool: 'mcp__ssh-bridge__ssh_exec',
+      tool_use_id: 'toolu_a',
+      host: 'raspberry',
+      command: 'systemctl restart nginx',
+    })
     await w.clock.settle()
     await $.classic.Elicitation({ mcp_server_name: 'ssh-bridge', message: CONFIRM_EXEC, mode: 'form' })
     await $.classic.ElicitationResult({ mcp_server_name: 'ssh-bridge', action: 'accept', content: { confirm: true } })
@@ -297,7 +379,12 @@ describe('classic.Elicitation et classic.ElicitationResult', () => {
   test('accepté sans confirm = true : accord non (refs/bridge-facts.md §5.5)', async ($, on) => {
     const w = world(on)
     w.answers.set('toolu_g', { ...failed(NOT_GRANTED), afterMs: 1_000 })
-    const pending = $.tool.call({ tool: 'mcp__ssh-bridge__ssh_exec', tool_use_id: 'toolu_g', host: 'raspberry', command: 'systemctl restart nginx' })
+    const pending = $.tool.call({
+      tool: 'mcp__ssh-bridge__ssh_exec',
+      tool_use_id: 'toolu_g',
+      host: 'raspberry',
+      command: 'systemctl restart nginx',
+    })
     await w.clock.settle()
     await $.classic.Elicitation({ mcp_server_name: 'ssh-bridge', message: CONFIRM_EXEC, mode: 'form' })
     await $.classic.ElicitationResult({ mcp_server_name: 'ssh-bridge', action: 'accept', content: { confirm: false } })
@@ -309,7 +396,12 @@ describe('classic.Elicitation et classic.ElicitationResult', () => {
   test('sans hôte lisible dans le message : l’appel MCP bridge en cours le plus récent', async ($, on) => {
     const w = world(on)
     w.answers.set('toolu_n', { ...ok('active'), afterMs: 1_000 })
-    const pending = $.tool.call({ tool: 'mcp__ssh-bridge__ssh_exec', tool_use_id: 'toolu_n', host: 'raspberry', command: 'systemctl restart nginx' })
+    const pending = $.tool.call({
+      tool: 'mcp__ssh-bridge__ssh_exec',
+      tool_use_id: 'toolu_n',
+      host: 'raspberry',
+      command: 'systemctl restart nginx',
+    })
     await w.clock.settle()
     await $.classic.Elicitation({ mcp_server_name: 'ssh-bridge', message: CONFIRM_NO_ARGS, mode: 'form' })
     expect(lastState(w)?.waiting).toMatchObject({ host: 'raspberry', callId: 'toolu_n#0' })
@@ -320,7 +412,12 @@ describe('classic.Elicitation et classic.ElicitationResult', () => {
   test('la réponse n’arrive jamais : « à toi » s’efface quand l’appel se termine', async ($, on) => {
     const w = world(on)
     w.answers.set('toolu_r', { ...failed(DECLINED), afterMs: 1_000 })
-    const pending = $.tool.call({ tool: 'mcp__ssh-bridge__ssh_exec', tool_use_id: 'toolu_r', host: 'raspberry', command: 'systemctl restart nginx' })
+    const pending = $.tool.call({
+      tool: 'mcp__ssh-bridge__ssh_exec',
+      tool_use_id: 'toolu_r',
+      host: 'raspberry',
+      command: 'systemctl restart nginx',
+    })
     await w.clock.settle()
     await $.classic.Elicitation({ mcp_server_name: 'ssh-bridge', message: CONFIRM_EXEC, mode: 'form' })
     await w.clock.advance(1_000)
@@ -359,7 +456,12 @@ describe('tool.call Skill, Agent, Write et Edit', () => {
     await $.tool.call({ tool: 'Skill', tool_use_id: 'toolu_s1', skill: 'superpowers:writing-plans' })
     await $.tool.call({ tool: 'Write', tool_use_id: 'toolu_w1', file_path: PLAN_PATH, content: PLAN_3 })
     await $.tool.call({ tool: 'Skill', tool_use_id: 'toolu_s2', skill: 'superpowers:subagent-driven-development' })
-    await $.tool.call({ tool: 'Agent', tool_use_id: 'toolu_a1', description: 'Implement Task 2', prompt: 'You are implementing Task 2' })
+    await $.tool.call({
+      tool: 'Agent',
+      tool_use_id: 'toolu_a1',
+      description: 'Implement Task 2',
+      prompt: 'You are implementing Task 2',
+    })
     expect(lastState(w)?.superpowers).toMatchObject({ stage: 'taches', tasks: 3, current: 2, isStale: false })
   })
 
@@ -374,7 +476,13 @@ describe('tool.call Skill, Agent, Write et Edit', () => {
     await $.tool.call({ tool: 'Skill', tool_use_id: 'toolu_s4', skill: 'superpowers:writing-plans' })
     await $.tool.call({ tool: 'Write', tool_use_id: 'toolu_w2', file_path: PLAN_PATH, content: PLAN_3 })
     writeFile(w, PLAN_PATH, PLAN_4)
-    await $.tool.call({ tool: 'Edit', tool_use_id: 'toolu_e1', file_path: PLAN_PATH, old_string: 'Troisième\n', new_string: 'Troisième\n\n### T4 — Quatrième\n' })
+    await $.tool.call({
+      tool: 'Edit',
+      tool_use_id: 'toolu_e1',
+      file_path: PLAN_PATH,
+      old_string: 'Troisième\n',
+      new_string: 'Troisième\n\n### T4 — Quatrième\n',
+    })
     expect(w.reads).toEqual([PLAN_PATH])
     expect(lastState(w)?.superpowers).toMatchObject({ tasks: 4 })
   })
@@ -382,7 +490,13 @@ describe('tool.call Skill, Agent, Write et Edit', () => {
   test('Edit d’un autre fichier : aucune lecture', async ($, on) => {
     const w = world(on)
     await $.tool.call({ tool: 'Skill', tool_use_id: 'toolu_s5', skill: 'superpowers:writing-plans' })
-    await $.tool.call({ tool: 'Edit', tool_use_id: 'toolu_e2', file_path: '/home/user/claude-mods-0.2/README.md', old_string: 'a', new_string: 'b' })
+    await $.tool.call({
+      tool: 'Edit',
+      tool_use_id: 'toolu_e2',
+      file_path: '/home/user/claude-mods-0.2/README.md',
+      old_string: 'a',
+      new_string: 'b',
+    })
     expect(w.reads).toHaveLength(0)
   })
 
@@ -417,7 +531,14 @@ describe('tool.call Workflow, minuteur du journal et session.append', () => {
     w.answers.set('toolu_wf', { result: { result: WF_RESULT, text: '' } })
     await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_wf', script: SCRIPT })
     expect(lastState(w)?.workflows).toMatchObject([
-      { key: 'wf_0f41829b-6d3', toolUseId: 'toolu_wf', name: 'audit-disques', phases: ['Review'], journalPath: JOURNAL, status: 'en-cours' },
+      {
+        key: 'wf_0f41829b-6d3',
+        toolUseId: 'toolu_wf',
+        name: 'audit-disques',
+        phases: ['Review'],
+        journalPath: JOURNAL,
+        status: 'en-cours',
+      },
     ])
   })
 
@@ -483,7 +604,17 @@ describe('tool.call Workflow, minuteur du journal et session.append', () => {
 
   test('un workflow à distance : sans journal, jamais lu', async ($, on) => {
     const w = world(on)
-    w.answers.set('toolu_wr', { result: { result: { status: 'remote_launched', taskId: 'r1', taskType: 'remote_agent', sessionUrl: 'https://claude.ai/code/x' }, text: '' } })
+    w.answers.set('toolu_wr', {
+      result: {
+        result: {
+          status: 'remote_launched',
+          taskId: 'r1',
+          taskType: 'remote_agent',
+          sessionUrl: 'https://claude.ai/code/x',
+        },
+        text: '',
+      },
+    })
     await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_wr', script: SCRIPT })
     expect(lastState(w)?.workflows).toMatchObject([{ key: 'r1', journalPath: null, status: 'distant' }])
     await w.clock.advance(6_000)

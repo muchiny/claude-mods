@@ -69,7 +69,7 @@ export function startWorkflow(
     lastGrowthAt: now,
     startedAt: now,
   }
-  return [...list.filter(x => x.key !== w.key), started]
+  return [...list.filter((x) => x.key !== w.key), started]
 }
 
 type Row = { type: string; agentId: string; label: string | null; phase: string | null }
@@ -107,12 +107,12 @@ export function foldJournal(w: Workflow, text: string, now: number): Workflow {
     const row = rowOf(line)
     if (row === null) continue
     if (row.type === 'started') {
-      if (!agents.some(a => a.id === row.agentId)) {
+      if (!agents.some((a) => a.id === row.agentId)) {
         agents = [...agents, { id: row.agentId, label: row.label ?? row.agentId, phase: row.phase, state: 'en-cours' }]
       }
     } else if (row.type === 'result' || row.type === 'failed') {
       const state = row.type === 'result' ? 'fait' : 'echec'
-      agents = agents.map(a => (a.id === row.agentId ? { ...a, state } : a))
+      agents = agents.map((a) => (a.id === row.agentId ? { ...a, state } : a))
     }
   }
   const status: WorkflowStatus = w.status === 'sans-nouvelles' ? 'en-cours' : w.status
@@ -122,7 +122,7 @@ export function foldJournal(w: Workflow, text: string, now: number): Workflow {
 /** Termine le workflow dont la clé ou le `toolUseId` vaut `key` ; même référence si rien ne change. */
 export function endWorkflow(list: Workflow[], key: string, status: Ending): Workflow[] {
   let changed = false
-  const next = list.map(w => {
+  const next = list.map((w) => {
     if ((w.key !== key && w.toolUseId !== key) || w.status === status) return w
     changed = true
     return { ...w, status }
@@ -138,7 +138,7 @@ export function endWorkflow(list: Workflow[], key: string, status: Ending): Work
  */
 export function quiet(list: Workflow[], now: number, mtimeMs: (w: Workflow) => number | null): Workflow[] {
   let changed = false
-  const next = list.map(w => {
+  const next = list.map((w) => {
     if (w.status !== 'en-cours') return w
     const mtime = mtimeMs(w)
     const last = mtime === null ? w.lastGrowthAt : Math.max(w.lastGrowthAt, mtime)
@@ -171,11 +171,11 @@ export function doneNotice(text: string): { key: string; status: Ending } | null
 export function currentPhase(w: Workflow): string | null {
   const started: string[] = []
   for (const a of w.agents) if (a.phase !== null && !started.includes(a.phase)) started.push(a.phase)
-  const running = started.findLast(phase => w.agents.some(a => a.phase === phase && a.state === 'en-cours'))
+  const running = started.findLast((phase) => w.agents.some((a) => a.phase === phase && a.state === 'en-cours'))
   return running ?? started.at(-1) ?? null
 }
 
 /** Les workflows qui tournent : en cours, ou lancés à distance. */
 export function active(list: Workflow[]): Workflow[] {
-  return list.filter(w => w.status === 'en-cours' || w.status === 'distant')
+  return list.filter((w) => w.status === 'en-cours' || w.status === 'distant')
 }

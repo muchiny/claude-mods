@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,7 +14,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
+  static:
+    name: Lint, format, types
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Biome : lint, format et tri des imports, warnings comptés comme erreurs.
+      - name: Biome
+        run: npx biome ci . --error-on-warnings
+
+      # Les types de l'API des mods sont dans dev/claude-code.d.ts (Claude Code 2.1.302).
+      - name: TypeScript
+        run: npx tsc -p tsconfig.json
+
+      - name: Audit des dépendances de développement
+        run: npm audit --audit-level=high
+
+  mod:
+    name: Validate and test
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -27,8 +54,7 @@ jobs:
       - name: Install Claude Code
         run: npm install -g @anthropic-ai/claude-code@latest
 
-      - name: Claude Code version
-        run: claude --version
+      - run: claude --version
 
       - name: Validate marketplace
         run: claude plugin validate .
@@ -40,6 +66,7 @@ jobs:
         run: claude plugin test mode-clair
 
   hygiene:
+    name: Public repository hygiene
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -49,7 +76,7 @@ jobs:
       - name: No personal paths or secret-like strings
         run: |
           if grep -rInE '/home/(muchini|loic)|gho_[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9_-]{10,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----' \
-              --exclude-dir=.git --exclude-dir=node_modules --exclude=ci.yml .; then
+              --exclude-dir=.git --exclude-dir=node_modules --exclude=ci.yml --exclude=package-lock.json .; then
             echo "::error::Chemin personnel ou secret détecté"
             exit 1
           fi

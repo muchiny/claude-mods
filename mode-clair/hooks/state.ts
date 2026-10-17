@@ -8,7 +8,14 @@
 import type { BridgeCall, CallState, ClairState, Superpowers, Tone, Waiting, Workflow } from '../types'
 import type { Outcome, ParsedCall } from './bridge'
 
-export type StateRow = { sign: '●' | '✓' | '✗' | '○' | '?'; tone: Tone; inLook: boolean; counted: boolean; isCall: boolean; label: string }
+export type StateRow = {
+  sign: '●' | '✓' | '✗' | '○' | '?'
+  tone: Tone
+  inLook: boolean
+  counted: boolean
+  isCall: boolean
+  label: string
+}
 
 /**
  * Spec §5.4, une ligne par état, plus 'acces-refuse' et 'delai-depasse'
@@ -21,18 +28,67 @@ export const STATE_TABLE: Readonly<Record<CallState, StateRow>> = {
   fait: { sign: '✓', tone: 'ok', inLook: false, counted: false, isCall: true, label: 'fait' },
   code: { sign: '✓', tone: 'texte', inLook: false, counted: false, isCall: true, label: 'code' },
   injoignable: { sign: '✗', tone: 'erreur', inLook: true, counted: true, isCall: false, label: 'injoignable' },
-  'machine-inconnue': { sign: '✗', tone: 'erreur', inLook: true, counted: true, isCall: false, label: 'machine inconnue' },
+  'machine-inconnue': {
+    sign: '✗',
+    tone: 'erreur',
+    inLook: true,
+    counted: true,
+    isCall: false,
+    label: 'machine inconnue',
+  },
   refuse: { sign: '✗', tone: 'erreur', inLook: true, counted: true, isCall: false, label: 'refusé' },
   limite: { sign: '✗', tone: 'attention', inLook: true, counted: true, isCall: false, label: 'limité' },
-  'confirmation-impossible': { sign: '✗', tone: 'erreur', inLook: true, counted: true, isCall: false, label: 'confirmation impossible' },
-  'confirmation-manquante': { sign: '✗', tone: 'attention', inLook: true, counted: true, isCall: false, label: 'confirmation manquante' },
-  'echec-machine': { sign: '✗', tone: 'erreur', inLook: true, counted: true, isCall: true, label: 'échec sur la machine' },
+  'confirmation-impossible': {
+    sign: '✗',
+    tone: 'erreur',
+    inLook: true,
+    counted: true,
+    isCall: false,
+    label: 'confirmation impossible',
+  },
+  'confirmation-manquante': {
+    sign: '✗',
+    tone: 'attention',
+    inLook: true,
+    counted: true,
+    isCall: false,
+    label: 'confirmation manquante',
+  },
+  'echec-machine': {
+    sign: '✗',
+    tone: 'erreur',
+    inLook: true,
+    counted: true,
+    isCall: true,
+    label: 'échec sur la machine',
+  },
   echec: { sign: '✗', tone: 'erreur', inLook: true, counted: true, isCall: true, label: 'échec' },
   'acces-refuse': { sign: '✗', tone: 'erreur', inLook: true, counted: true, isCall: false, label: 'accès refusé' },
   'delai-depasse': { sign: '✗', tone: 'attention', inLook: true, counted: true, isCall: true, label: 'délai dépassé' },
-  'erreur-usage': { sign: '✗', tone: 'attention', inLook: true, counted: false, isCall: false, label: 'erreur d’usage' },
-  'erreur-config': { sign: '✗', tone: 'attention', inLook: true, counted: false, isCall: false, label: 'erreur de config' },
-  'refuse-claude': { sign: '○', tone: 'attenue', inLook: false, counted: false, isCall: false, label: 'refusé par Claude Code' },
+  'erreur-usage': {
+    sign: '✗',
+    tone: 'attention',
+    inLook: true,
+    counted: false,
+    isCall: false,
+    label: 'erreur d’usage',
+  },
+  'erreur-config': {
+    sign: '✗',
+    tone: 'attention',
+    inLook: true,
+    counted: false,
+    isCall: false,
+    label: 'erreur de config',
+  },
+  'refuse-claude': {
+    sign: '○',
+    tone: 'attenue',
+    inLook: false,
+    counted: false,
+    isCall: false,
+    label: 'refusé par Claude Code',
+  },
   decline: { sign: '○', tone: 'attenue', inLook: false, counted: false, isCall: false, label: 'décliné' },
   interrompu: { sign: '○', tone: 'attenue', inLook: false, counted: false, isCall: true, label: 'interrompu' },
   incertain: { sign: '?', tone: 'attenue', inLook: false, counted: false, isCall: true, label: 'incertain' },
@@ -57,7 +113,7 @@ export const EMPTY: ClairState = {
  */
 function capped(calls: BridgeCall[]): BridgeCall[] {
   let excess = calls.length - MAX_CALLS
-  return calls.filter(c => {
+  return calls.filter((c) => {
     if (excess > 0 && c.state !== 'en-cours') {
       excess -= 1
       return false
@@ -73,21 +129,29 @@ function capped(calls: BridgeCall[]): BridgeCall[] {
  * hostOrder à sa première apparition ; une machine inconnue n'y entre jamais.
  * Rien à suivre, ou appels déjà commencés pour ce toolUseId : même référence.
  */
-export function startCalls(s: ClairState, toolUseId: string, agentId: string | undefined, parsed: ParsedCall[], now: number): ClairState {
-  if (parsed.length === 0 || s.calls.some(c => c.toolUseId === toolUseId)) return s
-  const fresh = parsed.map((p, n): BridgeCall => ({
-    id: `${toolUseId}#${n}`,
-    toolUseId,
-    ...(agentId === undefined ? {} : { agentId }),
-    via: p.via,
-    tool: p.tool,
-    host: p.host ?? Object.entries(s.sessions).find(([id]) => id === p.sessionId)?.[1] ?? null,
-    nature: p.nature,
-    state: 'en-cours',
-    truncated: false,
-    accord: p.accordByOption ? 'option' : 'aucun',
-    startedAt: now,
-  }))
+export function startCalls(
+  s: ClairState,
+  toolUseId: string,
+  agentId: string | undefined,
+  parsed: ParsedCall[],
+  now: number,
+): ClairState {
+  if (parsed.length === 0 || s.calls.some((c) => c.toolUseId === toolUseId)) return s
+  const fresh = parsed.map(
+    (p, n): BridgeCall => ({
+      id: `${toolUseId}#${n}`,
+      toolUseId,
+      ...(agentId === undefined ? {} : { agentId }),
+      via: p.via,
+      tool: p.tool,
+      host: p.host ?? Object.entries(s.sessions).find(([id]) => id === p.sessionId)?.[1] ?? null,
+      nature: p.nature,
+      state: 'en-cours',
+      truncated: false,
+      accord: p.accordByOption ? 'option' : 'aucun',
+      startedAt: now,
+    }),
+  )
   const hostOrder = [...s.hostOrder]
   for (const c of fresh) {
     if (c.host !== null && !hostOrder.includes(c.host)) hostOrder.push(c.host)
@@ -97,7 +161,7 @@ export function startCalls(s: ClairState, toolUseId: string, agentId: string | u
 
 /** Les appels d'un tool_use_id, dans l'ordre de leurs rangs. */
 export function callsOf(s: ClairState, toolUseId: string): BridgeCall[] {
-  return s.calls.filter(c => c.toolUseId === toolUseId)
+  return s.calls.filter((c) => c.toolUseId === toolUseId)
 }
 
 /** Index de couleur d'une machine : son rang d'apparition, -1 si elle n'est jamais apparue. */
@@ -112,7 +176,7 @@ export function rememberSession(s: ClairState, sessionId: string, host: string):
 
 /** Les appels en cours : tous, ou seulement ceux de l'agent `agentId` quand il est donné. */
 export function running(s: ClairState, agentId?: string): BridgeCall[] {
-  return s.calls.filter(c => c.state === 'en-cours' && (agentId === undefined || c.agentId === agentId))
+  return s.calls.filter((c) => c.state === 'en-cours' && (agentId === undefined || c.agentId === agentId))
 }
 
 const UNKNOWN: Outcome = { state: 'incertain', truncated: false }
@@ -168,7 +232,7 @@ function withCalls(s: ClairState, calls: BridgeCall[], ids: readonly string[]): 
  */
 export function finishCalls(s: ClairState, toolUseId: string, outcomes: Outcome[], now: number): ClairState {
   const ids: string[] = []
-  const calls = s.calls.map(c => {
+  const calls = s.calls.map((c) => {
     if (c.toolUseId !== toolUseId) return c
     ids.push(c.id)
     if (c.state === 'refuse-claude') return c
@@ -181,7 +245,7 @@ export function finishCalls(s: ClairState, toolUseId: string, outcomes: Outcome[
 /** Refus de Claude Code (PermissionDenied) : tous les appels du tool_use_id, terminés ou non. */
 export function refuseByClaude(s: ClairState, toolUseId: string, now: number): ClairState {
   const ids: string[] = []
-  const calls = s.calls.map(c => {
+  const calls = s.calls.map((c) => {
     if (c.toolUseId !== toolUseId) return c
     ids.push(c.id)
     return c.state === 'refuse-claude' ? c : closed(c, REFUSED, now)
@@ -196,7 +260,7 @@ export function refuseByClaude(s: ClairState, toolUseId: string, now: number): C
  */
 export function interruptOpen(s: ClairState, agentId: string | undefined, now: number): ClairState {
   const ids: string[] = []
-  const calls = s.calls.map(c => {
+  const calls = s.calls.map((c) => {
     if (c.state !== 'en-cours' || c.agentId !== agentId) return c
     ids.push(c.id)
     return closed(c, INTERRUPTED, now)
@@ -222,7 +286,7 @@ export function setWaiting(s: ClairState, w: Waiting | null): ClairState {
  */
 export function recordAccord(s: ClairState, callId: string | null, granted: boolean): ClairState {
   const accord: BridgeCall['accord'] = granted ? 'formulaire-oui' : 'formulaire-non'
-  const calls = s.calls.map(c => (c.id === callId && c.accord !== accord ? { ...c, accord } : c))
+  const calls = s.calls.map((c) => (c.id === callId && c.accord !== accord ? { ...c, accord } : c))
   return withCalls(s, calls, [])
 }
 
@@ -257,7 +321,7 @@ export function problems(s: ClairState): BridgeCall[] {
 
 /** Le n de `clair ✗ n` : problèmes comptés, terminés après le dernier /clair. */
 export function unseenProblems(s: ClairState): number {
-  return s.calls.filter(c => isUnseenProblem(c, s.seenAt)).length
+  return s.calls.filter((c) => isUnseenProblem(c, s.seenAt)).length
 }
 
 type Machine = { host: string; index: number; calls: number; last: BridgeCall; hasUnseenProblem: boolean }
@@ -271,15 +335,15 @@ type Machine = { host: string; index: number; calls: number; last: BridgeCall; h
 export function machines(s: ClairState): Machine[] {
   const out: Machine[] = []
   s.hostOrder.forEach((host, index) => {
-    const mine = s.calls.filter(c => c.host === host)
+    const mine = s.calls.filter((c) => c.host === host)
     const last = mine.at(-1)
     if (last === undefined) return
     out.push({
       host,
       index,
-      calls: mine.filter(c => STATE_TABLE[c.state].isCall).length,
+      calls: mine.filter((c) => STATE_TABLE[c.state].isCall).length,
       last,
-      hasUnseenProblem: mine.some(c => isUnseenProblem(c, s.seenAt)),
+      hasUnseenProblem: mine.some((c) => isUnseenProblem(c, s.seenAt)),
     })
   })
   return out
@@ -294,7 +358,9 @@ export function machines(s: ClairState): Machine[] {
  * ce tool_use_id.
  */
 export function dropCalls(s: ClairState, toolUseId: string): ClairState {
-  return s.calls.some(c => c.toolUseId === toolUseId) ? { ...s, calls: s.calls.filter(c => c.toolUseId !== toolUseId) } : s
+  return s.calls.some((c) => c.toolUseId === toolUseId)
+    ? { ...s, calls: s.calls.filter((c) => c.toolUseId !== toolUseId) }
+    : s
 }
 
 /**
@@ -303,10 +369,17 @@ export function dropCalls(s: ClairState, toolUseId: string): ClairState {
  * sinon le plus récent appel MCP en cours (amendement A9), sinon aucun. Ce que le message tait est
  * repris de l'appel retenu.
  */
-export function waitingFor(s: ClairState, confirmation: { tool: string | null; host: string | null }, now: number): Waiting {
+export function waitingFor(
+  s: ClairState,
+  confirmation: { tool: string | null; host: string | null },
+  now: number,
+): Waiting {
   const { tool, host } = confirmation
-  const open = s.calls.filter(c => c.via === 'mcp' && c.state === 'en-cours')
-  const call = open.findLast(c => (tool === null || c.tool === tool) && (host === null || c.host === host)) ?? open.at(-1) ?? null
+  const open = s.calls.filter((c) => c.via === 'mcp' && c.state === 'en-cours')
+  const call =
+    open.findLast((c) => (tool === null || c.tool === tool) && (host === null || c.host === host)) ??
+    open.at(-1) ??
+    null
   return { tool: tool ?? call?.tool ?? '', host: host ?? call?.host ?? null, callId: call?.id ?? null, since: now }
 }
 
@@ -319,6 +392,6 @@ export function closeWaiting(s: ClairState, toolUseId: string): ClairState {
   const w = s.waiting
   if (w === null) return s
   const calls = callsOf(s, toolUseId)
-  const isMine = w.callId === null ? calls.some(c => c.via === 'mcp') : calls.some(c => c.id === w.callId)
+  const isMine = w.callId === null ? calls.some((c) => c.via === 'mcp') : calls.some((c) => c.id === w.callId)
   return isMine ? setWaiting(s, null) : s
 }

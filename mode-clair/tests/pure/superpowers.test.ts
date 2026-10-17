@@ -1,7 +1,17 @@
 import { describe, expect, test } from 'claude-code/testing'
-
+import {
+  expire,
+  onAgent,
+  onAgentDone,
+  onAgentLaunched,
+  onDocWrite,
+  onSkill,
+  parsePlan,
+  runningAgentOf,
+  STALE_MS,
+  taskNumber,
+} from '../../hooks/superpowers'
 import type { Superpowers } from '../../types'
-import { STALE_MS, expire, onAgent, onAgentDone, onAgentLaunched, onDocWrite, onSkill, parsePlan, runningAgentOf, taskNumber } from '../../hooks/superpowers'
 
 // Plans réels de l'utilisateur (lecture seule, ~/archive/exit-code-directs et
 // ~/archive/bridge-mcp-main-2026-10-15, docs/superpowers/plans/) : titre et premiers titres de tâche.
@@ -49,13 +59,26 @@ describe('superpowers : lecture des plans et des descriptions', () => {
   })
 
   test('titres ### Task N: et suffixe « Implementation Plan » retiré', () => {
-    expect(parsePlan(PLAN_TASK)).toStrictEqual({ title: 'Reduction: YAML Output, Multi-Document yq, Limit After Filters', tasks: 4 })
-    const csv = ['# Ajouter l’export CSV Implementation Plan', '### Task 1: Ajouter la commande export', '### Task 2: Lire les résultats', '### Task 3: Écrire le fichier CSV'].join('\n')
+    expect(parsePlan(PLAN_TASK)).toStrictEqual({
+      title: 'Reduction: YAML Output, Multi-Document yq, Limit After Filters',
+      tasks: 4,
+    })
+    const csv = [
+      '# Ajouter l’export CSV Implementation Plan',
+      '### Task 1: Ajouter la commande export',
+      '### Task 2: Lire les résultats',
+      '### Task 3: Écrire le fichier CSV',
+    ].join('\n')
     expect(parsePlan(csv)).toStrictEqual({ title: 'Ajouter l’export CSV', tasks: 3 })
   })
 
   test('titres ### Tâche N : du plan de mode-clair lui-même', () => {
-    const plan = ['# mode-clair 0.2.0 — plan d’implémentation', '## Tâches', '### Tâche 7 : superpowers.ts', '### Tâche 8 : workflow.ts'].join('\n')
+    const plan = [
+      '# mode-clair 0.2.0 — plan d’implémentation',
+      '## Tâches',
+      '### Tâche 7 : superpowers.ts',
+      '### Tâche 8 : workflow.ts',
+    ].join('\n')
     expect(parsePlan(plan)).toStrictEqual({ title: 'mode-clair 0.2.0 — plan d’implémentation', tasks: 2 })
   })
 
@@ -133,7 +156,13 @@ describe('superpowers : les skills d’étape', () => {
   })
 
   test('brainstorming repart d’un état neuf, même au milieu d’un plan', () => {
-    const sp = state({ stage: 'taches', planTitle: 'Plan de correction — tout ce qui reste (2026-09-30)', planPath: PLAN_T_PATH, tasks: 19, current: 4 })
+    const sp = state({
+      stage: 'taches',
+      planTitle: 'Plan de correction — tout ce qui reste (2026-09-30)',
+      planPath: PLAN_T_PATH,
+      tasks: 19,
+      current: 4,
+    })
     expect(onSkill(sp, 'brainstorming', 9_000)).toStrictEqual(state({ lastEventAt: 9_000 }))
   })
 
@@ -169,25 +198,45 @@ describe('superpowers : les écritures sous docs/superpowers/', () => {
   })
 
   test('la spec fait passer le cadrage à l’étape spec, et ne fait jamais reculer', () => {
-    expect(onDocWrite(state({}), SPEC_PATH, '# spec', 2_000)).toStrictEqual(state({ stage: 'spec', lastEventAt: 2_000 }))
+    expect(onDocWrite(state({}), SPEC_PATH, '# spec', 2_000)).toStrictEqual(
+      state({ stage: 'spec', lastEventAt: 2_000 }),
+    )
     const sp = state({ stage: 'taches', planPath: PLAN_T_PATH, tasks: 3, current: 1 })
     expect(onDocWrite(sp, SPEC_PATH, '# spec', 2_000)).toStrictEqual({ ...sp, lastEventAt: 2_000 })
   })
 
   test('un plan réel aux titres ### T1 — donne son titre et son nombre de tâches', () => {
     expect(onDocWrite(state({ stage: 'spec' }), PLAN_T_PATH, PLAN_T, 3_000)).toStrictEqual(
-      state({ stage: 'plan', planTitle: 'Plan de correction — tout ce qui reste (2026-09-30)', planPath: PLAN_T_PATH, tasks: 3, lastEventAt: 3_000 }),
+      state({
+        stage: 'plan',
+        planTitle: 'Plan de correction — tout ce qui reste (2026-09-30)',
+        planPath: PLAN_T_PATH,
+        tasks: 3,
+        lastEventAt: 3_000,
+      }),
     )
     expect(onDocWrite(state({}), PLAN_T_PATH, PLAN_T, 3_000)?.stage).toBe('plan')
   })
 
   test('pendant l’exécution, relire le même plan garde l’étape et la tâche courante', () => {
-    const sp = state({ stage: 'taches', planTitle: 'Plan de correction — tout ce qui reste (2026-09-30)', planPath: PLAN_T_PATH, tasks: 2, current: 2 })
+    const sp = state({
+      stage: 'taches',
+      planTitle: 'Plan de correction — tout ce qui reste (2026-09-30)',
+      planPath: PLAN_T_PATH,
+      tasks: 2,
+      current: 2,
+    })
     expect(onDocWrite(sp, PLAN_T_PATH, PLAN_T, 4_000)).toStrictEqual({ ...sp, tasks: 3, lastEventAt: 4_000 })
   })
 
   test('relecture échouée (text null) : le même plan garde ses tâches, un autre plan les oublie', () => {
-    const sp = state({ stage: 'taches', planTitle: 'Plan de correction — tout ce qui reste (2026-09-30)', planPath: PLAN_T_PATH, tasks: 19, current: 4 })
+    const sp = state({
+      stage: 'taches',
+      planTitle: 'Plan de correction — tout ce qui reste (2026-09-30)',
+      planPath: PLAN_T_PATH,
+      tasks: 19,
+      current: 4,
+    })
     expect(onDocWrite(sp, PLAN_T_PATH, null, 4_000)).toStrictEqual({ ...sp, lastEventAt: 4_000 })
     expect(onDocWrite(sp, PLAN_TT_PATH, null, 4_000)).toStrictEqual(
       state({ stage: 'taches', planPath: PLAN_TT_PATH, lastEventAt: 4_000 }),
@@ -195,7 +244,13 @@ describe('superpowers : les écritures sous docs/superpowers/', () => {
   })
 
   test('changer de plan oublie la tâche courante', () => {
-    const sp = state({ stage: 'taches', planTitle: 'Plan de correction — tout ce qui reste (2026-09-30)', planPath: PLAN_T_PATH, tasks: 19, current: 4 })
+    const sp = state({
+      stage: 'taches',
+      planTitle: 'Plan de correction — tout ce qui reste (2026-09-30)',
+      planPath: PLAN_T_PATH,
+      tasks: 19,
+      current: 4,
+    })
     expect(onDocWrite(sp, PLAN_TT_PATH, PLAN_TT, 4_000)).toStrictEqual(
       state({
         stage: 'taches',
@@ -210,7 +265,9 @@ describe('superpowers : les écritures sous docs/superpowers/', () => {
   test('un autre fichier sous docs/superpowers/ ne compte que comme événement', () => {
     const sp = state({ stage: 'plan', planPath: PLAN_T_PATH, tasks: 3, isStale: true })
     const refs = '/home/user/claude-mods/docs/superpowers/plans/refs/engine-api.md'
-    expect(onDocWrite(sp, refs, '# Engine API reference for mode-clair 0.2.0, Claude Code 2.1.300', 6_000)).toStrictEqual({
+    expect(
+      onDocWrite(sp, refs, '# Engine API reference for mode-clair 0.2.0, Claude Code 2.1.300', 6_000),
+    ).toStrictEqual({
       ...sp,
       lastEventAt: 6_000,
       isStale: false,
@@ -220,7 +277,9 @@ describe('superpowers : les écritures sous docs/superpowers/', () => {
 
   test('un fichier hors de docs/superpowers/ ne change rien', () => {
     const sp = state({ stage: 'plan' })
-    expect(onDocWrite(sp, '/home/user/claude-mods-0.2/plugins/mode-clair/hooks/superpowers.ts', 'export {}', 6_000)).toBe(sp)
+    expect(
+      onDocWrite(sp, '/home/user/claude-mods-0.2/plugins/mode-clair/hooks/superpowers.ts', 'export {}', 6_000),
+    ).toBe(sp)
     expect(onDocWrite(sp, '/home/user/claude-mods-0.2/mydocs/superpowers/plans/x.md', '# x', 6_000)).toBe(sp)
   })
 })
@@ -231,10 +290,20 @@ describe('superpowers : les appels Agent', () => {
   })
 
   test('pendant le plan ou les tâches, le numéro de la description devient la tâche courante', () => {
-    const plan = state({ stage: 'plan', planTitle: 'Plan de correction — tout ce qui reste (2026-09-30)', planPath: PLAN_T_PATH, tasks: 19 })
+    const plan = state({
+      stage: 'plan',
+      planTitle: 'Plan de correction — tout ce qui reste (2026-09-30)',
+      planPath: PLAN_T_PATH,
+      tasks: 19,
+    })
     const t3 = onAgent(plan, 'Implement T3 sudo password stdin', 'You are implementing T3', 2_000)
     expect(t3).toStrictEqual({ ...plan, stage: 'taches', current: 3, lastEventAt: 2_000 })
-    expect(onAgent(t3, 'T9 implementer: write the criterion', '', 3_000)).toStrictEqual({ ...plan, stage: 'taches', current: 9, lastEventAt: 3_000 })
+    expect(onAgent(t3, 'T9 implementer: write the criterion', '', 3_000)).toStrictEqual({
+      ...plan,
+      stage: 'taches',
+      current: 9,
+      lastEventAt: 3_000,
+    })
   })
 
   test('sans numéro, numéro 0 ou au-delà du nombre de tâches : rien ne change', () => {
@@ -242,7 +311,10 @@ describe('superpowers : les appels Agent', () => {
     expect(onAgent(sp, 'Implement T11c AWX limit fix', '', 2_000)).toBe(sp)
     expect(onAgent(sp, 'Security audit T70 diff', '', 2_000)).toBe(sp)
     expect(onAgent(sp, 'Task 0: Reproduce the three defects live, before touching code', '', 2_000)).toBe(sp)
-    expect(onAgent(state({ stage: 'taches', tasks: 19 }), 'T19 — trois limites à documenter, pas à corriger', '', 2_000)?.current).toBe(19)
+    expect(
+      onAgent(state({ stage: 'taches', tasks: 19 }), 'T19 — trois limites à documenter, pas à corriger', '', 2_000)
+        ?.current,
+    ).toBe(19)
     expect(onAgent(state({ stage: 'taches', tasks: 0 }), 'Security audit T70 diff', '', 2_000)?.current).toBe(70)
   })
 
@@ -255,12 +327,20 @@ describe('superpowers : les appels Agent', () => {
 
   test('relecture finale : description final review ou prompt qui cite code-reviewer.md', () => {
     const sp = state({ stage: 'taches', planPath: PLAN_T_PATH, tasks: 19, current: 19 })
-    expect(onAgent(sp, 'Final review fix wave', '', 2_000)).toStrictEqual({ ...sp, stage: 'relecture', lastEventAt: 2_000 })
+    expect(onAgent(sp, 'Final review fix wave', '', 2_000)).toStrictEqual({
+      ...sp,
+      stage: 'relecture',
+      lastEventAt: 2_000,
+    })
     expect(onAgent(sp, 'Run the final code review', '', 2_000)?.stage).toBe('relecture')
     const prompt = 'Use the template at [code-reviewer.md](../requesting-code-review/code-reviewer.md).'
     expect(onAgent(sp, 'Review code changes', prompt, 2_000)?.stage).toBe('relecture')
     const relecture = state({ stage: 'relecture', isStale: true })
-    expect(onAgent(relecture, 'Final review fix wave', '', 7_000)).toStrictEqual({ ...relecture, lastEventAt: 7_000, isStale: false })
+    expect(onAgent(relecture, 'Final review fix wave', '', 7_000)).toStrictEqual({
+      ...relecture,
+      lastEventAt: 7_000,
+      isStale: false,
+    })
     const cadrage = state({})
     expect(onAgent(cadrage, 'Final review fix wave', prompt, 2_000)).toBe(cadrage)
   })
@@ -291,15 +371,45 @@ const OUTPUT = '/tmp/claude-1000/-home-user-claude-mods-0-2/tasks/af6f3b628322fc
 
 describe('superpowers : les agents lancés sous le plan qui tournent encore', () => {
   test('runningAgentOf : l’agentId d’un agent lancé en arrière-plan, rien pour un agent fini, distant ou un résultat inconnu', () => {
-    const launched = { status: 'async_launched', agentId: AGENT, description: 'Implement Task 2', prompt: 'You are implementing Task 2', outputFile: OUTPUT }
+    const launched = {
+      status: 'async_launched',
+      agentId: AGENT,
+      description: 'Implement Task 2',
+      prompt: 'You are implementing Task 2',
+      outputFile: OUTPUT,
+    }
     expect(runningAgentOf(launched)).toBe(AGENT)
     expect(runningAgentOf({ ...launched, isAsync: true })).toBe(AGENT)
     // Au premier plan : le résultat porte aussi un agentId, mais l'agent a fini (son turn.complete est déjà passé).
-    const completed = { status: 'completed', agentId: AGENT, content: [{ type: 'text', text: 'DONE' }], totalToolUseCount: 3, totalDurationMs: 4_000, totalTokens: 900, prompt: 'You are implementing Task 2' }
+    const completed = {
+      status: 'completed',
+      agentId: AGENT,
+      content: [{ type: 'text', text: 'DONE' }],
+      totalToolUseCount: 3,
+      totalDurationMs: 4_000,
+      totalTokens: 900,
+      prompt: 'You are implementing Task 2',
+    }
     expect(runningAgentOf(completed)).toBeNull()
-    const remote = { status: 'remote_launched', taskId: 'r1', sessionUrl: 'https://claude.ai/code/session_1', description: 'Implement Task 2', prompt: '', outputFile: OUTPUT }
+    const remote = {
+      status: 'remote_launched',
+      taskId: 'r1',
+      sessionUrl: 'https://claude.ai/code/session_1',
+      description: 'Implement Task 2',
+      prompt: '',
+      outputFile: OUTPUT,
+    }
     expect(runningAgentOf(remote)).toBeNull()
-    for (const odd of [undefined, null, 'Agent failed', {}, { status: 'async_launched' }, { status: 'async_launched', agentId: '' }, { status: 'async_launched', agentId: 7 }, { agentId: AGENT }]) {
+    for (const odd of [
+      undefined,
+      null,
+      'Agent failed',
+      {},
+      { status: 'async_launched' },
+      { status: 'async_launched', agentId: '' },
+      { status: 'async_launched', agentId: 7 },
+      { agentId: AGENT },
+    ]) {
       expect(runningAgentOf(odd)).toBeNull()
     }
   })
@@ -308,10 +418,19 @@ describe('superpowers : les agents lancés sous le plan qui tournent encore', ()
     const taches = state({ stage: 'taches', planPath: PLAN_T_PATH, tasks: 19, current: 2, isStale: true })
     const one = onAgentLaunched(taches, AGENT, 5_000)
     expect(one).toStrictEqual({ ...taches, runningAgents: [AGENT], lastEventAt: 5_000, isStale: false })
-    expect(onAgentLaunched(one, OTHER, 6_000)).toStrictEqual({ ...taches, runningAgents: [AGENT, OTHER], lastEventAt: 6_000, isStale: false })
+    expect(onAgentLaunched(one, OTHER, 6_000)).toStrictEqual({
+      ...taches,
+      runningAgents: [AGENT, OTHER],
+      lastEventAt: 6_000,
+      isStale: false,
+    })
     expect(onAgentLaunched(one, AGENT, 7_000)).toBe(one)
     const relecture = state({ stage: 'relecture' })
-    expect(onAgentLaunched(relecture, AGENT, 5_000)).toStrictEqual({ ...relecture, runningAgents: [AGENT], lastEventAt: 5_000 })
+    expect(onAgentLaunched(relecture, AGENT, 5_000)).toStrictEqual({
+      ...relecture,
+      runningAgents: [AGENT],
+      lastEventAt: 5_000,
+    })
     expect(onAgentLaunched(null, AGENT, 5_000)).toBeNull()
   })
 
@@ -326,7 +445,12 @@ describe('superpowers : les agents lancés sous le plan qui tournent encore', ()
     const sp = state({ stage: 'taches', runningAgents: [AGENT, OTHER], lastEventAt: 5_000 })
     expect(onAgentDone(sp, AGENT, 8_000)).toStrictEqual({ ...sp, runningAgents: [OTHER], lastEventAt: 8_000 })
     const stale = state({ stage: 'taches', runningAgents: [AGENT], isStale: true })
-    expect(onAgentDone(stale, AGENT, 8_000)).toStrictEqual({ ...stale, runningAgents: [], lastEventAt: 8_000, isStale: false })
+    expect(onAgentDone(stale, AGENT, 8_000)).toStrictEqual({
+      ...stale,
+      runningAgents: [],
+      lastEventAt: 8_000,
+      isStale: false,
+    })
     expect(onAgentDone(sp, 'a3634f40baec24679', 8_000)).toBe(sp)
     expect(onAgentDone(null, AGENT, 8_000)).toBeNull()
   })

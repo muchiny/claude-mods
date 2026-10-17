@@ -14,9 +14,9 @@
 //   composants de `engineNodes`, le vrai nœud du moteur `{ type: 'engine', ref: 0 }`
 //   (D:10086-10091), que le moteur réel refuse sous certaines Box (tâche 14).
 
-import { mock } from 'claude-code/testing'
-import type { MockClock } from 'claude-code/testing'
 import type { On, ToolCallResult } from 'claude-code'
+import type { MockClock } from 'claude-code/testing'
+import { mock } from 'claude-code/testing'
 
 import type { BridgeCall, ClairState } from '../../types'
 
