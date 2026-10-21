@@ -1633,6 +1633,27 @@ describe('pipeline : le ton de l’état et la couleur de la machine (D1, D2)', 
     expect(failed.find((p) => p.text === '✗')?.tone).toBe('erreur')
   })
 
+  test('une machine non prouvée sur une étape « fait » (✓) reste la machine, atténuée : ce n’est pas l’état « machine inconnue »', () => {
+    const done = call({ host: null, state: 'fait' })
+    const line = pipeline(done, stateOf([done]))
+    expect(text(line)).toBe('✓ machine inconnue')
+    expect(line).toStrictEqual([
+      { text: '✓', tone: 'ok' },
+      { text: ' ', tone: 'texte' },
+      { text: 'machine inconnue', tone: 'attenue' },
+    ])
+    // Sans état fourni : même chose.
+    expect(pipeline(done)).toStrictEqual(line)
+  })
+
+  test('un hôte vide : le mot d’état garde son ton, le texte ne bouge pas', () => {
+    const empty = call({ host: '', state: 'injoignable' })
+    const line = pipeline(empty, stateOf([empty]))
+    expect(text(line)).toBe(`✗  injoignable · ${RIEN}`)
+    expect(line.find((p) => p.text === 'injoignable')?.tone).toBe('erreur')
+    expect(line[0]).toStrictEqual({ text: '✗', tone: 'erreur' })
+  })
+
   test('D2 : sans état fourni, la machine garde le ton texte (aucun index de couleur connu)', () => {
     expect(pipeline(late).find((p) => p.text.includes('win2025'))?.tone).toBe('texte')
   })
@@ -1826,7 +1847,15 @@ describe('fit : un nom de machine plus long que la ligne est coupé, l’état r
   })
 
   test('fit sans l’option garde la coupe par caractères (autres lignes du mod)', () => {
-    const line: Line = [{ text: '✗ win2025 · injoignable', tone: 'texte' }]
-    expect(text(fit(line, 10))).toBe('✗ win2025…')
+    const line: Line = [{ text: '✗ win2025-long · injoignable', tone: 'texte' }]
+    expect(text(fit(line, 24))).toBe('✗ win2025-long · injoig…')
+    expect(text(fit(line, 24, true))).toBe('✗ win2025… · injoignable')
+  })
+
+  test('avec l’option : une ligne sans signe se coupe de même, une ligne sans séparation par la fin', () => {
+    const bare: Line = [{ text: 'win2025-long · injoignable', tone: 'texte' }]
+    expect(text(fit(bare, 20, true))).toBe('win20… · injoignable')
+    const alone: Line = [{ text: '✗ machine-très-longue', tone: 'texte' }]
+    expect(text(fit(alone, 10, true))).toBe('✗ machine…')
   })
 })

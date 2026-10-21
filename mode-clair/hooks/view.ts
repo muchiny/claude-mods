@@ -49,8 +49,6 @@ const NATURE: Readonly<Record<Nature, string>> = {
 }
 const MARK_SIGN = { ok: '✓', ko: '✗', off: '○' } as const
 const SIGNS: readonly string[] = [WAIT_SIGN, '●', '✓', '✗', '○', '?']
-/** Code points d'une tête « signe » + espace au plus (WAIT_SIGN en a 2). */
-const SIGN_ROOM = 3
 const SIGN_TONE: Readonly<Record<string, Tone>> = {
   '●': 'accent',
   '✓': 'ok',
@@ -293,7 +291,7 @@ function stateIndex(s: ClairState): IndexOf {
  * l'état (de `first` à `end`) restent ; null si même un nom d'une cellule ne laisse pas la place.
  */
 function cutMachine(chars: readonly Piece[], first: number, end: number, max: number): Line | null {
-  const sign = signAt(textOf(chars.slice(0, SIGN_ROOM)))
+  const sign = signAt(textOf([...chars]))
   const from = sign === null ? 0 : sign.length + 1
   const fixed = cellWidth(textOf(chars.slice(0, from))) + 1 + cellWidth(textOf(chars.slice(first, end)))
   const kept: Piece[] = []
@@ -338,9 +336,9 @@ export function fit(line: Line, columns: number, cutName = false): Line {
     if (w + 2 <= max) return norm([...head, { text: ' …', tone: 'attenue' }])
     if (w <= max) return norm([...head, { text: w < max ? '…' : '', tone: 'attenue' }])
   }
-  const first = seps[0]
-  if (cutName && first !== undefined) {
-    const named = cutMachine(chars, first, seps[1] ?? chars.length, max)
+  if (cutName) {
+    // Sans séparation, `first` vaut 0 : aucun nom à couper, cutMachine rend null.
+    const named = cutMachine(chars, seps[0] ?? 0, seps[1] ?? chars.length, max)
     if (named !== null) return named
   }
   const kept: Piece[] = []
@@ -625,11 +623,15 @@ function toneCard(texts: readonly string[]): Line[] {
   let head = true
   let dim = false
   // Rang de la ligne de pipeline : la suivante après « à regarder : », la deuxième après « dernier appel sur … : ».
-  let pipelineAt = -1
+  let pipelineAt: number | undefined
   return texts.map((t, rank): Line => {
-    if (t === EMPTY_CARD || t === LOOK || t.startsWith(VIEW_NONE) || t.startsWith(VIEW_GONE)) {
+    if (t === LOOK) {
       head = false
-      if (t === LOOK) pipelineAt = rank + 1
+      pipelineAt = rank + 1
+      return [{ text: t, tone: 'attenue' }]
+    }
+    if (t === EMPTY_CARD || t.startsWith(VIEW_NONE) || t.startsWith(VIEW_GONE)) {
+      head = false
       return [{ text: t, tone: 'attenue' }]
     }
     if (head && t.endsWith(SEP + GONE)) {
@@ -657,6 +659,7 @@ function toneCard(texts: readonly string[]): Line[] {
     if (head && !SUMMARY.test(t)) {
       const m = MACHINE_LINE.exec(t)
       // « machine inconnue » (D3) n'a pas de couleur : elle ne prend aucun rang.
+      // Stryker disable next-line StringLiteral: le groupe 1 de MACHINE_LINE participe toujours au succès, `?? ''` n'est jamais pris.
       if (m !== null && m[1] !== UNKNOWN_HOST) hosts.push(m[1] ?? '')
     }
     dim = t.endsWith(SEP + SEEN)
