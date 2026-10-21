@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'claude-code/testing'
+import { cellWidth } from '../../hooks/cells'
 import { bandLines, callLine, cardLines, pipeline } from '../../hooks/view'
 import type { BridgeCall, ClairState, Line, Workflow } from '../../types'
 
@@ -43,6 +44,14 @@ describe('toneLine relit le texte rendu : les noms ne le faussent pas (M2)', () 
     const c = call({ tool: '✗ boom', state: 'en-cours', endedAt: undefined })
     const row = callLine(c, stateOf([c]), 200)
     expect(row.filter((p) => p.tone === 'erreur')).toStrictEqual([])
+  })
+
+  test('texte exact : « · » devient « . », un signe de tête devient « - », même largeur', () => {
+    const c = call({ host: 'a · b', tool: '✗ boom', state: 'en-cours', endedAt: undefined })
+    expect(text(callLine(c, stateOf([c]), 200))).toBe('● a . b · - boom')
+    const w = call({ host: '? x' })
+    expect(text(pipeline(w))).toBe('✓ - x')
+    expect(cellWidth('✗ x')).toBe(cellWidth('- x'))
   })
 
   test('un hôte nommé « inconnue » sur une étape ✓ ne reçoit pas le ton d’état', () => {
