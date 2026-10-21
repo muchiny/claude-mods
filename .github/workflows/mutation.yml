@@ -90,13 +90,21 @@ jobs:
           path: reports/mutation-glue
           if-no-files-found: ignore
 
-  # Planchers par module (dev/mutation-floors.json) : mutation complète des modules purs sous Bun.
-  floors:
-    name: planchers de mutation
+  # Planchers par module (dev/mutation-floors.json) : mutation sous Bun, un job par module (dev/mutate-module.mjs :
+  # seuls les tests qui atteignent le module, PROPS_RUNS réduit car l'instrumentation de Stryker ralentit
+  # ~15 fois les tests de propriétés), puis un job qui rassemble les rapports et vérifie les planchers.
+  # Durées mesurées en local (concurrence 2) : cells ~7 min, colors, fr, superpowers, workflow < 1 min,
+  # state ~9 min, view et bridge voir README ; une runner GitHub (4 coeurs) ne doit pas faire pire.
+  floors-module:
+    name: plancher ${{ matrix.file }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        file: [bridge.ts, cells.ts, colors.ts, fr.ts, state.ts, superpowers.ts, view.ts, workflow.ts]
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
@@ -114,21 +122,45 @@ jobs:
       - run: npm ci
 
       # Stryker sort en 1 tant qu'un mutant survit (break = 100) : le vrai verdict est celui des
-      # planchers. Un plantage réel de Stryker (pas de mutation.json) fait quand même échouer le job.
-      - name: Stryker (modules purs)
+      # planchers (job floors). Un plantage réel de Stryker (pas de rapport) fait quand même échouer le job.
+      - name: Stryker (${{ matrix.file }})
         run: |
-          npm run mutate:pure || echo "::warning::Stryker a terminé en échec (mutants survivants) ; les planchers tranchent"
-          test -s reports/mutation-pure/mutation.json
-
-      - name: Planchers
-        run: node dev/mutation-floors.mjs reports/mutation-pure/mutation.json
+          node dev/mutate-module.mjs "${{ matrix.file }}" --concurrency 2 || echo "::warning::Stryker a terminé en échec (mutants survivants) ; les planchers tranchent"
+          test -s "reports/mutation-pure/${{ matrix.file }}.json"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: mutation-pure
-          path: reports/mutation-pure
-          if-no-files-found: ignore
+          name: mutation-floor-${{ matrix.file }}
+          path: reports/mutation-pure/${{ matrix.file }}.json
+          if-no-files-found: error
+
+  floors:
+    name: planchers de mutation
+    needs: floors-module
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: mutation-floor-*
+          path: reports/floors
+          merge-multiple: true
+
+      # Un module sans rapport est « absent du rapport » : échec ; un module sans plancher aussi.
+      - name: Planchers
+        run: node dev/mutation-floors.mjs reports/floors/*.json
 
   # Propriétés (fast-check) : même sujet que les tests de tests/props, 10 000 exécutions par propriété
   # au lieu de 200 (NUM_RUNS dans tests/props/settings.ts). La graine est affichée en cas d'échec.

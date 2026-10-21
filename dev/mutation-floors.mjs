@@ -1,6 +1,6 @@
 // Planchers de mutation par module : échoue si un score passe sous son plancher,
 // relève le plancher (avec --write) quand un module le dépasse.
-// Usage : node dev/mutation-floors.mjs reports/mutation-pure/mutation.json [--write]
+// Usage : node dev/mutation-floors.mjs <mutation.json>... [--write]   (un rapport par module est fusionné)
 import { readFileSync, writeFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -44,12 +44,12 @@ export function compare(measured, floors) {
 }
 
 function main(argv) {
-  const report = argv.find((a) => !a.startsWith('--'))
-  if (!report) {
-    console.error('usage : node dev/mutation-floors.mjs <mutation.json> [--write]')
+  const reports = argv.filter((a) => !a.startsWith('--'))
+  if (reports.length === 0) {
+    console.error('usage : node dev/mutation-floors.mjs <mutation.json>... [--write]')
     return 2
   }
-  const measured = scores(JSON.parse(readFileSync(report, 'utf8')))
+  const measured = Object.assign({}, ...reports.map((r) => scores(JSON.parse(readFileSync(r, 'utf8')))))
   const floors = JSON.parse(readFileSync(FLOORS, 'utf8'))
   const { below, raised } = compare(measured, floors)
   for (const [mod, score] of Object.entries(measured))

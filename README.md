@@ -98,24 +98,25 @@ processus lit lui-même `__STRYKER_ACTIVE_MUTANT__`, plus besoin de copie jetabl
 - **Porte de PR** : `node dev/mutation-gate.mjs --base origin/main` ne mute que les lignes de
   `mode-clair/hooks` ajoutées ou modifiées depuis l'ancêtre commun avec la base (`register.tsx` et `tools.generated.ts`
   exclus) ; un mutant survivant fait échouer le job `mutation-pr` de la CI.
-- **Planchers** : `dev/mutation-floors.json` donne le score minimal de chaque module. Le job `floors`
-  de `mutation.yml` lance `npm run mutate:pure` puis `node dev/mutation-floors.mjs
-  reports/mutation-pure/mutation.json` : code 1 sous un plancher ; `--write` relève les planchers
-  qu'un module dépasse.
-- **Durée de la mutation complète** : instrumentés par Stryker, les tests de `tests/props` et `tests/width` passent de 2 s
-  à environ 27 s ; avec 4 233 mutants et `coverageAnalysis: off` (runner `command`), `npm run mutate:pure` demande une
-  quinzaine d'heures à concurrence 2 : trop pour le job `floors` (60 min). Sur cette machine, seul `cells.ts` a été
-  mesuré à part (136 mutants, 100 %, 7 min : `mutate` ciblé sur `cells.ts` avec `pure/cells`, `pure/view`, `width` et
-  `golden`). Les autres planchers restent ceux de la dernière mesure complète ; à répartir par module (comme la matrice
-  de `mutation.yml`) avant de compter sur le job `floors`.
+- **Planchers** : `dev/mutation-floors.json` donne le score minimal de chaque module. `node dev/mutate-module.mjs
+  <module>.ts` (`npm run mutate:module -- <module>.ts`) mute un seul module avec les seuls tests qui l'atteignent (par
+  leurs imports, `--list` les affiche) et `PROPS_RUNS=30`, graine 42 : l'instrumentation de Stryker ralentit les tests
+  de propriétés d'environ 15 fois (tout le dépôt : 2 s nus, 27 s instrumentés), et c'est cela qui rendait la mutation
+  complète d'une seule traite impraticable (4 233 mutants, une quinzaine d'heures). Le rapport va dans
+  `reports/mutation-pure/<module>.ts.json`. Dans `mutation.yml`, un job `floors-module` par module (timeout 90 min)
+  puis un job `floors` qui rassemble les rapports : `node dev/mutation-floors.mjs reports/floors/*.json` (code 1 sous un
+  plancher, pour un module sans rapport ou sans plancher ; `--write` relève les planchers qu'un module dépasse).
+- **Durées mesurées** (WSL, concurrence 2, un module à la fois) : fr, superpowers 5 s ; workflow 1 min ; colors 15 s ;
+  state 9 min ; view 7 min ; cells 9 min (le test exhaustif de largeur ne tourne que là) ; bridge 14 min. Tous les
+  modules tiennent donc largement dans un job hebdomadaire ; `npm run mutate:pure` (tous les modules d'un coup, mêmes
+  réglages) reste possible mais prend environ 40 min. Les planchers ci-dessous ont tous été remesurés dans cette branche.
+- **Survivants connus** : `bridge.ts` lignes 71, 233 et 359 ; `superpowers.ts` 22 ; `view.ts` 693 ; `workflow.ts` 31 et 43.
+  Une PR qui touche l'une de ces lignes doit ajouter le test qui tue le mutant, sinon la porte échoue.
+- **Branches** : Bun ne mesure pas les branches (seuils `lines` et `functions` seulement, `statements`
+  accepté mais non appliqué, doc Bun 1.4). La mutation en tient lieu.
 - **Délai d'un mutant** : `timeoutMS` vaut 3000 ms. Des mutants de la boucle du découpeur shell de
   `bridge.ts` tournent à l'infini ; à 30 s chacun, la mutation complète dépasserait 8 h (12 min à
   3 s). Stryker compte un timeout comme un mutant tué : les planchers sont donc légèrement indulgents.
-- **Survivants connus** (déjà présents sur la base) : `bridge.ts` lignes 71, 233, 359 et 754 ;
-  `superpowers.ts` 22 ; `view.ts` 259 et 555 ; `workflow.ts` 31 et 43. Une PR qui touche l'une de ces
-  lignes doit ajouter le test qui tue le mutant, sinon la porte échoue.
-- **Branches** : Bun ne mesure pas les branches (seuils `lines` et `functions` seulement, `statements`
-  accepté mais non appliqué, doc Bun 1.4). La mutation en tient lieu.
 
 #### Mutation de la colle `register.tsx`
 
