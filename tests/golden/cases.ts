@@ -86,6 +86,13 @@ const FULL_CARD = stateOf(
   { seenAt: 2_500, superpowers: plan(), workflows: [workflow()] },
 )
 
+const cardOf = (host: string) =>
+  stateOf([
+    nth(1, { host, state: 'injoignable' }),
+    nth(2, { host, tool: 'ssh_file_write', nature: 'peut-modifier', state: 'delai-depasse' }),
+    nth(3, { host, state: 'injoignable', accord: 'formulaire-oui' }),
+  ])
+
 const LONG_CARD = stateOf([
   nth(1, { host: LONG_HOST, state: 'injoignable' }),
   nth(2, { host: LONG_HOST, tool: 'ssh_file_write', nature: 'peut-modifier', state: 'delai-depasse' }),
@@ -141,6 +148,9 @@ const BASES: { name: string; state: ClairState; isWorking?: boolean; args?: stri
   // La carte telle que register.tsx la dessine : chaque ligne passe par fit(ligne, colonnes, true) (D4, R93).
   { name: 'nom-60-caracteres-carte', state: LONG_CARD, fitCard: true },
   { name: 'nom-60-caracteres-carte-machine', state: LONG_CARD, args: LONG_HOST, fitCard: true },
+  { name: 'nom-20-caracteres-carte', state: cardOf(`machine-${'x'.repeat(12)}`), fitCard: true },
+  { name: 'nom-30-caracteres-carte', state: cardOf(`machine-${'x'.repeat(22)}`), fitCard: true },
+  { name: 'nom-45-caracteres-carte', state: cardOf(`machine-${'x'.repeat(37)}`), fitCard: true },
   { name: 'carte-pleine', state: FULL_CARD },
   { name: 'carte-pleine-machine', state: FULL_CARD, args: 'host-b' },
   {
