@@ -123,6 +123,23 @@ function loremExcept(text: string, keeps: readonly RegExp[]): string {
   return out + lorem(text.slice(at))
 }
 
+/**
+ * Nombres : une suite d'au plus 3 chiffres est gardée (aucune information), toute suite plus longue
+ * devient des 9 de même longueur (un PIN, un téléphone ou un numéro de compte ne passe pas).
+ */
+function digitsOf(text: string): string {
+  return text.replace(/\d{4,}/g, (d) => '9'.repeat(d.length))
+}
+
+/** Clés dont le nombre est gardé tel quel : code de sortie et délai (ce que le mod interprète). */
+const NUMBER_KEYS = new Set(['exit_code', 'timeout'])
+
+/** Nombre JSON : clé blanchie ou entier d'au plus 3 chiffres gardé ; sinon ses chiffres en 9. */
+function numberOf(key: string, value: number): number {
+  if (NUMBER_KEYS.has(key) || (Number.isInteger(value) && Math.abs(value) <= 999)) return value
+  return Number(digitsOf(String(value)))
+}
+
 // --- Dictionnaire ------------------------------------------------------------------------------
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -428,8 +445,15 @@ const TEMPLATES: readonly Template[] = [
   template('background', 'Command running in background with ID: {id}. Output is being written to: {path}'),
 ]
 
-function slotValue(dict: Dict, slot: Slot, value: string): string {
+/** Motifs dont le nombre est un code de sortie : gardé tel quel. */
+const EXIT_TEMPLATES = new Set(['exit-code', 'exec-exit', 'exit-tag', 'exit-tag-text'])
+
+function slotValue(dict: Dict, slot: Slot, value: string, template: string): string {
   switch (slot) {
+    case 'n':
+      return EXIT_TEMPLATES.has(template) ? value : digitsOf(value)
+    case 'size':
+      return digitsOf(value)
     case 'host':
       return hostOf(dict, value)
     case 'hosts':
@@ -485,7 +509,7 @@ function keepLine(dict: Dict, line: string): string | null {
   t.literals.forEach((literal, i) => {
     out += literal
     const slot = t.slots[i]
-    if (slot !== undefined) out += slotValue(dict, slot, String(m[i + 1]))
+    if (slot !== undefined) out += slotValue(dict, slot, String(m[i + 1]), t.id)
   })
   return lead + err + out + cr
 }
@@ -550,8 +574,9 @@ const SUBCOMMANDS = new Set([
   'serve',
   'help',
 ])
+type FlagKind = 'none' | 'path' | 'host' | 'number' | 'timeout' | 'json' | 'free'
 /** Options globales et de sous-commande de bridge-mcp (bridge-mcp/src/cli/mod.rs) ; valeur : sa nature. */
-const BRIDGE_FLAGS = new Map<string, 'none' | 'path' | 'host' | 'number' | 'json' | 'free'>([
+const BRIDGE_FLAGS = new Map<string, FlagKind>([
   ['--json', 'none'],
   ['--yes', 'none'],
   ['-y', 'none'],
@@ -565,8 +590,8 @@ const BRIDGE_FLAGS = new Map<string, 'none' | 'path' | 'host' | 'number' | 'json
   ['-c', 'path'],
   ['--workdir', 'path'],
   ['-w', 'path'],
-  ['--timeout', 'number'],
-  ['-t', 'number'],
+  ['--timeout', 'timeout'],
+  ['-t', 'timeout'],
   ['--limit', 'number'],
   ['-n', 'number'],
   ['--host', 'host'],
@@ -685,7 +710,7 @@ type Seg = {
   sub: string | undefined
   tool: string | undefined
   positional: number
-  expect: 'none' | 'path' | 'host' | 'number' | 'json' | 'free'
+  expect: FlagKind
   shellC: boolean
 }
 
@@ -705,8 +730,10 @@ function argValue(dict: Dict, kind: Seg['expect'], word: string): string {
       return requote(q, hostOf(dict, inner))
     case 'path':
       return requote(q, pathOf(dict, inner))
-    case 'number':
+    case 'timeout':
       return /^\d+$/.test(inner) ? word : lorem(word)
+    case 'number':
+      return /^\d+$/.test(inner) ? requote(q, digitsOf(inner)) : lorem(word)
     case 'json': {
       try {
         return requote(q, JSON.stringify(anonValue(dict, '', JSON.parse(inner))))
@@ -738,7 +765,8 @@ function toolArg(dict: Dict, word: string): string {
     )}`
   if (ID_ARG_KEYS.has(key)) return `${outKey}=${requote(q, idOf(dict, inner))}`
   if (PATH_ARG_KEYS.has(key) && isPathLike(inner)) return `${outKey}=${requote(q, pathOf(dict, inner))}`
-  if (/^\d+$/.test(inner) || inner === 'true' || inner === 'false') return `${outKey}=${value}`
+  if (/^\d+$/.test(inner)) return `${outKey}=${key === 'timeout' ? value : requote(q, digitsOf(inner))}`
+  if (inner === 'true' || inner === 'false') return `${outKey}=${value}`
   return `${outKey}=${lorem(value)}`
 }
 
@@ -780,7 +808,7 @@ function bridgeWord(dict: Dict, seg: Seg, word: string): string {
 function otherWord(dict: Dict, word: string): string {
   const { q, inner } = unquote(word)
   if (q !== '' && /(^|[\s/])bridge-mcp\s/.test(inner)) return requote(q, anonymizeCommand(dict, inner))
-  if (/^-?\d+$/.test(word)) return word
+  if (/^-?\d+$/.test(word)) return digitsOf(word)
   if (isPathLike(word)) return pathOf(dict, word)
   return lorem(word)
 }
@@ -841,7 +869,7 @@ function segWord(dict: Dict, seg: Seg, word: string): string {
         return `${ENV_NAMES.has(name) ? name : lorem(name)}=${lorem(String(assign[2]))}`
       }
       if (WRAPPERS.has(word) || /^-?\d+[smhd]?$/.test(word) || (word.startsWith('-') && word.length <= 3))
-        return /^[A-Za-z]+$/.test(word) || /^-?\d+[smhd]?$/.test(word) ? word : lorem(word)
+        return /^[A-Za-z]+$/.test(word) ? word : /^-?\d+[smhd]?$/.test(word) ? digitsOf(word) : lorem(word)
       if (basename(word) === 'bridge-mcp') {
         seg.mode = 'bridge'
         const { q, inner } = unquote(word)
@@ -1257,7 +1285,8 @@ const ENUM_KEYS = new Set([
 
 /** Valeur d'un champ, selon sa clé ; un objet garde ses clés connues, les autres en lorem. */
 function anonValue(dict: Dict, key: string, value: unknown): unknown {
-  if (value === null || typeof value === 'number' || typeof value === 'boolean') return value
+  if (typeof value === 'number') return numberOf(key, value)
+  if (value === null || typeof value === 'boolean') return value
   if (Array.isArray(value)) return value.map((v) => anonValue(dict, key, v))
   if (typeof value === 'object') {
     const out: Record<string, unknown> = {}
@@ -1467,7 +1496,10 @@ const VOCAB = new Set(VOCAB_SOURCES.flatMap((s) => (s.match(WORD) ?? []).map((w)
 /** Horodatage de la plage synthétique (tsOf) : janvier 2000, précision ms. */
 const SYNTHETIC_TS = /\b2000-01-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}Z/g
 /** Formes entières acceptées avant le découpage en mots. */
-const WHOLE_FORMS: readonly RegExp[] = [CSI_ALL, SYNTHETIC_TS, UUID_ANY]
+/** Nombres gardés tels quels par l'anonymiseur (clés blanchies) : délai et code de sortie. */
+const KEPT_NUMBERS =
+  /(?:\btimeout=|(?:--timeout|(?<![\w-])-t)[= ]|"(?:timeout|exit_code)":\s*|\bExit code:? |\[exit:)-?\d+/g
+const WHOLE_FORMS: readonly RegExp[] = [CSI_ALL, SYNTHETIC_TS, UUID_ANY, KEPT_NUMBERS]
 /** Formes refusées même si chacun de leurs mots est connu : horodatage ISO hors de la plage synthétique. */
 const REFUSED_FORMS: readonly RegExp[] = [/\d{4}-\d{2}-\d{2}T\d/]
 /** `mcp__ssh-bridge__<outil>` et `<outil>` seulement pour un outil de la liste du bridge. */
@@ -1479,17 +1511,20 @@ function withoutBridgeTools(text: string): string {
     .replace(/\b[a-z][a-z0-9_]*\b/g, (m) => (BRIDGE_TOOLS.has(m) ? ' ' : m))
 }
 
+/** Nombre d'un mot : au plus 5 chiffres, ou un masque de 9 (digitsOf) ; jamais 6 chiffres réels ou plus. */
+const NUM = '(?:\\d{1,5}|9+)'
+
 function knownWord(w: string): boolean {
   const lower = w.toLowerCase()
   return (
     /^[A-Za-z0-9]{1,2}$/.test(w) ||
-    /^\d+$/.test(w) ||
+    new RegExp(`^${NUM}$`).test(w) ||
     VOCAB.has(lower) ||
     LOREM.repeat(Math.ceil(lower.length / LOREM.length) + 1).includes(lower) ||
     /^r\d{4}$/.test(w) ||
-    /^T{1,2}\d+$/.test(w) ||
-    /^\d+(?:[KMGT]?i?B|ms|s|m|h)$/i.test(w) ||
-    /^\d+(?:st|nd|rd|th)$/.test(w)
+    new RegExp(`^T{1,2}${NUM}$`).test(w) ||
+    new RegExp(`^${NUM}(?:[KMGT]?i?B|ms|s|m|h)$`, 'i').test(w) ||
+    new RegExp(`^${NUM}(?:st|nd|rd|th)$`).test(w)
   )
 }
 
@@ -1506,14 +1541,16 @@ function unknownIn(text: string): string | null {
   return null
 }
 
-function walk(value: unknown, where: string, check: (s: string, where: string) => void): void {
+function walk(value: unknown, where: string, check: (s: string, where: string) => void, key = ''): void {
   if (typeof value === 'string') check(value, where)
+  // Un nombre est lu avec sa clé, comme dans un JSON : seules les clés blanchies gardent 6 chiffres ou plus.
+  else if (typeof value === 'number') check(`"${key}":${value}`, where)
   else if (Array.isArray(value)) {
-    for (const [i, v] of value.entries()) walk(v, `${where}[${i}]`, check)
+    for (const [i, v] of value.entries()) walk(v, `${where}[${i}]`, check, key)
   } else if (typeof value === 'object' && value !== null)
     for (const [k, v] of Object.entries(value)) {
       check(k, `${where}.<clé>`)
-      walk(v, `${where}.${KEYS.has(k) ? k : '?'}`, check)
+      walk(v, `${where}.${KEYS.has(k) ? k : '?'}`, check, k)
     }
 }
 

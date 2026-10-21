@@ -625,3 +625,63 @@ describe('passe C : horodatages synthétiques (M2)', () => {
     expect(() => assertKnownForms(anonCall({}, '2000-01-01T00:00:01.500Z  INFO lorem'))).not.toThrow()
   })
 })
+
+describe('passe C : nombres (L1)', () => {
+  test('nombres JSON : codes de sortie, timeout et entiers ≤ 3 chiffres gardés, le reste en 9 de même longueur', () => {
+    const result = { exit_code: 1073741819, code: 612345678, small: 42, neg: -7, ratio: 1234.5, timeout: 600000 }
+    const s = anonymize(
+      scenario([call('Bash', 'toolu_1', { command: 'true', timeout: 600000 }, 'ok', { result })]),
+      newDict(),
+    )
+    const c = calls(s)[0] as Call
+    expect(c.input).toMatchObject({ timeout: 600000 })
+    const values = Object.values(c.result.result as Record<string, number>)
+    expect(values).toEqual([1073741819, 999999999, 42, -7, 9999.5, 600000])
+    expect(json(s)).not.toContain('612345678')
+  })
+
+  test('mots Bash numériques et k=<chiffres> : ≤ 3 chiffres gardés, sinon des 9 ; timeout gardé', () => {
+    const command = [
+      'echo 0612345678 && sleep 3600 && timeout 30 ls',
+      'bridge-mcp tool ssh_exec host=machine-reelle-1 offset=123456 limit=50 timeout=600000',
+      'bridge-mcp --timeout 3600 -n 12345 exec machine-reelle-1 ls',
+    ].join('\n')
+    const s = anonymize(scenario([call('Bash', 'toolu_1', { command }, 'ok')]), newDict())
+    const out = inputOf(s, 0).command?.split('\n') ?? []
+    expect(out[0]).toBe('lore 9999999999 && lorem 9999 && timeout 30 lo')
+    expect(out[1]).toBe('bridge-mcp tool ssh_exec host=host-a offset=999999 limit=50 timeout=600000')
+    expect(out[2]).toBe('bridge-mcp --timeout 3600 -n 99999 exec host-a lo')
+    expect(json(s)).not.toContain('0612345678')
+    expect(json(s)).not.toContain('123456')
+  })
+
+  test('textes connus : code de sortie gardé, autres nombres longs en 9', () => {
+    const lines = [
+      'Exit code 1073741819',
+      'SSH command timeout after 86400s',
+      'Output too large (123456KB). Full output saved to: /tmp/x',
+    ]
+    const s = anonymize(scenario([call('Bash', 'toolu_1', { command: 'true' }, lines.join('\n'))]), newDict())
+    expect(textOf(calls(s)[0] as Call).split('\n')).toEqual([
+      'Exit code 1073741819',
+      'SSH command timeout after 99999s',
+      'Output too large (999999KB). Full output saved to: /tmp/x',
+    ])
+  })
+
+  test('assertKnownForms refuse une suite de ≥ 6 chiffres hors clés blanchies (PIN, téléphone, compte)', () => {
+    expect(() => assertKnownForms(anonCall({}, 'lorem 0612345678'))).toThrow(/forme inconnue/)
+    expect(() => assertKnownForms(anonCall({}, 'ok', { lorem: 123456 }))).toThrow(/forme inconnue/)
+    expect(() => assertKnownForms(anonCall({ command: 'lorem 1234567' }, 'ok'))).toThrow(/forme inconnue/)
+    // Blanchis : timeout, codes de sortie, masques en 9, nombres courts, parties d'UUID synthétiques.
+    expect(() =>
+      assertKnownForms(
+        anonCall(
+          { command: 'bridge-mcp --timeout 600000 tool ssh_exec timeout=600000', timeout: 600000 },
+          'Exit code 1073741819\n[exit:2] lorem 999999 12345\n00000000-0000-4000-8000-000000000001',
+          { exit_code: 1073741819, lorem: 999999, timeout: 600000, ipsum: 12 },
+        ),
+      ),
+    ).not.toThrow()
+  })
+})
