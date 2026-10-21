@@ -75,3 +75,22 @@ jobs:
           name: mutation-pure
           path: reports/mutation-pure
           if-no-files-found: ignore
+
+  # Propriétés (fast-check) : même sujet que les tests de tests/props, 10 000 exécutions par propriété
+  # au lieu de 200 (NUM_RUNS dans tests/props/settings.ts). La graine est affichée en cas d'échec.
+  props:
+    name: propriétés (10 000 exécutions)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Propriétés
+        run: PROPS_RUNS=10000 npx bun test ./tests/props --timeout 3000000

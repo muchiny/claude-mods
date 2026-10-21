@@ -17,6 +17,7 @@
     "mutate": "stryker run",
     "coverage": "bun test mode-clair/tests/pure --coverage",
     "test:dev": "bun test ./tests",
+    "props": "bun test ./tests/props --timeout 600000",
     "test:golden": "bun test ./tests/golden",
     "golden:update": "GOLDEN_UPDATE=1 bun test ./tests/golden",
     "mutate:pure": "stryker run stryker.pure.json",
@@ -26,6 +27,7 @@
     "@biomejs/biome": "2.5.15",
     "@stryker-mutator/core": "10.0.0",
     "bun": "1.4.3",
+    "fast-check": "4.10.2",
     "string-width": "8.3.0",
     "typescript": "7.0.2"
   }
