@@ -2,8 +2,9 @@ name: Mutation testing
 
 # Long (≈ 3 900 mutants, une exécution de `claude plugin test` chacun) : hebdomadaire et à la demande,
 # jamais à chaque push. Un job par module pour répartir la charge.
-# register.tsx est exclu : le moteur lit les noms d'événements de `on()` dans la source, et
-# l'instrumentation de Stryker les enveloppe dans un ternaire (le module ne se charge plus).
+# register.tsx est exclu de Stryker : le moteur lit les noms d'événements de `on()` dans la source, et
+# l'instrumentation de Stryker les enveloppe dans un ternaire (le module ne se charge plus) ; il a son
+# propre job (glue) et son mutateur textuel.
 on:
   schedule:
     - cron: '0 3 * * 1'
@@ -49,6 +50,44 @@ jobs:
         with:
           name: mutation-${{ matrix.file }}
           path: reports/mutation
+          if-no-files-found: ignore
+
+  # La colle register.tsx, hors de portée de Stryker : mutateur maison (dev/mutate-glue.mjs),
+  # une copie du mod par mutant dans /var/tmp, `claude plugin test` sous garde-fou temps et mémoire.
+  # Un survivant fait échouer le job ; le rapport (ligne et diff de chaque survivant) est publié.
+  glue:
+    name: mutation de la colle register.tsx
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code@latest
+
+      - name: Mutation de la colle
+        run: node dev/mutate-glue.mjs --concurrency 3
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: mutation-glue
+          path: reports/mutation-glue
           if-no-files-found: ignore
 
   # Planchers par module (dev/mutation-floors.json) : mutation complète des modules purs sous Bun.

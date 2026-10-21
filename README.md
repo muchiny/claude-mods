@@ -84,7 +84,8 @@ npx stryker run --mutate "mode-clair/hooks/colors.ts" --concurrency 4
 mutants lui-même. `dev/stryker-test.sh` travaille sur une copie jetable du mod dans `/var/tmp` en y
 inscrivant le mutant actif. Compte environ 4,5 s par mutant ; le module `bridge.ts` seul en a 1 656.
 `register.tsx` (le branchement des événements) est exclu : le moteur lit les noms d'événements de
-`on()` dans la source, et Stryker les enveloppe dans un ternaire, ce qui empêche le module de se charger.
+`on()` dans la source, et Stryker les enveloppe dans un ternaire, ce qui empêche le module de se charger
+(voir plus bas, mutation de la colle).
 La CI le lance chaque lundi et à la demande (`.github/workflows/mutation.yml`), un job par module,
 et publie le rapport HTML en artefact.
 
@@ -109,6 +110,27 @@ processus lit lui-même `__STRYKER_ACTIVE_MUTANT__`, plus besoin de copie jetabl
   lignes doit ajouter le test qui tue le mutant, sinon la porte échoue.
 - **Branches** : Bun ne mesure pas les branches (seuils `lines` et `functions` seulement, `statements`
   accepté mais non appliqué, doc Bun 1.4). La mutation en tient lieu.
+
+#### Mutation de la colle `register.tsx`
+
+Stryker ne peut pas muter `register.tsx` ; `dev/mutate-glue.mjs` le fait par des mutations textuelles
+ciblées (`===`↔`!==`, `&&`↔`||`, `return next(e)` sans l'appel, `if (cond)` → `true`/`false`,
+littéraux numériques ±1), jamais dans les chaînes, commentaires, regex, gabarits, texte JSX, ni dans
+l'événement et le filtre d'un `on(`. Chaque mutant tourne sur une copie du mod dans `/var/tmp`, sous
+`timeout 180 claude plugin test` et un garde-fou qui tue le groupe de processus au-delà de 1,5 Go ;
+le lancement exige 8 Go de mémoire disponible. Rapport : `reports/mutation-glue/result.json` (tués,
+survivants avec ligne et diff).
+
+```bash
+node dev/mutate-glue.mjs --list                 # les mutants, sans rien lancer
+node dev/mutate-glue.mjs --sample 30 --seed 1   # un tirage reproductible, concurrence 1
+node dev/mutate-glue.mjs --only L87C12-next     # un mutant précis
+```
+
+Les mutants équivalents relus sont dans `dev/mutate-glue-equivalents.json` avec leur raison ;
+l'identifiant suit ligne et colonne, une modification de `register.tsx` impose de relire la liste
+(le runner refuse une liste périmée). Le job `glue` de `mutation.yml` lance la mutation complète
+chaque lundi (environ 4 s par mutant) ; un survivant le fait échouer.
 
 ### CI
 
