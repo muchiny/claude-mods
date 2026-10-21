@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 // @ts-expect-error module .mjs sans déclaration de types
-import { grepFinds, hygienePattern, workflow } from './workflows.mjs'
+import { grepFinds, hygienePattern, tagCheck, workflow } from './workflows.mjs'
 
 const finds = (text: string): boolean => grepFinds(hygienePattern(), text)
 
@@ -45,4 +45,18 @@ describe('paint.yml : rien du terminal brut n’est publié (L5)', () => {
     expect(issue).toContain('[ligne de bannière masquée]')
     expect(issue).not.toContain('.full.bin')
   })
+})
+
+describe('release.yml : le tag distant est encore le commit vérifié avant gh release create (L6)', () => {
+  test('le pas précède gh release create dans le job publish', () => {
+    const wf = workflow('release.yml') as string
+    const check = wf.indexOf('- name: Tag distant égal au commit vérifié')
+    expect(check).toBeGreaterThan(wf.indexOf('  publish:'))
+    expect(check).toBeLessThan(wf.indexOf('gh release create'))
+  })
+  for (const annotated of [true, false])
+    test(`tag ${annotated ? 'annoté' : 'léger'} : inchangé, le pas passe ; déplacé, il échoue`, () => {
+      expect(tagCheck({ annotated, moved: false })).toBe(0)
+      expect(tagCheck({ annotated, moved: true })).toBe(1)
+    })
 })

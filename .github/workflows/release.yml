@@ -86,6 +86,19 @@ jobs:
         with:
           subject-path: ${{ env.ARCHIVE }}
 
+      # Le tag distant pointe encore sur le commit vérifié par verify (GITHUB_SHA) : un tag déplacé ou
+      # supprimé entre verify et publish ne publie rien. Ligne pelée (^{}) d'un tag annoté, sinon le tag
+      # léger (tests/dev/workflows.test.ts exécute ce pas).
+      - name: Tag distant égal au commit vérifié
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          REMOTE="$(git ls-remote origin "refs/tags/${TAG}" "refs/tags/${TAG}^{}" | awk 'END { print $1 }')"
+          if [ "$REMOTE" != "$GITHUB_SHA" ] || [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
+            echo "::error::tag ${TAG} distant (${REMOTE:-absent}) différent du commit vérifié ${GITHUB_SHA}"
+            exit 1
+          fi
+
       - name: Créer la release
         env:
           GH_TOKEN: ${{ github.token }}
