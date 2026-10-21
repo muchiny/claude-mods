@@ -126,7 +126,7 @@ function capped(calls: BridgeCall[]): BridgeCall[] {
  * Un appel en cours par élément de `parsed`, d'identifiant `${toolUseId}#${n}`.
  * L'hôte d'un `ssh_session_exec` vient de la session retenue par
  * rememberSession, sinon il reste inconnu (null). Une machine entre dans
- * hostOrder à sa première apparition ; une machine inconnue n'y entre jamais.
+ * hostOrder à sa première apparition ; une machine inconnue n'y entre jamais (la carte la dit à part, voir unknownMachine).
  * Rien à suivre, ou appels déjà commencés pour ce toolUseId : même référence.
  */
 export function startCalls(
@@ -351,6 +351,22 @@ export function machines(s: ClairState): Machine[] {
     })
   })
   return out
+}
+
+/**
+ * Les appels dont la machine n'est pas prouvée (D3) : leur compte au sens de §5.4, leur dernier
+ * appel commencé, et si l'un d'eux est un problème non vu ; null s'il n'y en a aucun. Ils ne sont
+ * jamais dans hostOrder, donc aucune couleur : la carte les dit sous « machine inconnue ».
+ */
+export function unknownMachine(s: ClairState): Omit<Machine, 'host' | 'index'> | null {
+  const mine = s.calls.filter((c) => c.host === null)
+  const last = mine.at(-1)
+  if (last === undefined) return null
+  return {
+    calls: mine.filter((c) => STATE_TABLE[c.state].isCall).length,
+    last,
+    hasUnseenProblem: mine.some((c) => isUnseenProblem(c, s.seenAt)),
+  }
 }
 
 // --- Tâche 11 : sorties de register.tsx (spec §6). Tests : tests/pure/glue.test.ts ---------------

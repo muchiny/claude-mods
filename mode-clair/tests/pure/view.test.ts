@@ -411,13 +411,13 @@ describe('fit : priorité machine · état (spec §4.1, critère 13)', () => {
   })
 
   // §5.4 : toutes les lignes
-  test('20 colonnes : aucune exception, coupée par la fin, la machine reste, les tons aussi', () => {
+  test('20 colonnes : aucune exception, le nom de la machine (D4) ou la fin de la ligne se coupe, la machine reste, les tons aussi', () => {
     const s = stateOf([call({ host: 'win2025ntlm' })])
     for (const st of ALL_STATES) {
       const line = callLine(call({ host: 'win2025ntlm', state: st, code: 1 }), s, 20)
       const t = text(line)
       expect(width(t)).toBeLessThanOrEqual(20)
-      expect(t.startsWith(`${STATE_TABLE[st].sign} win2025ntlm`)).toBe(true)
+      expect(t.startsWith(`${STATE_TABLE[st].sign} w`)).toBe(true)
       expect(line[0]?.tone).toStrictEqual(STATE_TABLE[st].tone)
       expect(line.some((p) => typeof p.tone === 'object' && p.tone.machine === 0)).toBe(true)
     }
@@ -1055,7 +1055,7 @@ describe('typographie du texte du mod (spec §4.1, critère 14)', () => {
     const s = stateOf(calls, { superpowers: plan({ planTitle: 'export' }), workflows: [workflow()] })
     const all = [
       ...calls.map((c) => callLine(c, s, 200)),
-      ...calls.map(pipeline),
+      ...calls.map((c) => pipeline(c, s)),
       ...cardLines(s, '', 10_000),
       ...cardLines(s, 'raspberry', 10_000),
       ...bandLines(
@@ -1424,8 +1424,8 @@ describe('pipeline : le texte autour des identifiants', () => {
     expect(text(pipeline(c))).toBe(`✓ accord · ✗ l'hôte injoignable · ${RIEN}`)
   })
 
-  test('une machine inconnue (hôte nul) s’écrit « machine » ; un hôte vide ne casse pas la typographie', () => {
-    expect(text(pipeline(call({ host: null, state: 'injoignable' })))).toBe(`✗ machine injoignable · ${RIEN}`)
+  test('une machine inconnue (hôte nul) s’écrit « machine inconnue » (D10) ; un hôte vide ne casse pas la typographie', () => {
+    expect(text(pipeline(call({ host: null, state: 'injoignable' })))).toBe(`✗ machine inconnue injoignable · ${RIEN}`)
     expect(text(pipeline(call({ host: '', state: 'injoignable', accord: 'formulaire-oui' })))).toBe(
       `✓ accord · ✗  injoignable · ${RIEN}`,
     )
@@ -1576,5 +1576,257 @@ describe('bandLines : tons exacts et cas limites', () => {
     expect(bandLines(stateOf([], { workflows: [first, second] }), CTX).map(text)).toStrictEqual([
       '● workflow second · Audit · 3 agents',
     ])
+  })
+})
+
+// Arbitrages de l'utilisateur du 2026-10-21 (REFERENCE.md, D1 à D4, D9, D10, D12).
+describe('pipeline : le ton de l’état et la couleur de la machine (D1, D2)', () => {
+  const late = call({ id: 'toolu_l#0', toolUseId: 'toolu_l', host: 'win2025', state: 'delai-depasse' })
+  const s = stateOf([call(), late])
+
+  test('D1 : « délai dépassé » est en attention dans le pipeline, comme sur la rangée et dans la carte', () => {
+    expect(pipeline(late, s)).toStrictEqual([
+      { text: '✗', tone: 'attention' },
+      { text: ' ', tone: 'texte' },
+      { text: 'win2025', tone: M(1) },
+      { text: ' ', tone: 'texte' },
+      { text: 'délai dépassé', tone: 'attention' },
+    ])
+    // La rangée du même appel : même signe, même ton d'état.
+    const row = callLine(late, s, 200)
+    expect(row.find((p) => p.text === '✗')?.tone).toBe('attention')
+  })
+
+  test('D1 : le signe ✗ de chaque état prend le ton de §5.4, et le mot d’état aussi', () => {
+    for (const st of ALL_STATES) {
+      const row = STATE_TABLE[st]
+      if (row.sign !== '✗') continue
+      const line = pipeline(call({ host: 'win2025', state: st, code: 1 }), s)
+      expect(line.find((p) => p.text === '✗')?.tone).toBe(row.tone)
+    }
+    const limited = pipeline(call({ state: 'limite', host: 'raspberry' }), s)
+    expect(limited.find((p) => p.text === 'limité par le bridge')?.tone).toBe('attention')
+    const usage = pipeline(call({ state: 'erreur-usage' }), s)
+    expect(usage.find((p) => p.text === 'erreur d’usage')?.tone).toBe('attention')
+    expect(usage.find((p) => p.text === '✗')?.tone).toBe('attention')
+    const refused = pipeline(call({ state: 'refuse' }), s)
+    expect(refused.find((p) => p.text === '✗')?.tone).toBe('erreur')
+    expect(refused.find((p) => p.text === 'refusé par le bridge')?.tone).toBe('erreur')
+    const down = pipeline(call({ host: 'win2025', state: 'injoignable' }), s)
+    expect(down.find((p) => p.text === 'injoignable')?.tone).toBe('erreur')
+  })
+
+  test('D2 : la machine garde sa couleur dans le pipeline, avec ou sans étape d’accord, y compris pour « code N »', () => {
+    const down = call({ host: 'win2025', state: 'injoignable', accord: 'formulaire-oui' })
+    const line = pipeline(down, s)
+    expect(line.find((p) => p.text === 'win2025')?.tone).toStrictEqual(M(1))
+    expect(line.find((p) => p.text.includes('accord'))?.tone).toBe('texte')
+    expect(line.find((p) => p.text === '✓')?.tone).toBe('ok')
+    const coded = pipeline(call({ state: 'code', code: 2 }), s)
+    expect(coded.map((p) => [p.text, p.tone])).toStrictEqual([
+      ['✓ ', 'texte'], // « code N » : signe en ton texte (§5.4)
+      ['raspberry', M(0)],
+      [' code 2', 'texte'],
+    ])
+    const failed = pipeline(call({ host: 'win2025', state: 'echec-machine', code: 3 }), s)
+    expect(failed.find((p) => p.text === 'win2025')?.tone).toStrictEqual(M(1))
+    expect(failed.find((p) => p.text === '✗')?.tone).toBe('erreur')
+  })
+
+  test('D2 : sans état fourni, la machine garde le ton texte (aucun index de couleur connu)', () => {
+    expect(pipeline(late).find((p) => p.text.includes('win2025'))?.tone).toBe('texte')
+  })
+
+  test('D1 et D2 dans la carte : « à regarder » colore le pipeline du plus récent problème, et il se relit à l’identique', () => {
+    const t = cardLines(s, '', 10_000)
+    const at = t.map(text).indexOf(`à regarder${NBSP}:`)
+    expect(t[at + 1]).toStrictEqual(pipeline(late, s))
+    expect(parseCard(cardText(t))).toStrictEqual(t)
+  })
+
+  test('D1 et D2 dans la carte d’une machine : la ligne de pipeline est colorée comme celle de « à regarder »', () => {
+    const t = cardLines(s, ' win2025 ', 10_000)
+    expect(t[t.length - 1]).toStrictEqual(pipeline(late, s))
+    expect(parseCard(cardText(t))).toStrictEqual(t)
+  })
+
+  test('une ligne de pipeline « déjà vu » reste atténuée en entier', () => {
+    const seen = stateOf([call(), late], { seenAt: 9_000 })
+    const t = cardLines(seen, '', 10_000)
+    const at = t.map(text).indexOf(`à regarder${NBSP}:`)
+    expect(t[at + 1]).toStrictEqual([{ text: '✗ win2025 délai dépassé · déjà vu', tone: 'attenue' }])
+  })
+})
+
+describe('pipeline : accord refusé et machine non prouvée (D9, D10)', () => {
+  const s = stateOf([call()])
+
+  test('D9 : un appel décliné écrit « ○ accord refusé · rien n’a tourné », signe ○, tout atténué', () => {
+    const declined = call({ tool: 'ssh_file_write', state: 'decline', accord: 'formulaire-non' })
+    const line = pipeline(declined, s)
+    expect(text(line)).toBe(`○ accord refusé · ${RIEN}`)
+    expect(line.filter((p) => p.tone !== 'attenue' && p.text !== ' ')).toStrictEqual([])
+    expect(line[0]).toStrictEqual({ text: '○', tone: 'attenue' })
+    expect(text(pipeline(call({ state: 'decline' }), s))).toBe(`○ accord refusé · ${RIEN}`)
+  })
+
+  test('D10 : une machine non prouvée s’écrit « machine inconnue » dans le pipeline, atténuée comme sur la rangée', () => {
+    const none = call({ host: null, state: 'injoignable' })
+    const line = pipeline(none, stateOf([none]))
+    expect(text(line)).toBe(`✗ machine inconnue injoignable · ${RIEN}`)
+    expect(line.find((p) => p.text.startsWith('machine inconnue'))?.tone).toBe('attenue')
+    expect(line.find((p) => p.text === 'injoignable')?.tone).toBe('erreur')
+    const coded = call({ host: null, state: 'code', code: 2 })
+    expect(text(pipeline(coded, stateOf([coded])))).toBe('✓ machine inconnue code 2')
+    const unknown = call({ host: null, state: 'machine-inconnue' })
+    expect(text(pipeline(unknown, stateOf([unknown])))).toBe(`✗ machine inconnue · ${RIEN}`)
+    expect(pipeline(unknown, stateOf([unknown])).find((p) => p.text === 'machine inconnue')?.tone).toBe('erreur')
+  })
+})
+
+describe('carte : un appel sans machine prouvée reste visible (D3)', () => {
+  const none = call({ id: 'toolu_n#0', toolUseId: 'toolu_n', host: null, state: 'incertain', startedAt: 2_000 })
+
+  test('seul : « machine inconnue » avec son compte et son dernier résultat, compté dans le résumé', () => {
+    const lines = cardLines(stateOf([none]), '', 10_000)
+    expect(lines.map(text)).toStrictEqual([
+      '0 machine · 1 appel · aucun problème non vu',
+      'machine inconnue · 1 appel · ? incertain',
+    ])
+    const row = lines[1] ?? []
+    expect(row[0]).toStrictEqual({ text: 'machine inconnue · ', tone: 'attenue' })
+    expect(row.find((p) => p.text === 'incertain')?.tone).toBe('attenue')
+    expect(row.find((p) => p.text === '1 appel')?.tone).toBe('texte')
+    expect(parseCard(cardText(lines))).toStrictEqual(lines)
+  })
+
+  test('avec des machines : la ligne vient après elles, sans décaler leurs couleurs, et le résumé additionne les appels', () => {
+    const win = call({ id: 'toolu_w#0', toolUseId: 'toolu_w', host: 'win2025', startedAt: 1_500 })
+    const lines = cardLines(stateOf([call(), win, none]), '', 10_000)
+    expect(lines.map(text)).toStrictEqual([
+      '2 machines · 3 appels · aucun problème non vu',
+      'raspberry · 1 appel · ✓ ssh_disk_usage',
+      'win2025 · 1 appel · ✓ ssh_disk_usage',
+      'machine inconnue · 1 appel · ? incertain',
+    ])
+    expect(lines[1]?.[0]?.tone).toStrictEqual(M(0))
+    expect(lines[2]?.[0]?.tone).toStrictEqual(M(1))
+    expect(lines[3]?.[0]?.tone).toBe('attenue')
+    expect(parseCard(cardText(lines))).toStrictEqual(lines)
+  })
+
+  test('un état « machine inconnue » : 0 appel, le problème est compté et « à regarder » le montre', () => {
+    const bad = call({ id: 'toolu_b#0', toolUseId: 'toolu_b', host: null, state: 'machine-inconnue', startedAt: 2_000 })
+    const lines = cardLines(stateOf([bad]), '', 10_000).map(text)
+    expect(lines.slice(0, 3)).toStrictEqual([
+      '0 machine · 0 appel · 1 problème non vu',
+      'machine inconnue · 0 appel · ✗ machine inconnue',
+      `à regarder${NBSP}:`,
+    ])
+  })
+
+  test('un problème non vu plus ancien sur ces appels reste signalé même si le dernier est incertain', () => {
+    const bad = call({
+      id: 'toolu_b#0',
+      toolUseId: 'toolu_b',
+      host: null,
+      state: 'machine-inconnue',
+      startedAt: 1_000,
+      endedAt: 1_100,
+    })
+    const lines = cardLines(stateOf([bad, none]), '', 10_000).map(text)
+    expect(lines[1]).toBe('machine inconnue · 1 appel · ? incertain · ✗ problème non vu')
+  })
+
+  test('plusieurs appels sans machine : un seul compte, le dernier résultat est celui du dernier appel commencé', () => {
+    const two = call({ id: 'toolu_m#0', toolUseId: 'toolu_m', host: null, state: 'fait', startedAt: 3_000 })
+    const lines = cardLines(stateOf([call(), none, two]), '', 10_000).map(text)
+    expect(lines).toStrictEqual([
+      '1 machine · 3 appels · aucun problème non vu',
+      'raspberry · 1 appel · ✓ ssh_disk_usage',
+      'machine inconnue · 2 appels · ✓ ssh_disk_usage',
+    ])
+  })
+
+  test('/clair <machine> garde la ligne « machine inconnue » parmi les machines', () => {
+    const lines = cardLines(stateOf([call(), none]), ' raspberry ', 10_000).map(text)
+    expect(lines.slice(0, 2)).toStrictEqual([
+      'raspberry · 1 appel · ✓ ssh_disk_usage',
+      'machine inconnue · 1 appel · ? incertain',
+    ])
+  })
+})
+
+describe('bande : workflow sans nom lisible (D12)', () => {
+  test('« workflow en cours », jamais « workflow » seul', () => {
+    const anon = workflow({ name: '', phases: [], agents: [] })
+    expect(bandLines(stateOf([], { workflows: [anon] }), CTX).map(text)).toStrictEqual(['● workflow en cours'])
+    const phased = workflow({ name: '' })
+    expect(bandLines(stateOf([], { workflows: [phased] }), CTX).map(text)).toStrictEqual([
+      '● workflow en cours · Audit · 3 agents',
+    ])
+  })
+
+  test('sans nom : à distance et sans nouvelles restent dits, sans « en cours » contradictoire', () => {
+    const remote = workflow({ name: '', status: 'distant', agents: [], journalPath: null })
+    expect(bandLines(stateOf([], { workflows: [remote] }), CTX).map(text)).toStrictEqual(['● workflow · à distance'])
+    const quiet = workflow({ name: '', status: 'sans-nouvelles', agents: [] })
+    expect(cardLines(stateOf([], { workflows: [quiet] }), '', 10_000).map(text)).toStrictEqual([
+      '○ workflow · sans nouvelles',
+    ])
+  })
+})
+
+describe('fit : un nom de machine plus long que la ligne est coupé, l’état reste entier (D4, R93)', () => {
+  const LONG = `machine-${'x'.repeat(52)}`
+  const down = call({ host: LONG, state: 'injoignable' })
+  const s = stateOf([down])
+
+  test('40 colonnes : « machine-xx… · injoignable », nom en couleur, « … » atténué, détails retirés', () => {
+    const line = callLine(down, s, 40)
+    expect(text(line)).toBe(`✗ machine-${'x'.repeat(15)}… · injoignable`)
+    expect(cellWidth(text(line))).toBeLessThanOrEqual(40)
+    expect(line).toStrictEqual([
+      { text: '✗', tone: 'erreur' },
+      { text: ' ', tone: 'texte' },
+      { text: `machine-${'x'.repeat(15)}`, tone: M(0) },
+      { text: '… · ', tone: 'attenue' },
+      { text: 'injoignable', tone: 'erreur' },
+    ])
+  })
+
+  test('l’état d’un appel en cours (l’outil) reste entier dans la bande à 40 colonnes', () => {
+    const run = call({ host: LONG, state: 'en-cours', endedAt: undefined })
+    const lines = bandLines(stateOf([run]), { ...CTX, columns: 40 })
+    expect(lines.map(text)).toStrictEqual([`● machine-${'x'.repeat(12)}… · ssh_disk_usage`])
+  })
+
+  test('largeur en cellules, pas en points de code : un nom en caractères larges se coupe en cellules', () => {
+    const wide = call({ host: '工'.repeat(30), state: 'injoignable' })
+    for (let columns = 24; columns <= 60; columns += 1) {
+      const line = callLine(wide, stateOf([wide]), columns)
+      expect(cellWidth(text(line))).toBeLessThanOrEqual(columns)
+      expect(text(line)).toContain(' · injoignable')
+    }
+    const at40 = callLine(wide, stateOf([wide]), 40)
+    expect(text(at40)).toBe(`✗ ${'工'.repeat(11)}… · injoignable`)
+  })
+
+  test('un nom qui tient, ou un état trop long pour la ligne, garde l’ancien comportement', () => {
+    expect(text(callLine(call(), stateOf([call()]), 200))).toBe('✓ raspberry · ssh_disk_usage · lecture')
+    const tight = callLine(down, s, 12)
+    expect(cellWidth(text(tight))).toBeLessThanOrEqual(12)
+    expect(text(tight).endsWith('…')).toBe(true)
+  })
+
+  test('à chaque largeur, de la plus étroite à 80 colonnes, rien ne dépasse', () => {
+    for (let columns = 1; columns <= 80; columns += 1) {
+      expect(cellWidth(text(callLine(down, s, columns)))).toBeLessThanOrEqual(columns)
+    }
+  })
+
+  test('fit sans l’option garde la coupe par caractères (autres lignes du mod)', () => {
+    const line: Line = [{ text: '✗ win2025 · injoignable', tone: 'texte' }]
+    expect(text(fit(line, 10))).toBe('✗ win2025…')
   })
 })

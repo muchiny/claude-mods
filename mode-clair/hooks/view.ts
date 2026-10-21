@@ -22,7 +22,7 @@ import type {
 import { steps, stripControls } from './bridge'
 import { cellWidth } from './cells'
 import { fr } from './fr'
-import { hostIndex, machines, problems, STATE_TABLE, unseenProblems } from './state'
+import { hostIndex, machines, problems, STATE_TABLE, unknownMachine, unseenProblems } from './state'
 import { active, currentPhase } from './workflow'
 
 export type Ctx = { now: number; columns: number; isWorking: boolean; viewAgentId?: string }
@@ -49,6 +49,8 @@ const NATURE: Readonly<Record<Nature, string>> = {
 }
 const MARK_SIGN = { ok: '✓', ko: '✗', off: '○' } as const
 const SIGNS: readonly string[] = [WAIT_SIGN, '●', '✓', '✗', '○', '?']
+/** Code points d'une tête « signe » + espace au plus (WAIT_SIGN en a 2). */
+const SIGN_ROOM = 3
 const SIGN_TONE: Readonly<Record<string, Tone>> = {
   '●': 'accent',
   '✓': 'ok',
@@ -115,9 +117,18 @@ function hostText(host: string | null): string {
   return host === null ? UNKNOWN_HOST : one(host)
 }
 
+/** Mots d'étape du pipeline qui ne sont pas le libellé de leur état (bridge.steps) : leur ligne de §5.4. */
+const STEP_WORDS: ReadonlyMap<string, CallState> = new Map<string, CallState>([
+  [fr('refusé par le bridge'), 'refuse'],
+  [fr('limité par le bridge'), 'limite'],
+  [fr('accord refusé'), 'decline'],
+])
+
 /** La ligne de la table §5.4 dont le libellé (ou « code N ») est ce mot. */
 function rowOf(word: string): (typeof STATE_TABLE)[CallState] | undefined {
   if (CODE_WORD.test(word)) return STATE_TABLE.code
+  const step = STEP_WORDS.get(word)
+  if (step !== undefined) return STATE_TABLE[step]
   for (const state of Object.keys(STATE_TABLE) as CallState[]) {
     if (label(state) === word) return STATE_TABLE[state]
   }
@@ -144,12 +155,56 @@ function signAt(seg: string): string | null {
   return null
 }
 
+/** Début du mot d'état en fin de `rest` (« host-a injoignable » → 7), -1 s'il n'y en a pas. */
+function stateWordAt(rest: string, sign: string): number {
+  let at = 0
+  for (;;) {
+    const word = rest.slice(at)
+    // Une machine non prouvée seule après ✓ est la machine d'un appel fait, pas l'état « machine inconnue ».
+    if (rowOf(word) !== undefined && (word !== UNKNOWN_HOST || sign === '✗')) return at
+    const space = rest.indexOf(' ', at)
+    if (space < 0) return -1
+    at = space + 1
+  }
+}
+
+/**
+ * Une étape de pipeline, « signe [machine ]état » (bridge.steps) : le signe prend le ton de l'état
+ * (§5.4, D1), la machine sa couleur (§4.1, D2). Sans mot d'état reconnu (« accord », « host-a » seul
+ * d'un appel fait), le reste est la machine ou un mot sans ton propre.
+ */
+function stepPieces(sign: string, rest: string, indexOf: IndexOf): Piece[] {
+  const at = stateWordAt(rest, sign)
+  if (at < 0) {
+    return norm([
+      { text: sign, tone: signTone(sign, rest) },
+      { text: ' ', tone: 'texte' },
+      { text: rest, tone: wordTone(rest, indexOf, true) },
+    ])
+  }
+  const word = rest.slice(at)
+  const host = rest.slice(0, Math.max(at - 1, 0))
+  const named: Piece[] =
+    at === 0
+      ? []
+      : [
+          { text: host, tone: wordTone(host, indexOf, true) },
+          { text: ' ', tone: 'texte' },
+        ]
+  return norm([
+    { text: sign, tone: signTone(sign, word) },
+    { text: ' ', tone: 'texte' },
+    ...named,
+    { text: word, tone: wordTone(word, NO_HOSTS, false) },
+  ])
+}
+
 /**
  * Tons d'une ligne « signe machine · état · détail », lus dans son seul texte.
  * Le signe prend le ton de l'état qui le suit (table §5.4) ; une ligne qui
  * finit par « déjà vu » est atténuée en entier.
  */
-function toneLine(text: string, indexOf: IndexOf): Line {
+function toneLine(text: string, indexOf: IndexOf, isPipeline = false): Line {
   if (text.endsWith(SEP + SEEN)) return [{ text, tone: 'attenue' }]
   const segs = text.split(SEP)
   const out: Piece[] = []
@@ -157,10 +212,15 @@ function toneLine(text: string, indexOf: IndexOf): Line {
     if (i > 0) out.push({ text: SEP, tone: 'attenue' })
     const sign = signAt(seg)
     if (sign === null) {
-      out.push({ text: seg, tone: wordTone(seg, indexOf, false) })
+      // Premier segment : « machine inconnue · 1 appel · … » (D3) est atténué, comme sur la rangée.
+      out.push({ text: seg, tone: wordTone(seg, indexOf, i === 0) })
       return
     }
     const rest = seg.slice(sign.length + 1)
+    if (isPipeline) {
+      out.push(...stepPieces(sign, rest, indexOf))
+      return
+    }
     // Stryker disable next-line StringLiteral: sans deuxième segment, « » et toute autre chaîne qui n'est pas un libellé donnent le même rowOf indéfini.
     const next = segs[1] ?? ''
     const key = i === 0 && rowOf(next) !== undefined ? next : rest
@@ -229,11 +289,33 @@ function stateIndex(s: ClairState): IndexOf {
 }
 
 /**
+ * « signe machine · état » dont seul le nom de la machine est coupé (D4) : le signe, « … » et
+ * l'état (de `first` à `end`) restent ; null si même un nom d'une cellule ne laisse pas la place.
+ */
+function cutMachine(chars: readonly Piece[], first: number, end: number, max: number): Line | null {
+  const sign = signAt(textOf(chars.slice(0, SIGN_ROOM)))
+  const from = sign === null ? 0 : sign.length + 1
+  const fixed = cellWidth(textOf(chars.slice(0, from))) + 1 + cellWidth(textOf(chars.slice(first, end)))
+  const kept: Piece[] = []
+  let used = 0
+  for (const c of chars.slice(from, first)) {
+    const w = cellWidth(c.text)
+    if (fixed + used + w > max) break
+    kept.push(c)
+    used += w
+  }
+  if (kept.length === 0) return null
+  return norm([...chars.slice(0, from), ...kept, { text: '…', tone: 'attenue' }, ...chars.slice(first, end)])
+}
+
+/**
  * Coupe une ligne à `columns` cellules. Les détails partent d'abord, par
  * segments entiers depuis la fin (remplacés par « … ») ; la tête
- * « signe machine · état » n'est coupée que si elle ne tient pas seule.
+ * « signe machine · état » n'est coupée que si elle ne tient pas seule. `cutName` (lignes d'appel) :
+ * quand « signe machine · état » ne tient pas, c'est le nom de la machine qui est coupé, « … » à la
+ * place, et l'état reste entier (D4, R93) ; si l'état seul ne tient pas, la coupe est celle du reste.
  */
-export function fit(line: Line, columns: number): Line {
+export function fit(line: Line, columns: number, cutName = false): Line {
   const max = Number.isFinite(columns) ? Math.floor(columns) : 0
   if (max < 1) return []
   if (cellWidth(textOf(line)) <= max) return line
@@ -255,6 +337,11 @@ export function fit(line: Line, columns: number): Line {
     const w = cellWidth(textOf(head))
     if (w + 2 <= max) return norm([...head, { text: ' …', tone: 'attenue' }])
     if (w <= max) return norm([...head, { text: w < max ? '…' : '', tone: 'attenue' }])
+  }
+  const first = seps[0]
+  if (cutName && first !== undefined) {
+    const named = cutMachine(chars, first, seps[1] ?? chars.length, max)
+    if (named !== null) return named
   }
   const kept: Piece[] = []
   let used = 0
@@ -310,12 +397,12 @@ function waitingCallLine(c: BridgeCall, s: ClairState, columns: number): Line {
 export function callLine(c: BridgeCall, s: ClairState, columns: number): Line {
   if (s.waiting !== null && s.waiting.callId === c.id) return waitingCallLine(c, s, columns)
   const seeCard = c.state === 'echec' ? SEP + SEE_CARD : ''
-  return fit(toneLine(callText(c) + seeCard, stateIndex(s)), columns)
+  return fit(toneLine(callText(c) + seeCard, stateIndex(s)), columns, true)
 }
 
-/** Le pipeline réel d'un appel (spec §5.1), étapes de bridge.steps. */
-export function pipeline(c: BridgeCall): Line {
-  return toneLine(pipelineText(c), NO_HOSTS)
+/** Le pipeline réel d'un appel (spec §5.1), étapes de bridge.steps ; `s` donne la couleur de la machine (§4.1). */
+export function pipeline(c: BridgeCall, s?: ClairState): Line {
+  return toneLine(pipelineText(c), s === undefined ? NO_HOSTS : stateIndex(s), true)
 }
 
 /** Ligne d'état : seulement quand tu dois agir (spec §4.5). */
@@ -359,7 +446,14 @@ function spText(sp: Superpowers | null, forBand: boolean): string | null {
 }
 
 function workflowText(w: Workflow): string {
-  const parts = [`${w.status === 'sans-nouvelles' ? '○' : '●'} ${fr('workflow ')}${one(w.name)}`]
+  // Sans nom lisible (D12) : « workflow en cours » ; à distance ou sans nouvelles, le statut qui suit suffit.
+  const name =
+    w.name === ''
+      ? w.status === 'en-cours'
+        ? fr('workflow en cours')
+        : 'workflow'
+      : `${fr('workflow ')}${one(w.name)}`
+  const parts = [`${w.status === 'sans-nouvelles' ? '○' : '●'} ${name}`]
   if (w.status === 'distant') parts.push(REMOTE)
   if (w.status === 'sans-nouvelles') parts.push(QUIET)
   const phase = currentPhase(w)
@@ -436,7 +530,9 @@ export function bandLines(s: ClairState, ctx: Ctx): Line[] {
     const sp = ctx.isWorking || agentRuns ? spText(s.superpowers, true) : null
     if (sp !== null) lines.push(toneLine(sp, NO_HOSTS))
   }
-  return lines.slice(0, 2).map((l) => fit(l, ctx.columns))
+  // La première ligne est celle de l'appel seul quand il y en a un : son nom de machine se coupe avant son état (D4).
+  const callRow = run.length === 1 ? 0 : -1
+  return lines.slice(0, 2).map((l, i) => fit(l, ctx.columns, i === callRow))
 }
 
 const EMPTY_CARD = fr('rien depuis le début de la session')
@@ -463,11 +559,14 @@ function lastText(c: BridgeCall): string {
 /** Le texte de la carte, une chaîne par ligne (spec §4.4). */
 function cardTexts(s: ClairState, args: string): string[] {
   const ms = machines(s)
-  const machineText = (m: (typeof ms)[number]): string => {
+  const machineText = (m: Pick<(typeof ms)[number], 'host' | 'calls' | 'last' | 'hasUnseenProblem'>): string => {
     const last = lastText(m.last)
     const mark = m.hasUnseenProblem && !last.startsWith('✗') ? `${SEP}✗ ${UNSEEN_MARK}` : ''
     return `${one(m.host)}${SEP}${fr(plural(m.calls, 'appel', 'appels'))}${SEP}${last}${mark}`
   }
+  // Les appels sans machine prouvée restent visibles (D3) : une ligne « machine inconnue », après les machines.
+  const unknown = unknownMachine(s)
+  const unknownLine = unknown === null ? [] : [machineText({ host: UNKNOWN_HOST, ...unknown })]
   // Une ligne par machine de hostOrder, à sa place : le rang d'une ligne est le
   // hostIndex de sa machine (spec §4.7), même quand le plafond de 200 appels a
   // évincé tous les siens (machines() la saute alors) ; elle reste, atténuée.
@@ -475,6 +574,7 @@ function cardTexts(s: ClairState, args: string): string[] {
     const m = ms.find((x) => x.index === index)
     return m === undefined ? `${one(host)}${SEP}${GONE}` : machineText(m)
   })
+  hostLines.push(...unknownLine)
   const quote = (reason: string): string => `${QUOTE_OPEN}${one(reason)}${QUOTE_CLOSE}`
   const name = args.trim().replace(/\s.*/s, '')
   if (name !== '') {
@@ -493,7 +593,7 @@ function cardTexts(s: ClairState, args: string): string[] {
   const out: string[] = []
   if (s.calls.length > 0) {
     const unseen = unseenProblems(s)
-    const total = ms.reduce((n, m) => n + m.calls, 0)
+    const total = ms.reduce((n, m) => n + m.calls, 0) + (unknown?.calls ?? 0)
     const problemsText = unseen > 0 ? fr(plural(unseen, 'problème non vu', 'problèmes non vus')) : NONE_UNSEEN
     out.push(
       `${fr(plural(ms.length, 'machine', 'machines'))}${SEP}${fr(plural(total, 'appel', 'appels'))}${SEP}${problemsText}`,
@@ -524,9 +624,12 @@ function toneCard(texts: readonly string[]): Line[] {
   const indexOf: IndexOf = (name) => hosts.indexOf(name)
   let head = true
   let dim = false
-  return texts.map((t): Line => {
+  // Rang de la ligne de pipeline : la suivante après « à regarder : », la deuxième après « dernier appel sur … : ».
+  let pipelineAt = -1
+  return texts.map((t, rank): Line => {
     if (t === EMPTY_CARD || t === LOOK || t.startsWith(VIEW_NONE) || t.startsWith(VIEW_GONE)) {
       head = false
+      if (t === LOOK) pipelineAt = rank + 1
       return [{ text: t, tone: 'attenue' }]
     }
     if (head && t.endsWith(SEP + GONE)) {
@@ -535,6 +638,7 @@ function toneCard(texts: readonly string[]): Line[] {
     }
     if (t.startsWith(VIEW_HEAD) && t.endsWith(VIEW_TAIL)) {
       head = false
+      pipelineAt = rank + 2
       const host = t.slice(VIEW_HEAD.length, t.length - VIEW_TAIL.length)
       return norm([
         { text: VIEW_HEAD, tone: 'attenue' },
@@ -552,10 +656,11 @@ function toneCard(texts: readonly string[]): Line[] {
     }
     if (head && !SUMMARY.test(t)) {
       const m = MACHINE_LINE.exec(t)
-      if (m !== null) hosts.push(m[1] ?? '')
+      // « machine inconnue » (D3) n'a pas de couleur : elle ne prend aucun rang.
+      if (m !== null && m[1] !== UNKNOWN_HOST) hosts.push(m[1] ?? '')
     }
     dim = t.endsWith(SEP + SEEN)
-    return toneLine(t, indexOf)
+    return toneLine(t, indexOf, rank === pipelineAt)
   })
 }
 
