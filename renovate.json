@@ -16,9 +16,42 @@
       "matchManagers": ["github-actions"]
     },
     {
+      "description": "Binaires de CI de ci.yml : la somme SHA-256 de la release doit être recopiée à la main dans la même PR (la CI échoue tant que non)",
+      "groupName": "ci-binaires",
+      "matchDepNames": ["rhysd/actionlint", "gitleaks/gitleaks", "zizmor"]
+    },
+    {
       "description": "Claude Code s'installe en CI (matrice 2.1.296 / latest), ce n'est pas une dépendance du dépôt",
       "matchPackageNames": ["@anthropic-ai/claude-code"],
       "enabled": false
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "actionlint (ACTIONLINT_VERSION de ci.yml) ; la somme SHA-256 voisine reste à mettre à jour à la main",
+      "managerFilePatterns": ["/^\\.github/workflows/ci\\.yml$/"],
+      "matchStrings": ["ACTIONLINT_VERSION: (?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "rhysd/actionlint",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v?(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "description": "gitleaks (GITLEAKS_VERSION de ci.yml) ; la somme SHA-256 voisine reste à mettre à jour à la main",
+      "managerFilePatterns": ["/^\\.github/workflows/ci\\.yml$/"],
+      "matchStrings": ["GITLEAKS_VERSION: (?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "gitleaks/gitleaks",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v?(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "description": "zizmor (pipx run zizmor==X de ci.yml)",
+      "managerFilePatterns": ["/^\\.github/workflows/ci\\.yml$/"],
+      "matchStrings": ["zizmor==(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "zizmor",
+      "datasourceTemplate": "pypi"
     }
   ]
 }
