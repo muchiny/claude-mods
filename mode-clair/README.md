@@ -194,8 +194,14 @@ machine est toujours écrit.
 - **Couleur par ordre d'apparition**, pas par configuration : le plugin ne lit
   pas ta configuration du bridge.
 
-La table de référence de l'affichage, situation par situation, et les points
-encore ouverts sont dans `tests/replay/REFERENCE.md`.
+La table de référence de l'affichage, situation par situation, et les arbitrages
+qui l'ont fixée sont dans `tests/replay/REFERENCE.md`. Un cas n'y est pas
+tranché : pour un outil à plusieurs machines, quand le code de sortie de la CLI
+est hors de 0 à 6 et que l'entrée de la machine dans `results` dit autre chose,
+l'entrée de la machine l'emporte. Le rejeu de sessions réelles ne contrôle que
+l'issue (réussi, échec, refus, interrompu, attente, inconnu) et la machine de chaque
+appel : les états fins (`code N`, `délai dépassé`, nature, `tronqué`) reposent sur
+les tests purs et les goldens.
 
 ## Développement
 

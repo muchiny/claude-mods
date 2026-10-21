@@ -51,18 +51,63 @@ claude --plugin-dir ./claude-mods/mode-clair
 
 ## Développement
 
-Node 22 ou plus récent, puis `npm ci`.
+Node 22 ou plus récent, puis `npm ci`. N'appelle jamais un outil par son nom avant `npm ci` (un lanceur de paquets
+télécharge sinon un homonyme) : tout passe par `npm run …` ou `node_modules/.bin/…`.
 
 ```bash
-npm run lint        # Biome : lint, format, tri des imports (biome ci)
-npm run typecheck   # tsc --noEmit, types de l'API des mods dans dev/claude-code.d.ts
-npm run validate    # claude plugin validate (marketplace et mod)
-npm test            # claude plugin test mode-clair
-npm run format      # applique le format Biome
-npm run coverage    # couverture des modules purs sous bun:test (seuil : 100 % des lignes et fonctions)
-npm run test:dev    # tests des outils de développement (dev/*.mjs)
-npm run mutate:pure # mutation de tous les modules purs sous Bun (rapide, seuil break = 100)
+npm run lint           # Biome : lint, format, tri des imports (biome ci)
+npm run format         # applique le format Biome
+npm run typecheck      # tsc --noEmit, types de l'API des mods dans dev/claude-code.d.ts
+npm run validate       # claude plugin validate (marketplace et mod)
+npm test               # claude plugin test mode-clair : tests purs, moteur, rejeu sur sessions réelles
+npm run coverage       # couverture des modules purs sous bun:test (seuil : 100 % des lignes et fonctions)
+npm run test:dev       # bun test ./tests : propriétés (graine 42), goldens, largeur, outils de dev
+npm run props          # seulement les propriétés (PROPS_RUNS, PROPS_SEED), délai de 10 min
+npm run test:golden    # seulement les goldens de rendu
+npm run golden:update  # réécrit les goldens (diff à relire dans la PR)
+npm run mutate:pure    # mutation de tous les modules purs sous Bun (environ 40 min, voir plus bas)
+npm run mutate:module -- view.ts  # mutation d'un seul module, avec les seuls tests qui l'atteignent
+npm run mutate:gate    # porte de PR : mutation des lignes de hooks modifiées (--base origin/main)
+npm run mutate         # Stryker historique (dev/stryker-test.sh, copie jetable du mod)
+npm run replay:extract # régénère la fixture de rejeu depuis ~/.claude/projects (local, voir ci-dessous)
+npm run replay:reduce  # réduit la fixture générée à la taille committée (local)
+npm run paint          # peinture du vrai terminal (dev/paint/), Claude Code réel dans un pty
 ```
+
+La preuve de fin de tâche est `npm run lint && npm run typecheck && npm test && npm run coverage`,
+plus `npm run test:dev`. `bun` vient du paquet npm (`node_modules/.bin/bun`), pas du `PATH`.
+
+### Couches de tests
+
+| Couche | Où | Sous quoi | Ce qu'elle attrape |
+| --- | --- | --- | --- |
+| Unitaires purs | `mode-clair/tests/pure` | `claude plugin test` et `bun test` | la logique des modules `hooks/*.ts` (analyse de commande, classement, état, rendu) |
+| Moteur | `mode-clair/tests/engine` | `claude plugin test` seulement | le branchement de `register.tsx` sur les événements du vrai moteur de mods |
+| Golden | `tests/golden` | `bun test` | le texte et les tons du rendu (bande, rangées, carte) à 40, 80, 120 et 200 colonnes, comparés à des fichiers |
+| Propriétés | `tests/props` | `bun test` (fast-check) | des invariants sur des séquences d'événements tirées au hasard : jamais « fait » sans résultat, tout appel finit dans un seul état, aucune ligne au-delà de `columns`, aller-retour de la carte, pas d'usurpation par caractère de contrôle |
+| Largeur | `tests/width` | `bun test` | la largeur en cellules de chaque point de code, contre la table de `@xterm/addon-unicode11` |
+| Rejeu et oracle | `mode-clair/tests/replay` | `claude plugin test` | des sessions réelles anonymisées (scénarios réels) et écrites à la main (synthétiques), injectées dans le vrai `register.tsx` ; l'état final est comparé à un oracle indépendant |
+| Peinture | `dev/paint`, `.github/workflows/paint.yml` | Claude Code réel dans un pty | ce qui arrive vraiment à l'écran : textes, couleurs, fonds, largeur des signes |
+| Mutation pure | `stryker.pure.json`, `dev/mutate-module.mjs`, `dev/mutation-gate.mjs` | `bun test` sous Stryker | les tests voient-ils un changement de comportement des modules purs ? |
+| Mutation de la colle | `dev/mutate-glue.mjs` | `claude plugin test` sur copie | idem pour `register.tsx`, que Stryker ne sait pas muter |
+| Outils de dev | `tests/dev` | `bun test` | l'anonymiseur, les gardes de confidentialité, la porte de mutation, le banc de peinture, les workflows |
+
+L'oracle (`mode-clair/tests/replay/oracle.ts`) lit la table `mode-clair/tests/replay/REFERENCE.md` et
+jamais `hooks/*` (un test de dev refuse tout import de `hooks/`). Sa limite : il ne compare que
+`succes`, `echec`, `refus`, `interrompu`, `attente`, `inconnu` et l'hôte de chaque appel, les
+workflows terminés ou non et l'étape Superpowers. Les états fins (`code N`, `délai dépassé`,
+`limité`, nature, drapeau `tronqué`, texte exact des rangées) ne sont donc pas vérifiés par le rejeu :
+ils reposent sur les tests purs, les goldens et les propriétés.
+
+Les scénarios réels viennent de sessions de l'auteur, anonymisées de façon déterministe par
+`dev/replay/anonymize.ts` (machines, chemins, identifiants, horodatages, nombres, texte libre en
+lorem de même longueur) puis refusées par une barrière si une forme inconnue reste. Le texte libre
+garde la longueur et la ponctuation des libellés : un dictionnaire de longueurs reste théoriquement
+possible (voir l'en-tête de `anonymize.ts`). La fixture committée est
+`mode-clair/tests/replay/scenarios.generated.ts` (environ 900 Ko). Le tarball de release est
+fait de `git archive … HEAD mode-clair` : il **embarque donc `mode-clair/tests/`**, fixtures
+anonymisées comprises. Régénérer la fixture (`replay:extract` puis `replay:reduce`) se fait en local,
+sur une machine qui a les transcripts ; la CI ne le fait jamais.
 
 ### Couverture
 
@@ -77,7 +122,7 @@ testing ci-dessous les couvre, en plus exigeant.
 [Stryker](https://stryker-mutator.io) mesure si les tests voient vraiment un changement de comportement :
 
 ```bash
-node_modules/.bin/stryker run --mutate "mode-clair/hooks/colors.ts" --concurrency 4
+node_modules/.bin/stryker run --mutate "mode-clair/hooks/colors.ts" --concurrency 1
 ```
 
 `claude plugin test` n'expose pas l'environnement aux modules, donc Stryker ne peut pas activer ses
@@ -110,8 +155,12 @@ processus lit lui-même `__STRYKER_ACTIVE_MUTANT__`, plus besoin de copie jetabl
   state 9 min ; view 7 min ; cells 9 min (le test exhaustif de largeur ne tourne que là) ; bridge 14 min. Tous les
   modules tiennent donc largement dans un job hebdomadaire ; `npm run mutate:pure` (tous les modules d'un coup, mêmes
   réglages) reste possible mais prend environ 40 min. Les planchers ci-dessous ont tous été remesurés dans cette branche.
-- **Survivants connus** : `bridge.ts` lignes 71, 233 et 359 ; `superpowers.ts` 22 ; `view.ts` 693 ; `workflow.ts` 31 et 43.
-  Une PR qui touche l'une de ces lignes doit ajouter le test qui tue le mutant, sinon la porte échoue.
+- **Survivants** : il n'y a pas de liste à tenir à la main. Les mutants que les tests ne tuent pas sont dans
+  le rapport de chaque module (`reports/mutation-pure/<module>.ts.json`, artefact `mutation-floor-<module>`
+  de `mutation.yml`), avec leur ligne ; le plancher de `dev/mutation-floors.json` est le score mesuré,
+  et une baisse fait échouer le job `floors`. La porte de PR ne tolère aucun survivant sur les lignes
+  qu'elle modifie : une PR qui touche une ligne dont le mutant survit doit ajouter le test qui le tue,
+  ou annoter un équivalent relu (`// Stryker disable next-line <mutateur>: <raison>`).
 - **Branches** : Bun ne mesure pas les branches (seuils `lines` et `functions` seulement, `statements`
   accepté mais non appliqué, doc Bun 1.4). La mutation en tient lieu.
 - **Délai d'un mutant** : `timeoutMS` vaut 3000 ms. Des mutants de la boucle du découpeur shell de
@@ -143,27 +192,39 @@ périmée et le runner refuse de tourner tant que la liste n'est pas relue. Les 
 reposent sur le `.catch` des hooks sont épinglés par `mode-clair/tests/engine/catch.test.tsx`. Le job `glue` de `mutation.yml` lance la mutation complète
 chaque lundi (environ 4 s par mutant) ; un survivant le fait échouer.
 
-### CI
+### CI : ce que chaque workflow prouve, et ce qu'il ne prouve pas
 
-`.github/workflows/ci.yml`, à chaque push et pull request :
+`.github/workflows/ci.yml`, à chaque push et pull request. Les noms de jobs sont ceux à exiger dans la
+protection de la branche `main` (`docs/BRANCH-PROTECTION.md`).
 
-| Job | Contrôle |
-| --- | --- |
-| `static` | Biome (`--error-on-warnings`), `tsc`, `npm audit` (échec à partir de « high ») |
-| `coverage` | 100 % des lignes et des fonctions des modules purs (`bun test --coverage`) |
-| `props-golden` | `bun test ./tests` (propriétés à graine fixe, goldens, outils de dev) et forme de `tools.generated.ts` |
-| `mod (2.1.296, node 22)` | `claude plugin validate` (marketplace et mod), `claude plugin test` sur la version minimale annoncée |
-| `mod (latest, node 24)` | les mêmes contrôles sur la dernière version de Claude Code |
-| `mutation-pr` | mutation des lignes de hooks modifiées par la PR, aucun survivant toléré |
-| `hygiene` | aucun chemin personnel ni secret, fixtures anonymes, gitleaks sur l'historique |
-| `actions-lint` | `actionlint` (binaire épinglé, somme SHA-256 vérifiée) et `zizmor` (`--min-severity medium`) sur les workflows |
+| Job | Prouve | Ne prouve pas |
+| --- | --- | --- |
+| `static` | Biome (`--error-on-warnings`), `tsc`, `npm audit` (échec à partir de « high ») | le comportement |
+| `coverage` | 100 % des lignes et des fonctions des modules purs (`bun test --coverage`) | que les tests voient un changement (c'est la mutation) ; les branches (Bun ne les mesure pas) ; `register.tsx` (non compté) |
+| `props-golden` | `npm run test:dev` : propriétés à graine fixe 42 et 200 exécutions, goldens, largeur, outils de dev ; forme de `tools.generated.ts` | des séquences rares (la passe hebdomadaire en tire 10 000, graine variable) ; le contenu de `tools.generated.ts` |
+| `mod (2.1.296, node 22)` | `claude plugin validate` (marketplace et mod) et `claude plugin test` (tests purs, moteur, rejeu sur les scénarios réels et synthétiques) sur la version minimale annoncée | le rendu dans un vrai terminal ; la fidélité de l'oracle sur les états fins |
+| `mod (latest, node 24)` | les mêmes contrôles sur la dernière version de Claude Code | idem |
+| `mutation-pr` | aucun mutant survivant sur les lignes de `mode-clair/hooks` modifiées par la PR (`register.tsx` exclu) | la qualité des lignes non touchées (planchers hebdomadaires) ; la colle |
+| `hygiene` | aucun chemin personnel ni secret, fixtures de rejeu aux formes synthétiques, gitleaks sur l'historique | qu'une chaîne anonymisée ne révèle rien par sa longueur (voir plus haut) |
+| `actions-lint` | `actionlint` (binaire épinglé, somme SHA-256 vérifiée) et `zizmor` (`--min-severity medium`) sur les workflows | que les workflows planifiés aboutissent en vrai |
+
+Le job `props-golden` est le seul à lancer `test:dev` ; `coverage` ne lance que la couverture.
+
+Autres workflows :
+
+| Workflow | Quand | Prouve | Ne prouve pas |
+| --- | --- | --- | --- |
+| `mutation.yml` | lundi 3 h UTC et à la demande | par module (`mutate`, Stryker historique sous `claude plugin test`), puis les planchers sous Bun (`floors-module` par module, `floors` qui rassemble) ; la mutation de `register.tsx` (`glue`) ; les propriétés à 10 000 exécutions et graine variable (`props`) | rien tant qu'il n'a pas tourné sur GitHub : la première exécution planifiée reste à voir ; il n'a pas été lancé en entier, ses morceaux l'ont été en local |
+| `paint.yml` | lundi 4 h UTC, à la demande, et sur les PR qui touchent le banc ou `mode-clair/hooks` | les scénarios sans modèle (`/clair` vide, étiquette `SessionMode`, bande au repos) dans un vrai terminal, sur 2.1.296 et `latest` : textes, couleurs, fonds, largeur | les scénarios avec modèle (Bash simple, faux bridge-mcp, refus) : ils exigent `ANTHROPIC_API_KEY`, jamais fournie sur une PR, et n'ont jamais tourné. Un écart hebdomadaire ouvre une issue |
+| `codeql.yml` | push sur `main`, PR, lundi 4 h UTC | analyse statique JavaScript et TypeScript | la logique du mod |
+| `scorecard.yml` | `main` et mardi 5 h UTC | OpenSSF Scorecard, score publié pour le badge | rien avant le premier passage sur `main` ; ce n'est pas un check de fusion |
+| `release.yml` | tag `vX.Y.Z` poussé par le mainteneur | le tag est sur `main`, sa version égale celle de `plugin.json`, lint, types et `npm test` sur 2.1.296 passent, le tag distant n'a pas bougé ; archive attestée (provenance) | que la release s'installe : l'archive `git archive … mode-clair` embarque `mode-clair/tests/` (fixtures anonymisées comprises) |
 
 Les workflows n'ont aucune permission par défaut (`permissions: {}`, puis `contents: read` par job),
 `actions/checkout` ne garde pas le jeton, `step-security/harden-runner` tourne en mode audit en
 premier pas de chaque job, et chaque action est épinglée par son SHA complet (version en commentaire).
 Renovate (`renovate.json`) propose les mises à jour, groupées (`dev-tooling`, `github-actions`), après
-14 jours de mûrissement ; l'application Renovate doit être installée sur le dépôt. Les noms de jobs
-ci-dessus sont ceux à exiger dans la protection de la branche `main`.
+14 jours de mûrissement ; l'application Renovate doit être installée sur le dépôt.
 
 #### Régénérer `tools.generated.ts`
 

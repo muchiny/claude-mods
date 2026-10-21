@@ -65,7 +65,7 @@ section « Désaccords relevés » : chaque ligne porte désormais le comporteme
 | R10 | outil de la table avec `readOnlyHint` / sans | nature `lecture` / `peut modifier` | §5.1 Table des outils |
 | R11 | valeur d'hôte qui commence par `$` (`host=$H`) | machine non affirmée : `machine inconnue`, l'appel reste affiché | §5.1 Reconnaissance CLI ; règle |
 | R12 | outil sans `host` ni `hosts` (`hostless`, `ssh_history` compris : son `host` filtre l'historique local) | rien : aucune rangée, aucun compte (`ssh_status` n'est pas compté) | §5.1 Table des outils ; §3 critère 4 |
-| R13 | `ssh_exec_multi` / `ssh_metrics_multi` avec `hosts = [host-a, host-b]` | une rangée par hôte, chacune classée sur son propre élément de `results` (`success`, `exit_code`, `error`) ; un hôte sans élément lisible (sortie coupée, persistée, illisible) : `? incertain`, jamais `✓ fait` ni `✓ code ?` hérité du résultat global (tranché D11). Non spécifié (question ouverte, tâche 8) : un code de sortie CLI hors de 0 à 6 (R52) quand l'hôte a son propre élément ; aujourd'hui l'élément de l'hôte l'emporte | §5.1 `multi` ; faits §6.1 (JSON `total_hosts`, `results[]`) |
+| R13 | `ssh_exec_multi` / `ssh_metrics_multi` avec `hosts = [host-a, host-b]` | une rangée par hôte, chacune classée sur son propre élément de `results` (`success`, `exit_code`, `error`) ; un hôte sans élément lisible (sortie coupée, persistée, illisible) : `? incertain`, jamais `✓ fait` ni `✓ code ?` hérité du résultat global (tranché D11). Non spécifié par l'utilisateur (cas laissé tel quel) : un code de sortie CLI hors de 0 à 6 (R52) quand l'hôte a son propre élément dans `results` ; l'élément de l'hôte l'emporte | §5.1 `multi` ; faits §6.1 (JSON `total_hosts`, `results[]`) |
 | R14 | `ssh_exec_multi` rejeté avec `MCP invalid request: Unknown hosts: a, b` | `✗ machine inconnue` pour l'appel | bridge-mcp/src/mcp/tool_handlers/ssh_exec_multi.rs:217 ; faits §3.2 |
 | R15 | `ssh_session_create` réussi (SessionInfo `{"id":…,"host":"host-a",…}`) puis `ssh_session_exec` avec ce `session_id` | rangée de `ssh_session_exec` sur `host-a` | §5.1 `session` ; bridge-mcp/src/ssh/session.rs:72-78 ; faits §6.1 |
 | R16 | `ssh_session_exec` dont la session n'a pas été vue créée | `machine inconnue` (jamais devinée) | §5.1 `session` ; règle |
@@ -184,6 +184,16 @@ jamais un appel en cours (§4.2).
 | R90 | autre skill (`using-superpowers`, `systematic-debugging`, `test-driven-development`, `verification-before-completion`…) | rien ne change, aucune ligne | §5.2 ; §3 critère 10 |
 | R91 | `Write` / `Edit` sous `docs/superpowers/` sans état existant | aucun état créé ; avec un état : le complète (relecture du plan après `Edit` réussi, liste gardée si la relecture échoue) | §5.2 |
 | R92 | aucun événement Superpowers depuis 30 minutes | état abandonné (minuteur, jamais calculé au rendu) : sort de la bande, reste dans `/clair` | §5.2 |
+
+## Limite de l'oracle
+
+L'oracle (`oracle.ts`) ne rend, par appel, que l'hôte et une issue parmi `succes`, `echec`,
+`refus`, `interrompu`, `attente`, `inconnu` (type `Truth`), plus les workflows terminés ou non et
+l'étape Superpowers. Le rejeu ne compare que cela. Les états fins de la table (`code N` contre
+`fait`, `délai dépassé`, `limité`, `confirmation manquante`, la nature, le drapeau `tronqué`, le
+texte exact des rangées et de la carte) ne sont pas vérifiés par le rejeu : ils reposent sur les
+tests purs, les goldens et les propriétés. Un état fin faux qui garde la même issue passe donc le
+rejeu.
 
 ## Désaccords relevés (étape 2) — TRANCHÉS le 2026-10-21
 
