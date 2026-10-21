@@ -1,0 +1,8 @@
+# Faux positifs de gitleaks (règle generic-api-key) : clés de workflow fictives des fixtures de test
+# (`key: 'wf_…'`, `"key":"v2:…"`), sans secret. Une empreinte par ligne : commit:fichier:règle:ligne.
+e4d711032b058d138558b9295c434ed33935a8b7:mode-clair/tests/engine/events.test.tsx:generic-api-key:535
+dc8226fde747738062e23d62fde31c835a7aee05:mode-clair/tests/engine/events.test.tsx:generic-api-key:420
+dc8226fde747738062e23d62fde31c835a7aee05:mode-clair/tests/pure/workflow.test.ts:generic-api-key:63
+dc8226fde747738062e23d62fde31c835a7aee05:mode-clair/tests/pure/workflow.test.ts:generic-api-key:71
+dc8226fde747738062e23d62fde31c835a7aee05:mode-clair/tests/pure/workflow.test.ts:generic-api-key:112
+dc8226fde747738062e23d62fde31c835a7aee05:mode-clair/tests/pure/workflow.test.ts:generic-api-key:321
