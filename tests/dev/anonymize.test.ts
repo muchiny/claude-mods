@@ -201,12 +201,15 @@ describe('anonymize : texte libre', () => {
     )
     const out = textOf(calls(s)[0] as Call).split('\n')
     expect(out[0]).toBe('Exit code 6')
-    expect(out[1]?.startsWith('2026-10-21T10:00:00.123456Z  INFO ')).toBe(true)
+    expect(out[1]?.startsWith('2000-01-01T00:00:00.000Z  INFO ')).toBe(true)
     expect(out[1]).not.toContain('machine-reelle')
     expect(out[2]).toBe('Error: Unknown host: host-a')
     expect(out[3]).toBe('[exit:2]')
+    // Ligne 1 : l'horodatage devient synthétique (précision ms), le message garde sa largeur.
+    expect(stringWidth(out[1] ?? '')).toBe(stringWidth(lines[1] ?? '') - 3)
     for (const i of [1, 4, 5]) {
       expect(out[i]).not.toBe(lines[i])
+      if (i === 1) continue
       expect(stringWidth(out[i] ?? '')).toBe(stringWidth(lines[i] ?? ''))
     }
     expect(out[4]).not.toContain('hunter2')
@@ -461,7 +464,7 @@ describe('assertKnownForms : formes gardées', () => {
           tool: 'Agent',
           toolUseId: 'toolu_r0001',
           input: { description: 'T13 lorem', prompt: 'TT1 ipsum' },
-          result: { result: 'ok', text: '2026-10-21T10:00:00Z \u001b[2mWARN\u001b[0m lorem' },
+          result: { result: 'ok', text: '2000-01-01T00:00:00.000Z \u001b[2mWARN\u001b[0m lorem' },
           afterMs: 0,
         },
       ],
@@ -566,5 +569,59 @@ describe('durcissement (revue 1)', () => {
     )
     expect(() => assertKnownForms(one('mcp__prive-bridge__ssh_ls', {}))).toThrow(/forme inconnue/)
     expect(() => assertKnownForms(one('mcp__ssh-bridge__ssh_ls', {}))).not.toThrow()
+  })
+})
+
+// --- Passe C (audit de confidentialité) ---------------------------------------------------------
+
+/** Scénario déjà anonymisé d'un seul appel, pour interroger les barrières. */
+const anonCall = (input: unknown, text: string, result: unknown = 'ok'): Scenario => ({
+  id: 'essai-0100',
+  source: 'replay',
+  files: {},
+  events: [
+    { t: 0, kind: 'tool.call', tool: 'Bash', toolUseId: 'toolu_r0001', input, result: { result, text }, afterMs: 0 },
+  ],
+})
+
+describe('passe C : horodatages synthétiques (M2)', () => {
+  const tracing = (lines: string[]): Scenario =>
+    anonymize(
+      scenario([
+        call('Bash', 'toolu_1', { command: 'bridge-mcp tool ssh_exec host=machine-reelle-1' }, lines.join('\n')),
+      ]),
+      newDict(),
+    )
+
+  test('un horodatage ISO réel ne sort pas d’anonymize : époque 2000-01-01, décalage relatif au scénario', () => {
+    const s = tracing([
+      '2026-10-21T10:00:00.123456Z  INFO lorem',
+      '2026-10-21T10:00:01.623Z  WARN ipsum',
+      '2026-10-21T11:00:00Z ERROR dolor',
+    ])
+    const out = textOf(calls(s)[0] as Call).split('\n')
+    expect(json(s)).not.toContain('2026-')
+    expect(out[0]?.startsWith('2000-01-01T00:00:00.000Z  INFO ')).toBe(true)
+    expect(out[1]?.startsWith('2000-01-01T00:00:01.500Z  WARN ')).toBe(true)
+    expect(out[2]?.startsWith('2000-01-01T00:59:59.877Z ERROR ')).toBe(true)
+  })
+
+  test('monotone : l’origine est le plus ancien horodatage du scénario, même vu après', () => {
+    const s = tracing(['2026-10-21T10:00:05Z  INFO lorem', '2026-10-21T10:00:00Z  INFO ipsum'])
+    const out = textOf(calls(s)[0] as Call).split('\n')
+    expect(out[0]?.startsWith('2000-01-01T00:00:05.000Z')).toBe(true)
+    expect(out[1]?.startsWith('2000-01-01T00:00:00.000Z')).toBe(true)
+  })
+
+  test('horodatage illisible (mois 13) : l’époque synthétique, jamais la valeur', () => {
+    const s = tracing(['2026-13-45T99:99:99Z  INFO lorem'])
+    expect(json(s)).not.toContain('2026-')
+    expect(textOf(calls(s)[0] as Call).startsWith('2000-01-01T00:00:00.000Z  INFO ')).toBe(true)
+  })
+
+  test('assertKnownForms refuse un horodatage ISO hors de la plage synthétique', () => {
+    expect(() => assertKnownForms(anonCall({}, '2026-10-21T10:00:00.123Z  INFO lorem'))).toThrow(/forme inconnue/)
+    expect(() => assertKnownForms(anonCall({}, '2026-10-21T10:00:00Z  INFO lorem'))).toThrow(/forme inconnue/)
+    expect(() => assertKnownForms(anonCall({}, '2000-01-01T00:00:01.500Z  INFO lorem'))).not.toThrow()
   })
 })

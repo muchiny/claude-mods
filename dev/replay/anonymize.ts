@@ -44,6 +44,8 @@ export type Dict = {
   uuids: Map<string, string>
   labels: Map<string, string>
   components: Map<string, string>
+  /** Plus ancien horodatage ISO du scénario (ms) : origine des horodatages synthétiques. */
+  tsBase: number | null
 }
 
 export function newDict(): Dict {
@@ -54,6 +56,7 @@ export function newDict(): Dict {
     uuids: new Map(),
     labels: new Map(),
     components: new Map(),
+    tsBase: null,
   }
 }
 
@@ -165,6 +168,29 @@ export function idOf(dict: Dict, real: string): string {
   const synthetic = `${prefix}r${String(count(dict, prefix)).padStart(4, '0')}`
   dict.ids.set(real, synthetic)
   return synthetic
+}
+
+/** Origine des horodatages synthétiques : aucun horodatage réel ne sort de l'anonymiseur. */
+const SYNTHETIC_EPOCH = Date.UTC(2000, 0, 1)
+
+/** Horodatage ISO `AAAA-MM-JJThh:mm:ss[.f]Z` en ms (fraction tronquée à la ms), ou null s'il ne se lit pas. */
+function isoMs(text: string): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?Z$/.exec(text)
+  if (m === null) return null
+  const [y, mo, d, h, mi, s] = m.slice(1, 7).map(Number) as [number, number, number, number, number, number]
+  if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59 || s > 59) return null
+  return Date.UTC(y, mo - 1, d, h, mi, s, Number(`${m[7] ?? ''}000`.slice(0, 3)))
+}
+
+/**
+ * Horodatage → époque synthétique 2000-01-01T00:00:00.000Z + décalage depuis le plus ancien horodatage
+ * du scénario (monotone : l'ordre est gardé, la date réelle jamais). Illisible : l'époque elle-même.
+ */
+function tsOf(dict: Dict, real: string): string {
+  const at = isoMs(real)
+  if (at !== null && (dict.tsBase === null || at < dict.tsBase)) dict.tsBase = at
+  const offset = at === null || dict.tsBase === null ? 0 : at - dict.tsBase
+  return new Date(SYNTHETIC_EPOCH + offset).toISOString()
 }
 
 /** Libellé affiché (nom de workflow, phase, étiquette) : lorem distinct par libellé distinct. */
@@ -420,6 +446,8 @@ function slotValue(dict: Dict, slot: Slot, value: string): string {
     case 'free':
     case 'user':
       return lorem(value)
+    case 'ts':
+      return tsOf(dict, value)
     default:
       return value
   }
@@ -1436,8 +1464,12 @@ const VOCAB_SOURCES: readonly string[] = [
 ]
 const WORD = /[\p{L}\p{N}]+/gu
 const VOCAB = new Set(VOCAB_SOURCES.flatMap((s) => (s.match(WORD) ?? []).map((w) => w.toLowerCase())))
+/** Horodatage de la plage synthétique (tsOf) : janvier 2000, précision ms. */
+const SYNTHETIC_TS = /\b2000-01-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}Z/g
 /** Formes entières acceptées avant le découpage en mots. */
-const WHOLE_FORMS: readonly RegExp[] = [CSI_ALL, /\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, UUID_ANY]
+const WHOLE_FORMS: readonly RegExp[] = [CSI_ALL, SYNTHETIC_TS, UUID_ANY]
+/** Formes refusées même si chacun de leurs mots est connu : horodatage ISO hors de la plage synthétique. */
+const REFUSED_FORMS: readonly RegExp[] = [/\d{4}-\d{2}-\d{2}T\d/]
 /** `mcp__ssh-bridge__<outil>` et `<outil>` seulement pour un outil de la liste du bridge. */
 function withoutBridgeTools(text: string): string {
   return text
@@ -1465,6 +1497,10 @@ function knownWord(w: string): boolean {
 function unknownIn(text: string): string | null {
   let rest = text
   for (const re of WHOLE_FORMS) rest = rest.replace(re, ' ')
+  for (const re of REFUSED_FORMS) {
+    const m = re.exec(rest)
+    if (m !== null) return m[0]
+  }
   rest = withoutBridgeTools(rest)
   for (const w of rest.match(WORD) ?? []) if (!knownWord(w)) return w
   return null
