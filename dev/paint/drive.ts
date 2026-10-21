@@ -53,7 +53,7 @@ function args(): { only: string | null; out: string } {
     const i = a.indexOf(flag)
     return i >= 0 ? (a[i + 1] ?? null) : null
   }
-  const base = process.env.RUNNER_TEMP ?? '/var/tmp'
+  const base = process.env.RUNNER_TEMP || '/var/tmp'
   return { only: at('--only'), out: at('--out') ?? join(base, 'paint-out') }
 }
 
@@ -113,23 +113,41 @@ async function runScenario(s: Scenario, home: string): Promise<Run> {
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
   const run: Run = { full: Buffer.alloc(0), cuts: [], login: false, error: null }
 
-  const blocked = () => {
-    if (!isLoginScreen(text)) return
+  // Écran de connexion ou de thème : cherché sur l'écran affiché (les ROWS dernières rangées de la grille
+  // rejouée), pas sur tout le texte reçu depuis le début : un texte de connexion passé (sortie d'outil,
+  // réponse du modèle) ne marque pas le scénario sauté.
+  const blocked = async () => {
+    const g = await gridOf(new Uint8Array(Buffer.concat(chunks)), COLS, ROWS)
+    if (
+      !isLoginScreen(
+        g.rows
+          .slice(-ROWS)
+          .map((r) => r.text)
+          .join('\n'),
+      )
+    )
+      return
     run.login = true
     throw new Error('connexion requise')
   }
 
+  // Une attente lit le texte reçu depuis la dernière saisie (pas depuis son propre début) : la réponse
+  // peut arriver avant que l'attente commence (pendant le contrôle d'écran qui suit chaque pas).
+  let sentAt = 0
+
   async function step(st: Step): Promise<void> {
-    if ('send' in st) p.write(st.send)
-    else if ('capture' in st) run.cuts.push({ name: st.capture, bytes: Buffer.concat(chunks) })
+    if ('send' in st) {
+      sentAt = text.length
+      p.write(st.send)
+    } else if ('capture' in st) run.cuts.push({ name: st.capture, bytes: Buffer.concat(chunks) })
     else if ('settle' in st) {
       const until = Math.min(Date.now() + SETTLE_CAP_MS, deadline)
       while (Date.now() - lastData < st.settle && Date.now() < until && !exited) await sleep(100)
     } else {
-      const from = text.length
+      const from = sentAt
       const until = Math.min(Date.now() + (st.timeoutMs ?? WAIT_MS), deadline)
-      while (!text.slice(from).includes(st.waitFor)) {
-        blocked()
+      for (let i = 0; !text.slice(from).includes(st.waitFor); i += 1) {
+        if (i % 5 === 0) await blocked()
         if (exited) throw new Error(`Claude Code est sorti avant « ${st.waitFor} »`)
         if (Date.now() >= until) throw new Error(`« ${st.waitFor} » attendu, pas vu`)
         await sleep(100)
@@ -142,7 +160,7 @@ async function runScenario(s: Scenario, home: string): Promise<Run> {
     // pendant une attente.
     for (const st of s.steps) {
       await step(st)
-      blocked()
+      await blocked()
     }
     p.write('/exit')
     await sleep(500)
@@ -186,7 +204,6 @@ async function main(): Promise<number> {
     let r: Run
     try {
       current.home = createHome({
-        base: process.env.RUNNER_TEMP ?? '/var/tmp',
         repo: REPO,
         fakeBridge: join(HERE, 'fake-bridge-mcp.sh'),
         key: process.env.ANTHROPIC_API_KEY ?? '',

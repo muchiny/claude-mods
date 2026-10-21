@@ -12,14 +12,19 @@
 // Nettoyage : le dossier est créé d'abord, tout le reste (copie comprise) dans un try qui l'efface en cas
 // d'erreur ; l'appelant l'efface dans un finally ; installCleanup() efface aussi le HOME courant et tue le
 // groupe du Claude courant sur SIGINT, SIGTERM, SIGHUP et exception non rattrapée.
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { chmodSync, copyFileSync, lstatSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { basename, dirname, join, resolve } from 'node:path'
+
+/** Dossier où naissent les HOME jetables : $RUNNER_TEMP en CI, /var/tmp en local (jamais /tmp). */
+export function homeBase() {
+  return process.env.RUNNER_TEMP || '/var/tmp'
+}
 
 /**
  * Crée un HOME jetable sous `base`. `credentials` : chemin du fichier d'identifiants à copier, ou null.
  * Sur erreur, rien ne reste sous `base` et l'erreur remonte.
  */
-export function createHome({ base, repo, fakeBridge, key = '', credentials = null }) {
+export function createHome({ base = homeBase(), repo, fakeBridge, key = '', credentials = null }) {
   const home = mkdtempSync(join(base, 'paint-home-'))
   try {
     const cfg = {
@@ -41,13 +46,32 @@ export function createHome({ base, repo, fakeBridge, key = '', credentials = nul
     symlinkSync(fakeBridge, join(home, 'bin', 'bridge-mcp'))
     return home
   } catch (e) {
-    removeHome(home)
+    removeHome(home, base)
     throw e
   }
 }
 
-export function removeHome(home) {
-  if (home) rmSync(home, { recursive: true, force: true })
+/**
+ * Efface un HOME jetable, et rien d'autre : un dossier réel (pas un lien) nommé paint-home-* placé
+ * directement sous `base`. Tout autre chemin est refusé (message sur stderr, rien d'effacé). Rend true si
+ * le dossier a été effacé ou n'existait plus.
+ */
+export function removeHome(home, base = homeBase()) {
+  if (!home) return true
+  const path = resolve(home)
+  let st = null
+  try {
+    st = lstatSync(path)
+  } catch {
+    return true
+  }
+  const ours = dirname(path) === resolve(base) && basename(path).startsWith('paint-home-') && st.isDirectory()
+  if (!ours) {
+    console.error(`removeHome : chemin refusé (pas un paint-home-* sous ${resolve(base)}) : ${path}`)
+    return false
+  }
+  rmSync(path, { recursive: true, force: true })
+  return true
 }
 
 export function killGroup(pid) {
@@ -60,7 +84,7 @@ export function killGroup(pid) {
 }
 
 /**
- * `current` : { home, pid } tenu à jour par l'appelant. Sur signal ou exception non rattrapée : tue le
+ * `current` : { home, pid } tenu à jour par l'appelant (HOME né sous homeBase()). Sur signal ou exception non rattrapée : tue le
  * groupe du Claude courant, efface le HOME courant, puis sort (128 + numéro du signal, 1 sur exception).
  */
 export function installCleanup(current) {
