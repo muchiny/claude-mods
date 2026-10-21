@@ -516,12 +516,9 @@ function spText(sp: Superpowers | null, forBand: boolean): string | null {
 
 function workflowText(w: Workflow): string {
   // Sans nom lisible (D12) : « workflow en cours » ; à distance ou sans nouvelles, le statut qui suit suffit.
+  const shown = one(w.name)
   const name =
-    w.name === ''
-      ? w.status === 'en-cours'
-        ? fr('workflow en cours')
-        : 'workflow'
-      : `${fr('workflow ')}${one(w.name)}`
+    shown === '' ? (w.status === 'en-cours' ? fr('workflow en cours') : 'workflow') : `${fr('workflow ')}${shown}`
   const parts = [`${w.status === 'sans-nouvelles' ? '○' : '●'} ${name}`]
   if (w.status === 'distant') parts.push(REMOTE)
   if (w.status === 'sans-nouvelles') parts.push(QUIET)
