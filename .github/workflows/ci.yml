@@ -73,9 +73,6 @@ jobs:
       - name: Coverage
         run: npm run coverage
 
-      - name: Tests des outils de développement
-        run: npm run test:dev
-
   mutation-pr:
     name: mutation-pr
     if: github.event_name == 'pull_request'

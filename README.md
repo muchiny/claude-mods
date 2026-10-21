@@ -31,7 +31,7 @@ Choisis la portée à l'installation :
 - **utilisateur** : le mod est actif dans tous tes projets ;
 - **projet** : actif seulement dans le dépôt courant.
 
-Ensuite, tape `/clair` pour ouvrir le panneau de `mode-clair`. Le détail des
+Ensuite, tape `/clair` : la carte de `mode-clair` s'écrit dans la conversation. Le détail des
 signes, des sources et des limites est dans le
 [README du mod](mode-clair/README.md).
 
