@@ -94,12 +94,18 @@ processus lit lui-même `__STRYKER_ACTIVE_MUTANT__`, plus besoin de copie jetabl
 `reports/mutation-pure/`. Lance-le avec `TMPDIR=/var/tmp` et un peu de mémoire libre.
 
 - **Porte de PR** : `node dev/mutation-gate.mjs --base origin/main` ne mute que les lignes de
-  `mode-clair/hooks` ajoutées ou modifiées depuis la base (`register.tsx` et `tools.generated.ts`
+  `mode-clair/hooks` ajoutées ou modifiées depuis l'ancêtre commun avec la base (`register.tsx` et `tools.generated.ts`
   exclus) ; un mutant survivant fait échouer le job `mutation-pr` de la CI.
 - **Planchers** : `dev/mutation-floors.json` donne le score minimal de chaque module. Le job `floors`
   de `mutation.yml` lance `npm run mutate:pure` puis `node dev/mutation-floors.mjs
   reports/mutation-pure/mutation.json` : code 1 sous un plancher ; `--write` relève les planchers
   qu'un module dépasse.
+- **Délai d'un mutant** : `timeoutMS` vaut 3000 ms. Des mutants de la boucle du découpeur shell de
+  `bridge.ts` tournent à l'infini ; à 30 s chacun, la mutation complète dépasserait 8 h (12 min à
+  3 s). Stryker compte un timeout comme un mutant tué : les planchers sont donc légèrement indulgents.
+- **Survivants connus** (déjà présents sur la base) : `bridge.ts` lignes 71, 233, 359 et 754 ;
+  `superpowers.ts` 22 ; `view.ts` 259 et 555 ; `workflow.ts` 31 et 43. Une PR qui touche l'une de ces
+  lignes doit ajouter le test qui tue le mutant, sinon la porte échoue.
 - **Branches** : Bun ne mesure pas les branches (seuils `lines` et `functions` seulement, `statements`
   accepté mais non appliqué, doc Bun 1.4). La mutation en tient lieu.
 

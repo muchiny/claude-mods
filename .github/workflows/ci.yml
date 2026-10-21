@@ -81,7 +81,9 @@ jobs:
       # Mutants des seules lignes de mode-clair/hooks ajoutées ou modifiées depuis la base de la PR :
       # un seul mutant survivant fait échouer le job (seuil break = 100, stryker.pure.json).
       - name: Mutation des lignes modifiées
-        run: node dev/mutation-gate.mjs --base origin/${{ github.base_ref }}
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: node dev/mutation-gate.mjs --base "origin/$BASE_REF"
 
   mod:
     name: Validate and test

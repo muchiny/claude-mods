@@ -59,8 +59,12 @@ jobs:
 
       - run: npm ci
 
+      # Stryker sort en 1 tant qu'un mutant survit (break = 100) : le vrai verdict est celui des
+      # planchers. Un plantage réel de Stryker (pas de mutation.json) fait quand même échouer le job.
       - name: Stryker (modules purs)
-        run: npm run mutate:pure
+        run: |
+          npm run mutate:pure || echo "::warning::Stryker a terminé en échec (mutants survivants) ; les planchers tranchent"
+          test -s reports/mutation-pure/mutation.json
 
       - name: Planchers
         run: node dev/mutation-floors.mjs reports/mutation-pure/mutation.json

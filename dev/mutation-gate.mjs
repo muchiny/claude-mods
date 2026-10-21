@@ -27,6 +27,14 @@ export function changedRanges(diff) {
   return ranges
 }
 
+// Diff -U0 des hooks entre l'ancêtre commun avec `base` et l'arbre de travail : les lignes
+// changées seulement sur la base après le point de départ de la branche n'en font pas partie.
+export function baseDiff(base, cwd = process.cwd()) {
+  const git = (...args) => execFileSync('git', args, { encoding: 'utf8', cwd })
+  const ancestor = git('merge-base', base, 'HEAD').trim()
+  return git('diff', '-U0', ancestor, '--', 'mode-clair/hooks/*.ts', 'mode-clair/hooks/*.tsx')
+}
+
 function main(argv) {
   const i = argv.indexOf('--base')
   const base = i >= 0 ? argv[i + 1] : undefined
@@ -34,10 +42,7 @@ function main(argv) {
     console.error('usage : node dev/mutation-gate.mjs --base <ref>')
     return 2
   }
-  const diff = execFileSync('git', ['diff', '-U0', base, '--', 'mode-clair/hooks/*.ts', 'mode-clair/hooks/*.tsx'], {
-    encoding: 'utf8',
-  })
-  const ranges = changedRanges(diff)
+  const ranges = changedRanges(baseDiff(base))
   if (ranges.size === 0) {
     console.log('mutation-gate : aucune ligne de hooks modifiée')
     return 0

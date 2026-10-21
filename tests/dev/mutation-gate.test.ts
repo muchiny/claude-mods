@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
 // @ts-expect-error module .mjs sans déclaration de types
-import { changedRanges } from '../../dev/mutation-gate.mjs'
+import { baseDiff, changedRanges } from '../../dev/mutation-gate.mjs'
+// @ts-expect-error module .mjs sans déclaration de types
+import { divergedRepo } from './git-fixture.mjs'
 
 const diff = [
   'diff --git a/mode-clair/hooks/bridge.ts b/mode-clair/hooks/bridge.ts',
@@ -48,5 +50,11 @@ describe('changedRanges', () => {
 
   test('un diff vide donne une map vide', () => {
     expect(changedRanges('').size).toBe(0)
+  })
+})
+
+describe('baseDiff', () => {
+  test('ignore les lignes changées seulement sur la base après le point de départ', () => {
+    expect(changedRanges(baseDiff('main', divergedRepo())).get('mode-clair/hooks/a.ts')).toEqual([[4, 4]])
   })
 })
