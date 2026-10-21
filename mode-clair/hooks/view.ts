@@ -76,9 +76,15 @@ type IndexOf = (name: string) => number
 // Stryker disable next-line ArrowFunction: wordTone ne lit l'index que par « i >= 0 » : undefined >= 0 est faux comme -1 >= 0.
 const NO_HOSTS: IndexOf = () => -1
 
-/** Identifiant affiché sur une seule ligne, sans caractère de contrôle (un ESC dessiné par la carte reconfigurerait le terminal). */
+/**
+ * Identifiant affiché sur une seule ligne, sans caractère de contrôle (un ESC dessiné par la carte reconfigurerait le terminal)
+ * ni d'usurpation d'affichage (stripControls). toneLine relit le texte rendu : un nom ne doit y fabriquer ni séparateur
+ * (« · » devient « . ») ni signe de tête (« ✗ x » devient « - x »), de même largeur.
+ */
 function one(s: string): string {
-  return stripControls(s.replace(/[\r\n\t]+/g, ' '))
+  const name = stripControls(s.replace(/[\r\n\t]+/g, ' ')).replaceAll('·', '.')
+  const sign = signAt(name)
+  return sign === null ? name : `-${name.slice(sign.length)}`
 }
 
 /** Un ton se compare par sa clé : son nom, ou « machine:N » (deux objets de même machine sont le même ton). */
@@ -162,7 +168,9 @@ function stateWordAt(rest: string, sign: string): number {
   // Débuts de mot : 0 et chaque position qui suit une espace.
   const starts = [0]
   for (let i = rest.indexOf(' '); i >= 0; i = rest.indexOf(' ', i + 1)) starts.push(i + 1)
-  return starts.find((at) => rowOf(rest.slice(at)) !== undefined) ?? -1
+  // Le signe de l'étape est celui de son état (§5.4) : un nom de machine égal à un mot d'état, derrière un autre signe (« ✓ inconnue »), reste un nom.
+  // « code N » suit aussi bien ✓ (ça a tourné) que ✗ (échec de la machine).
+  return starts.find((at) => CODE_WORD.test(rest.slice(at)) || rowOf(rest.slice(at))?.sign === sign) ?? -1
 }
 
 /**
@@ -173,10 +181,13 @@ function stateWordAt(rest: string, sign: string): number {
 function stepPieces(sign: string, rest: string, indexOf: IndexOf): Piece[] {
   const at = stateWordAt(rest, sign)
   if (at < 0) {
+    // Ni état ni « code N » : un nom (« inconnue » derrière ✓ est une machine, pas l'état), jamais le ton d'un mot d'état.
+    const i = indexOf(rest)
+    const tone: Tone = i >= 0 ? { machine: i } : rest === UNKNOWN_HOST ? 'attenue' : 'texte'
     return norm([
       { text: sign, tone: signTone(sign, rest) },
       { text: ' ', tone: 'texte' },
-      { text: rest, tone: wordTone(rest, indexOf, true) },
+      { text: rest, tone },
     ])
   }
   const word = rest.slice(at)
