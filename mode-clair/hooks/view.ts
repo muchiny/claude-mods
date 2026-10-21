@@ -120,6 +120,8 @@ const STEP_WORDS: ReadonlyMap<string, CallState> = new Map<string, CallState>([
   [fr('refusé par le bridge'), 'refuse'],
   [fr('limité par le bridge'), 'limite'],
   [fr('accord refusé'), 'decline'],
+  // « host inconnue » : l'étape d'une machine nommée que le bridge dit inconnue (la machine nulle écrit « machine inconnue »).
+  ['inconnue', 'machine-inconnue'],
 ])
 
 /** La ligne de la table §5.4 dont le libellé (ou « code N ») est ce mot. */
@@ -155,11 +157,12 @@ function signAt(seg: string): string | null {
 
 /** Début du mot d'état en fin de `rest` (« host-a injoignable » → 7), -1 s'il n'y en a pas. */
 function stateWordAt(rest: string, sign: string): number {
+  // Une machine non prouvée seule après ✓ est la machine d'un appel fait, pas l'état « machine inconnue ».
+  if (rest === UNKNOWN_HOST && sign !== '✗') return -1
   let at = 0
   for (;;) {
     const word = rest.slice(at)
-    // Une machine non prouvée seule après ✓ est la machine d'un appel fait, pas l'état « machine inconnue ».
-    if (rowOf(word) !== undefined && (word !== UNKNOWN_HOST || sign === '✗')) return at
+    if (rowOf(word) !== undefined) return at
     const space = rest.indexOf(' ', at)
     if (space < 0) return -1
     at = space + 1
@@ -286,24 +289,69 @@ function stateIndex(s: ClairState): IndexOf {
   return (name) => hostIndex(s, name)
 }
 
+/** Où est le nom de la machine dans une ligne, et jusqu'où l'état doit rester entier (indices de points de code). */
+type NameSpan = { from: number; to: number; end: number }
+
+const MACHINE_COUNT = /^\d+ appels?$/
+/** Début d'une ligne à signe qui n'a pas de machine : workflow, « N appels » en cours. */
+const NO_NAME = /^(workflow|\d+ appels$)/
+
 /**
- * « signe machine · état » dont seul le nom de la machine est coupé (D4) : le signe, « … » et
- * l'état (de `first` à `end`) restent ; null si même un nom d'une cellule ne laisse pas la place.
+ * Le nom de la machine d'une ligne du mod, selon sa forme : « signe machine · état » (rangée et
+ * lignes d'appel), « machine · N appels · état » (carte), « signe [machine ]état · … » (pipeline) ;
+ * null pour toute autre ligne (workflow, Superpowers, résumé).
  */
-function cutMachine(chars: readonly Piece[], first: number, end: number, max: number): Line | null {
-  const sign = signAt(textOf([...chars]))
-  const from = sign === null ? 0 : sign.length + 1
-  const fixed = cellWidth(textOf(chars.slice(0, from))) + 1 + cellWidth(textOf(chars.slice(first, end)))
+function nameSpan(chars: readonly Piece[], seps: readonly number[]): NameSpan | null {
+  const starts = [0, ...seps.map((i) => i + SEP.length)]
+  const ends = [...seps, chars.length]
+  const segs = starts.map((start, i) => textOf(chars.slice(start, ends[i])))
+  const first = segs[0] as string
+  const sign0 = signAt(first)
+  if (sign0 === null) {
+    // `count` manque pour une ligne sans séparation : test(undefined) lit « undefined », jamais « N appels ».
+    return MACHINE_COUNT.test(segs[1] as string)
+      ? { from: 0, to: ends[0] as number, end: ends[2] ?? chars.length }
+      : null
+  }
+  // Ni le workflow (« ● workflow x · phase »), ni la bande de plusieurs appels (« ● 3 appels · … ») n'ont de machine à couper.
+  if (NO_NAME.test(first.slice(sign0.length + 1))) return null
+  const next = segs[1]
+  // Rangée et ligne d'appel : le deuxième segment est l'état, sans signe ; le pipeline en a un, ou conclut.
+  if (next !== undefined && signAt(next) === null && next !== NOTHING_RAN && next !== TRUNCATED) {
+    return { from: sign0.length + 1, to: ends[0] as number, end: ends[1] as number }
+  }
+  for (const [i, seg] of segs.entries()) {
+    const sign = signAt(seg)
+    if (sign === null) continue
+    const rest = seg.slice(sign.length + 1)
+    const from = (starts[i] as number) + sign.length + 1
+    const at = stateWordAt(rest, sign)
+    // Étape « machine état » : l'état suit le nom.
+    // Stryker disable next-line EqualityOperator: à `at === 0` (état sans machine) l'étendue est vide, donc rien n'est coupé ; une étape plus loin ne porte une machine que dans une ligne fabriquée, que la boucle de têtes de fit a déjà rendue.
+    if (at > 0) return { from, to: from + at - 1, end: ends[i] as number }
+    // Étape sans état (un appel fait) suivie du drapeau « tronqué » : la machine se coupe, le drapeau reste.
+    if (at < 0 && segs[i + 1] === TRUNCATED) return { from, to: ends[i] as number, end: ends[i + 1] as number }
+  }
+  return null
+}
+
+/**
+ * La ligne dont seul le nom de la machine est coupé (D4) : tout ce qui précède, « … » et l'état
+ * (de `to` à `end`) restent ; null si même un nom d'une cellule ne laisse pas la place.
+ */
+function cutMachine(chars: readonly Piece[], span: NameSpan, max: number): Line | null {
+  const { from, to, end } = span
+  const fixed = cellWidth(textOf(chars.slice(0, from))) + 1 + cellWidth(textOf(chars.slice(to, end)))
   const kept: Piece[] = []
   let used = 0
-  for (const c of chars.slice(from, first)) {
+  for (const c of chars.slice(from, to)) {
     const w = cellWidth(c.text)
     if (fixed + used + w > max) break
     kept.push(c)
     used += w
   }
   if (kept.length === 0) return null
-  return norm([...chars.slice(0, from), ...kept, { text: '…', tone: 'attenue' }, ...chars.slice(first, end)])
+  return norm([...chars.slice(0, from), ...kept, { text: '…', tone: 'attenue' }, ...chars.slice(to, end)])
 }
 
 /**
@@ -337,8 +385,8 @@ export function fit(line: Line, columns: number, cutName = false): Line {
     if (w <= max) return norm([...head, { text: w < max ? '…' : '', tone: 'attenue' }])
   }
   if (cutName) {
-    // Sans séparation, `first` vaut 0 : aucun nom à couper, cutMachine rend null.
-    const named = cutMachine(chars, seps[0] ?? 0, seps[1] ?? chars.length, max)
+    const span = nameSpan(chars, seps)
+    const named = span === null ? null : cutMachine(chars, span, max)
     if (named !== null) return named
   }
   const kept: Piece[] = []
@@ -528,9 +576,8 @@ export function bandLines(s: ClairState, ctx: Ctx): Line[] {
     const sp = ctx.isWorking || agentRuns ? spText(s.superpowers, true) : null
     if (sp !== null) lines.push(toneLine(sp, NO_HOSTS))
   }
-  // La première ligne est celle de l'appel seul quand il y en a un : son nom de machine se coupe avant son état (D4).
-  const callRow = run.length === 1 ? 0 : -1
-  return lines.slice(0, 2).map((l, i) => fit(l, ctx.columns, i === callRow))
+  // Le nom d'une machine se coupe avant son état (D4) ; les autres lignes sont coupées par la fin.
+  return lines.slice(0, 2).map((l) => fit(l, ctx.columns, true))
 }
 
 const EMPTY_CARD = fr('rien depuis le début de la session')

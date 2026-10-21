@@ -299,7 +299,7 @@ export const register: Register = (on) => {
     const { Box, Text } = $.ui.resolve(e)
     return (
       <Box flexDirection="column">
-        {lines.map((line, i) => draw(Text, fit(line, e.viewport?.columns ?? 80), `c${i}`))}
+        {lines.map((line, i) => draw(Text, fit(line, e.viewport?.columns ?? 80, true), `c${i}`))}
       </Box>
     )
   }).catch(($, e, next) => next(e))

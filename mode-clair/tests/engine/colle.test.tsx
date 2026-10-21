@@ -446,8 +446,8 @@ describe('colle : rendus', () => {
       component: 'CommandOutput',
       props: { command: 'clair', args: '', text, isErrored: false },
     })
-    const rows = parseCard(text).map((line) => textOf(fit(line, 80)))
-    expect(rows.some((row, i) => row !== textOf(fit(parseCard(text)[i] ?? [], 81)))).toBe(true)
+    const rows = parseCard(text).map((line) => textOf(fit(line, 80, true)))
+    expect(rows.some((row, i) => row !== textOf(fit(parseCard(text)[i] ?? [], 81, true)))).toBe(true)
     expect(drawnLines(await ui.drawn()).map(plain)).toEqual(rows)
     await ui.unmount()
   })

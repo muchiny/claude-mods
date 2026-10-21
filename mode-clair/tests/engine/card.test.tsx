@@ -146,13 +146,34 @@ describe('/clair : command.run et CommandOutput', () => {
     })
     const drawn = (await ui.findAll({ type: 'Text' })).map((t) => t.text)
     const fitted = parseCard(text).map((line) =>
-      fit(line, 30)
+      fit(line, 30, true)
         .map((piece) => piece.text)
         .join(''),
     )
     expect(fitted.filter((row) => row.endsWith('…')).length).toBeGreaterThan(0)
     for (const row of fitted) expect(drawn).toContain(row)
     for (const t of drawn) expect([...t].length).toBeLessThanOrEqual(30)
+    await ui.unmount()
+  })
+
+  // D4, R93 : un nom de machine plus long que la ligne est coupé sur la carte aussi, l'état reste entier.
+  test('à 40 colonnes, le nom d’une machine de 60 caractères est coupé et l’état de la rangée reste entier', async ($, on) => {
+    const w = world(on)
+    const host = `machine-${'x'.repeat(52)}`
+    w.answers.set('toolu_1', failed(SSH_REFUSED))
+    await $.tool.call({ tool: 'mcp__ssh-bridge__ssh_disk_usage', tool_use_id: 'toolu_1', host })
+    const text = await runClair($)
+    const ui = await $.ui.mount({
+      plugin: PLUGIN,
+      surface: 'terminal',
+      component: 'CommandOutput',
+      viewport: { columns: 40, rows: 40 },
+      props: { command: 'clair', args: '', text, isErrored: false },
+    })
+    const drawn = (await ui.findAll({ type: 'Text' })).map((t) => t.text)
+    const row = drawn.find((t) => t.startsWith('machine-') && t.includes('… · 0 appel · '))
+    expect(row).toMatch(/^machine-x+… · 0 appel · ✗ injoignable$/)
+    for (const t of drawn) expect([...t].length).toBeLessThanOrEqual(40)
     await ui.unmount()
   })
 

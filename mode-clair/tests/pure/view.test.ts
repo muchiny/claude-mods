@@ -418,6 +418,10 @@ describe('fit : priorité machine · état (spec §4.1, critère 13)', () => {
       const t = text(line)
       expect(width(t)).toBeLessThanOrEqual(20)
       expect(t.startsWith(`${STATE_TABLE[st].sign} w`)).toBe(true)
+      // L'état (premier détail) reste entier quand un nom d'au moins un caractère lui laisse la place ; sinon la fin se coupe par « … ».
+      const state = text(callLine(call({ host: 'win2025ntlm', state: st, code: 1 }), s, 200)).split(' · ')[1] as string
+      const room = 20 - cellWidth(`${STATE_TABLE[st].sign} w… · ${state}`)
+      expect(room >= 0 ? t.endsWith(` · ${state}`) : t.endsWith('…')).toBe(true)
       expect(line[0]?.tone).toStrictEqual(STATE_TABLE[st].tone)
       expect(line.some((p) => typeof p.tone === 'object' && p.tone.machine === 0)).toBe(true)
     }
@@ -1852,10 +1856,177 @@ describe('fit : un nom de machine plus long que la ligne est coupé, l’état r
     expect(text(fit(line, 24, true))).toBe('✗ win2025… · injoignable')
   })
 
-  test('avec l’option : une ligne sans signe se coupe de même, une ligne sans séparation par la fin', () => {
-    const bare: Line = [{ text: 'win2025-long · injoignable', tone: 'texte' }]
-    expect(text(fit(bare, 20, true))).toBe('win20… · injoignable')
+  test('avec l’option : une ligne sans séparation se coupe par la fin, une ligne de résumé reste intacte', () => {
     const alone: Line = [{ text: '✗ machine-très-longue', tone: 'texte' }]
     expect(text(fit(alone, 10, true))).toBe('✗ machine…')
+    // Un pipeline sans machine (accord, échec sans nom) n'a rien à couper : coupe par la fin.
+    const noHost: Line = [{ text: '✓ accord · ✗ échec · rien n’a tourné', tone: 'texte' }]
+    expect(text(fit(noHost, 14, true))).toBe(text(fit(noHost, 14)))
+    const unsigned: Line = [{ text: 'machine · injoignable · détail', tone: 'texte' }]
+    expect(text(fit(unsigned, 12, true))).toBe(text(fit(unsigned, 12)))
+    const bare: Line = [{ text: 'win2025-long · injoignable', tone: 'texte' }]
+    expect(text(fit(bare, 20, true))).toBe(text(fit(bare, 20)))
+  })
+})
+
+describe('pipeline : machine nommée et état « machine inconnue » (D2)', () => {
+  test('« ✗ host inconnue » : la machine garde sa couleur, « inconnue » le ton d’erreur', () => {
+    const c = call({ host: 'win2025', state: 'machine-inconnue' })
+    const s = stateOf([call(), c])
+    const line = pipeline(c, s)
+    expect(text(line)).toBe(`✗ win2025 inconnue · ${RIEN}`)
+    expect(line.find((p) => p.text === 'win2025')?.tone).toStrictEqual(M(1))
+    expect(line.find((p) => p.text === 'inconnue')?.tone).toBe('erreur')
+    expect(line[0]).toStrictEqual({ text: '✗', tone: 'erreur' })
+  })
+})
+
+describe('carte : un nom de machine plus long que la ligne est coupé sur chaque ligne, l’état reste entier (D4, R93)', () => {
+  const LONG = `machine-${'x'.repeat(52)}`
+  const run = call({ id: 'toolu_r#0', toolUseId: 'toolu_r', host: LONG, state: 'en-cours', endedAt: undefined })
+  const down = call({
+    id: 'toolu_d#0',
+    toolUseId: 'toolu_d',
+    host: LONG,
+    state: 'injoignable',
+    startedAt: 2_000,
+    endedAt: 2_100,
+  })
+  const late = call({
+    id: 'toolu_e#0',
+    toolUseId: 'toolu_e',
+    host: LONG,
+    state: 'delai-depasse',
+    startedAt: 3_000,
+    endedAt: 3_100,
+  })
+  const s = stateOf([run, down, late])
+  const drawn = (args: string, columns: number) => cardLines(s, args, 10_000).map((l) => text(fit(l, columns, true)))
+
+  test('rangée de machine : « nom… · N appels · état »', () => {
+    const row = drawn('', 60)[1] as string
+    expect(cellWidth(row)).toBeLessThanOrEqual(60)
+    expect(row).toMatch(/^machine-x+… · 2 appels · ✗ délai dépassé$/)
+    const narrow = drawn('', 40)[1] as string
+    expect(cellWidth(narrow)).toBeLessThanOrEqual(40)
+    expect(narrow).toMatch(/^machine-x+… · 2 appels · ✗ délai dépassé$/)
+    expect(narrow.length).toBeGreaterThan(30)
+  })
+
+  test('ligne d’appel de « à regarder » : « ✗ nom… · état »', () => {
+    const rows = drawn('', 40)
+    const at = rows.indexOf(`à regarder${NBSP}:`)
+    const entries = rows.slice(at + 2) // après le pipeline du plus récent : les autres appels
+    expect(entries.length).toBeGreaterThan(0)
+    for (const e of entries) {
+      expect(cellWidth(e)).toBeLessThanOrEqual(40)
+      expect(e).toMatch(/^✗ machine-x+… · (injoignable|délai dépassé)$/)
+    }
+  })
+
+  test('ligne de pipeline : « ✗ nom… état »', () => {
+    const rows = drawn('', 40)
+    const at = rows.indexOf(`à regarder${NBSP}:`)
+    const pipe = rows[at + 1] as string
+    expect(cellWidth(pipe)).toBeLessThanOrEqual(40)
+    expect(pipe).toMatch(/^✗ machine-x+… délai dépassé$/)
+  })
+
+  test('pipeline à plusieurs étapes : l’accord reste, le nom est coupé, l’état reste', () => {
+    const asked = call({
+      id: 'toolu_a#0',
+      toolUseId: 'toolu_a',
+      host: LONG,
+      state: 'injoignable',
+      accord: 'formulaire-oui',
+      startedAt: 4_000,
+      endedAt: 4_100,
+    })
+    const rows = cardLines(stateOf([asked]), '', 10_000).map((l) => text(fit(l, 40, true)))
+    const at = rows.indexOf(`à regarder${NBSP}:`)
+    expect(cellWidth(rows[at + 1] as string)).toBeLessThanOrEqual(40)
+    expect(rows[at + 1]).toMatch(/^✓ accord · ✗ machine-x+… injoignable$/)
+  })
+
+  test('/clair <machine> : la ligne d’appel et le pipeline de la machine', () => {
+    const rows = drawn(LONG, 40)
+    const at = rows.findIndex((r) => r.startsWith('dernier appel sur'))
+    expect(rows[at + 1]).toMatch(/^✗ machine-x+… · délai dépassé$/)
+    expect(rows[at + 2]).toMatch(/^✗ machine-x+… délai dépassé$/)
+    for (const r of rows.slice(at + 1)) expect(cellWidth(r)).toBeLessThanOrEqual(40)
+  })
+
+  test('largeur étroite (24) : l’état reste entier tant qu’il tient avec un nom d’un caractère', () => {
+    for (const r of drawn('', 24).slice(1, 2)) expect(cellWidth(r)).toBeLessThanOrEqual(24)
+    const rows = drawn('', 24)
+    const at = rows.indexOf(`à regarder${NBSP}:`)
+    expect(rows[at + 1]).toMatch(/^✗ machine[-x]*… délai dépassé$/)
+  })
+
+  test('les lignes qui n’ont pas de nom de machine, ou un nom qui tient, restent coupées comme avant', () => {
+    const wf = workflow({ name: 'une-tres-longue-enquete-de-workflow-sur-plusieurs-lignes' })
+    const line = cardLines(stateOf([], { workflows: [wf] }), '', 10_000)[0] as Line
+    expect(text(fit(line, 40, true))).toBe(text(fit(line, 40)))
+    const small = stateOf([call()])
+    for (const l of cardLines(small, '', 10_000)) expect(text(fit(l, 200, true))).toBe(text(l))
+  })
+})
+
+describe('fit avec cutName : formes de ligne reconnues (D4)', () => {
+  const L = (t: string): Line => [{ text: t, tone: 'texte' }]
+  const cut = (t: string, columns: number) => text(fit(L(t), columns, true))
+  const plain = (t: string, columns: number) => text(fit(L(t), columns))
+  const NAME = 'machine-xxxxxxxxxxxxxxxxxxxxxxxx'
+
+  test('rangée de machine : « N appel(s) » en second segment, rien d’autre', () => {
+    for (const n of ['1 appel', '3 appels', '12 appels']) {
+      const t = `${NAME} · ${n} · ✓ ssh_disk_usage`
+      expect(cut(t, 40)).toMatch(new RegExp(`^machine-x*… · ${n} · ✓ ssh_disk_usage$`))
+    }
+    for (const n of ['x2 appels', '2 appels de plus', '2 appelsx', 'appels']) {
+      const t = `${NAME} · ${n} · ✓ ssh_disk_usage`
+      expect(cut(t, 40)).toBe(plain(t, 40))
+    }
+  })
+
+  test('la bande de plusieurs appels et le workflow sont coupés par la fin, comme avant', () => {
+    for (const t of [
+      '● 2 appels · host-a, host-b',
+      '● 12 appels · host-a, host-b',
+      '● workflow audit-disques-de-toute-la-flotte · Audit',
+      '○ workflowx · sans nouvelles · Audit-tres-long',
+    ]) {
+      expect(cut(t, 24)).toBe(plain(t, 24))
+    }
+    // Une machine dont le nom ressemble ne les imite pas : elle est coupée.
+    expect(cut(`✗ ci-workflow-${NAME} · injoignable`, 40)).toMatch(/^✗ ci-workflow-[a-z-]*… · injoignable$/)
+    expect(cut(`✗ 2 appelsfoo-${NAME} · injoignable`, 40)).toMatch(/^✗ 2 appelsfoo-[a-z-]*… · injoignable$/)
+  })
+
+  test('pipeline : une seule étape suivie de « rien n’a tourné », ou de « tronqué »', () => {
+    expect(cut(`✗ ${NAME} injoignable · rien n’a tourné`, 40)).toMatch(/^✗ machine-x*… injoignable$/)
+    expect(cut(`✓ ${NAME} · tronqué`, 24)).toMatch(/^✓ machine-x*… · tronqué$/)
+    expect(cut(`✓ ${NAME}`, 24)).toMatch(/^✓ machine-x*…$/)
+  })
+
+  test('pipeline : l’étape sans état (un appel fait) garde son drapeau « tronqué » ; le reste de la ligne tombe', () => {
+    expect(cut(`✓ accord · ✓ ${NAME} · tronqué`, 34)).toMatch(/^✓ accord · ✓ machi[a-z-]*… · tronqué$/)
+    expect(cut(`✓ accord · ✓ ${NAME} · autre`, 24)).toMatch(/^✓ accord · ✓ machi[a-z-]*…$/)
+  })
+
+  test('pipeline : « machine état » suivi de « tronqué » garde l’état, le drapeau tombe avec les détails', () => {
+    expect(cut(`✗ ${NAME} délai dépassé · tronqué`, 40)).toMatch(/^✗ machin[a-z-]*… délai dépassé$/)
+  })
+
+  test('pipeline : un état sans machine n’est jamais pris pour un nom, même suivi de « tronqué »', () => {
+    const t = '✗ échec · tronqué'
+    expect(cut(t, 14)).toBe(plain(t, 14))
+  })
+
+  test('pipeline sans machine : coupé par la fin, l’état n’est jamais pris pour un nom', () => {
+    const t = '✓ accord · ✗ échec · rien n’a tourné'
+    expect(cut(t, 20)).toBe(plain(t, 20))
+    const u = '✗ erreur d’usage · rien n’a tourné'
+    expect(cut(u, 14)).toBe(plain(u, 14))
   })
 })
