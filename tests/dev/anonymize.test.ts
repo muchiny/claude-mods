@@ -766,3 +766,24 @@ describe('passe C : dossiers de projet et composants courts par le dictionnaire 
     expect(json(s)).not.toContain('Qz')
   })
 })
+
+describe('passe C : refus relevés à la régénération', () => {
+  test('« final review » gardé seulement en mot entier (pas « final reviewer »)', () => {
+    const s = anonymize(
+      scenario([
+        call('Agent', 'toolu_1', { description: 'final reviewer', prompt: 'the final reviews; final review' }, 'ok'),
+      ]),
+      newDict(),
+    )
+    expect(inputOf(s, 0).description).not.toContain('review')
+    expect(inputOf(s, 0).prompt?.endsWith('final review')).toBe(true)
+    expect(() => assertKnownForms(s)).not.toThrow()
+  })
+
+  test('identifiant de modèle daté (resolvedModel) accepté ; 8 chiffres ailleurs refusés', () => {
+    expect(() =>
+      assertKnownForms(anonCall({}, 'ok', { resolvedModel: 'claude-sonnet-4-20250514', model: 'opus' })),
+    ).not.toThrow()
+    expect(() => assertKnownForms(anonCall({}, 'lorem 20250514'))).toThrow(/forme inconnue/)
+  })
+})

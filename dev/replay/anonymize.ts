@@ -1194,8 +1194,8 @@ function skillOf(dict: Dict, value: string): string {
 /** Description et prompt d'Agent : `Task n`, `final review`, `code-reviewer.md` gardés (REFERENCE R86, R88). */
 const AGENT_KEEPS: readonly RegExp[] = [
   /\b(?:Task|Tâche|T{1,2})\s*\d+\b/g,
-  /final (?:code )?review/gi,
-  /code-reviewer\.md/g,
+  /\bfinal (?:code )?review\b/gi,
+  /\bcode-reviewer\.md\b/g,
 ]
 
 /** Clés gardées dans un objet (schéma des outils, du moteur et des sorties JSON du bridge). */
@@ -1522,7 +1522,9 @@ const SYNTHETIC_TS = /\b2000-01-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\
 /** Nombres gardés tels quels par l'anonymiseur (clés blanchies) : délai et code de sortie. */
 const KEPT_NUMBERS =
   /(?:\btimeout=|(?:--timeout|(?<![\w-])-t)[= ]|"(?:timeout|exit_code)":\s*|\bExit code:? |\[exit:)-?\d+/g
-const WHOLE_FORMS: readonly RegExp[] = [CSI_ALL, SYNTHETIC_TS, SYNTHETIC_UUID, KEPT_NUMBERS]
+/** Identifiant de modèle daté (`claude-sonnet-4-20250514`) : la date est publique, pas un nombre privé. */
+const MODEL_ID = /\b(?:claude-)?(?:opus|sonnet|haiku|fable)(?:-[a-z0-9]{1,2})*-20\d{6}\b/g
+const WHOLE_FORMS: readonly RegExp[] = [CSI_ALL, SYNTHETIC_TS, SYNTHETIC_UUID, KEPT_NUMBERS, MODEL_ID]
 /** Formes refusées même si chacun de leurs mots est connu : horodatage ISO hors de la plage synthétique. */
 const REFUSED_FORMS: readonly RegExp[] = [/\d{4}-\d{2}-\d{2}T\d/]
 /** `mcp__ssh-bridge__<outil>` et `<outil>` seulement pour un outil de la liste du bridge. */
