@@ -1,9 +1,18 @@
 import { describe, expect, test } from 'claude-code/testing'
 // @ts-expect-error module .mjs sans déclaration de types
-import { runExtract } from './run-extract.mjs'
+import { extractDirs, runExtract } from './run-extract.mjs'
 
 type Run = { status: number | null; stderr: string; written: boolean }
 const run = (o: { deny: string | null; mode?: number; args?: string[] }): Run => runExtract(o)
+
+describe('extract : dossiers jetables', () => {
+  test('aucun dossier /var/tmp/extract-* ne fuit, succès comme échec', () => {
+    const before = extractDirs()
+    run({ deny: null })
+    run({ deny: 'secret\n' })
+    expect(extractDirs()).toEqual(before)
+  })
+})
 
 describe('extract : la liste noire ferme la porte', () => {
   test('liste noire absente : échec, rien d’écrit', () => {
