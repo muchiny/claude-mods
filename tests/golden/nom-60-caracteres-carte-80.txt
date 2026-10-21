@@ -23,12 +23,12 @@ machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨atten
 # largeurs : 42 110 12 103 94 94
 ## carte ajustée (80 colonnes)
 1 machine⟨texte⟩ · ⟨attenue⟩2 appels⟨texte⟩ · ⟨attenue⟩3 problèmes non vus⟨erreur⟩
-machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩2 appels⟨texte⟩ …⟨attenue⟩
+machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩… · ⟨attenue⟩2 appels⟨texte⟩ · ⟨attenue⟩●⟨accent⟩ ssh_disk_usage⟨texte⟩
 à regarder :⟨attenue⟩
 ✓⟨ok⟩ accord⟨texte⟩ · ⟨attenue⟩✗⟨erreur⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩…⟨attenue⟩ ⟨texte⟩injoignable⟨erreur⟩
 ✗⟨attention⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩délai dépassé⟨attention⟩ …⟨attenue⟩
 ✗⟨erreur⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩injoignable⟨erreur⟩ …⟨attenue⟩
-# largeurs : 42 73 12 80 80 78
+# largeurs : 42 80 12 80 80 78
 ## ligne d’état et étiquette
 état : (aucune)
 pied : clair ✗ 3

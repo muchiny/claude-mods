@@ -1,0 +1,30 @@
+## bande (80 colonnes)
+# largeurs : 
+## appel toolu_1#0
+✗⟨erreur⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩injoignable⟨erreur⟩ · rien n’a tourné⟨attenue⟩
+# largeurs : 64
+## appel toolu_2#0
+✗⟨attention⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩délai dépassé⟨attention⟩ · peut modifier⟨attenue⟩
+# largeurs : 64
+## appel toolu_3#0
+✗⟨erreur⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩injoignable⟨erreur⟩ · rien n’a tourné⟨attenue⟩
+# largeurs : 64
+## carte /clair
+1 machine⟨texte⟩ · ⟨attenue⟩1 appel⟨texte⟩ · ⟨attenue⟩3 problèmes non vus⟨erreur⟩
+machine-xxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩1 appel⟨texte⟩ · ⟨attenue⟩✗⟨erreur⟩ ⟨texte⟩injoignable⟨erreur⟩
+à regarder :⟨attenue⟩
+✓⟨ok⟩ accord⟨texte⟩ · ⟨attenue⟩✗⟨erreur⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ ⟨texte⟩injoignable⟨erreur⟩ · rien n’a tourné⟨attenue⟩
+✗⟨attention⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩délai dépassé⟨attention⟩ · peut modifier⟨attenue⟩
+✗⟨erreur⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩injoignable⟨erreur⟩ · rien n’a tourné⟨attenue⟩
+# largeurs : 41 56 12 73 64 64
+## carte ajustée (80 colonnes)
+1 machine⟨texte⟩ · ⟨attenue⟩1 appel⟨texte⟩ · ⟨attenue⟩3 problèmes non vus⟨erreur⟩
+machine-xxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩1 appel⟨texte⟩ · ⟨attenue⟩✗⟨erreur⟩ ⟨texte⟩injoignable⟨erreur⟩
+à regarder :⟨attenue⟩
+✓⟨ok⟩ accord⟨texte⟩ · ⟨attenue⟩✗⟨erreur⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ ⟨texte⟩injoignable⟨erreur⟩ · rien n’a tourné⟨attenue⟩
+✗⟨attention⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩délai dépassé⟨attention⟩ · peut modifier⟨attenue⟩
+✗⟨erreur⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩injoignable⟨erreur⟩ · rien n’a tourné⟨attenue⟩
+# largeurs : 41 56 12 73 64 64
+## ligne d’état et étiquette
+état : (aucune)
+pied : clair ✗ 3

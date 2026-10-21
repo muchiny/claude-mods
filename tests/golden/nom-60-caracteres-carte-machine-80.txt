@@ -20,11 +20,11 @@ dernier appel sur ⟨attenue⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ○⟨attenue⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ ⟨texte⟩en cours⟨accent⟩
 # largeurs : 110 80 79 71
 ## carte ajustée (80 colonnes)
-machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩2 appels⟨texte⟩ …⟨attenue⟩
+machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩… · ⟨attenue⟩2 appels⟨texte⟩ · ⟨attenue⟩●⟨accent⟩ ssh_disk_usage⟨texte⟩
 dernier appel sur ⟨attenue⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ :⟨attenue⟩
 ●⟨accent⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩ssh_disk_usage⟨texte⟩
 ○⟨attenue⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ ⟨texte⟩en cours⟨accent⟩
-# largeurs : 73 80 79 71
+# largeurs : 80 80 79 71
 ## ligne d’état et étiquette
 état : (aucune)
 pied : clair ✗ 3

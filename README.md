@@ -91,7 +91,7 @@ et publie le rapport HTML en artefact.
 
 #### Mutation rapide sous Bun
 
-`npm run mutate:pure` (`stryker.pure.json`) rejoue `mode-clair/tests/pure` sous `bun test` : le
+`npm run mutate:pure` (`stryker.pure.json`) rejoue `mode-clair/tests/pure`, `tests/golden`, `tests/props` et `tests/width` sous `bun test` (pas `tests/dev` : ces tests lisent des fichiers du dépôt que Stryker décale dans son bac à sable, par exemple `register.tsx` coiffé de `// @ts-nocheck`) : le
 processus lit lui-même `__STRYKER_ACTIVE_MUTANT__`, plus besoin de copie jetable. Le rapport est dans
 `reports/mutation-pure/`. Lance-le avec `TMPDIR=/var/tmp` et un peu de mémoire libre.
 

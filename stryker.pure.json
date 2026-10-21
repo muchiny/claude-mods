@@ -2,7 +2,7 @@
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
   "testRunner": "command",
   "commandRunner": {
-    "command": "PROPS_SEED=42 bun test ./mode-clair/tests/pure ./tests"
+    "command": "PROPS_SEED=42 bun test ./mode-clair/tests/pure ./tests/golden ./tests/props ./tests/width"
   },
   "coverageAnalysis": "off",
   "mutate": ["mode-clair/hooks/**/*.ts", "!mode-clair/hooks/tools.generated.ts"],
