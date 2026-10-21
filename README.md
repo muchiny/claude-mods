@@ -1,6 +1,7 @@
 # claude-mods
 
 [![CI](https://github.com/muchiny/claude-mods/actions/workflows/ci.yml/badge.svg)](https://github.com/muchiny/claude-mods/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/muchiny/claude-mods/badge)](https://scorecard.dev/viewer/?uri=github.com/muchiny/claude-mods)
 
 Mods pour [Claude Code](https://code.claude.com) : des plugins qui changent
 l'interface de Claude Code lui-même (bande au-dessus de la saisie, panneau,
