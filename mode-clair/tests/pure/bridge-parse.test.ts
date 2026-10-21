@@ -687,6 +687,29 @@ describe('usefulLines : séquences de contrôle', () => {
     expect(usefulLines('a\rb\r\rc')).toEqual(['c'])
   })
 
+  // Sortie distante non fiable : aucune expression ne doit être quadratique (200 000 = 13 s avant le correctif, 160 000 CR).
+  test('entrées adverses de 200 000 caractères : linéaire et exact', () => {
+    const N = 200_000
+    const cases: [string, string[]][] = [
+      [`${'\r'.repeat(N)}x`, ['x']],
+      [`x${'\r'.repeat(N)}`, ['x']],
+      [`${'\r'.repeat(N)}\nx`, ['x']],
+      ['\x1b'.repeat(N), []],
+      ['\x1b]'.repeat(N), [']'.repeat(N)]],
+      [`\x1b]${'a'.repeat(N)}`, [`]${'a'.repeat(N)}`]],
+      [`\x1b[${'0'.repeat(N)}`, [`[${'0'.repeat(N)}`]],
+      ['\x1b['.repeat(N), ['['.repeat(N)]],
+      [`\x1b[${';'.repeat(N)}`, [`[${';'.repeat(N)}`]],
+      [`a${' '.repeat(N)}b`, [`a${' '.repeat(N)}b`]],
+    ]
+    for (const [input, want] of cases) {
+      const t0 = performance.now()
+      const got = usefulLines(input)
+      expect(performance.now() - t0).toBeLessThan(1000)
+      expect(got).toEqual(want)
+    }
+  })
+
   test('CSI autre que SGR retiré', () => {
     expect(usefulLines('x\x1b[2Ky')).toEqual(['xy'])
     expect(usefulLines('\x1b[31mrouge\x1b[0m')).toEqual(['rouge'])

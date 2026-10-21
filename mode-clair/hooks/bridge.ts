@@ -531,6 +531,13 @@ const OSC = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g
 // biome-ignore lint/suspicious/noControlCharactersInRegex: c'est précisément ce qu'on retire
 const CONTROLS = /[\x00-\x08\x0b-\x1f\x7f-\x9f]/g
 
+/** Ce qui suit le dernier \r de la ligne, \r finaux exclus. Linéaire : pas d'expression à ancre finale (quadratique sur une suite de \r). */
+function afterLastCr(line: string): string {
+  let end = line.length
+  while (line[end - 1] === '\r') end -= 1
+  return line.slice(line.lastIndexOf('\r', end - 1) + 1, end)
+}
+
 /**
  * Texte tel qu'un terminal l'afficherait, sans ses commandes : séquences CSI et OSC retirées, puis tout
  * caractère C0 (sauf \n et \t), DEL et C1. Un \r non suivi de \n ramène au début de la ligne : seul ce
@@ -538,14 +545,7 @@ const CONTROLS = /[\x00-\x08\x0b-\x1f\x7f-\x9f]/g
  * sans rien après lui n'efface rien (un terminal garde le texte).
  */
 export function stripControls(text: string): string {
-  return text
-    .replace(OSC, '')
-    .replace(CSI, '')
-    .split('\n')
-    .map((line) => line.replace(/\r+$/, ''))
-    .map((line) => line.slice(line.lastIndexOf('\r') + 1))
-    .join('\n')
-    .replace(CONTROLS, '')
+  return text.replace(OSC, '').replace(CSI, '').split('\n').map(afterLastCr).join('\n').replace(CONTROLS, '')
 }
 
 /** Ligne du journal tracing de bridge-mcp, couleur retirée (amendement A3, bridge-facts §0.1.1). */
