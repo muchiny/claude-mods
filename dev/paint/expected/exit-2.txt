@@ -1,0 +1,9 @@
+# bridge-mcp tool ssh_exec host=host-a command=… (faux bridge : « [exit:2] », code 6) puis /clair.
+# Pas encore observé (scénario avec modèle) : plages de lignes, à resserrer au premier passage.
+repere: ❯ /clair
++1..+6: host-a
++1..+6: code 2
+signe: ✓
+signe: ✗
+signe: ?
+absent: clair ✗

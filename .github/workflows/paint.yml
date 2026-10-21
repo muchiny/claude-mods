@@ -1,0 +1,114 @@
+name: Peinture
+
+# Peinture du vrai terminal (dev/paint/) : Claude Code réel dans un pty, octets rejoués dans
+# @xterm/headless + addon-unicode11, grille comparée à dev/paint/expected/. Hebdomadaire, à la demande,
+# et sur les PR qui touchent le banc. Un écart hebdomadaire ou à la demande ouvre une issue (job report) ;
+# il ne bloque aucune PR qui ne touche pas le banc.
+#
+# Sans identifiant, la session s'ouvre (« Not logged in ») et les scénarios sans modèle tournent. Si un
+# écran de connexion bloque quand même, drive.ts écrit « ::notice::peinture sautée : connexion requise »
+# et le job réussit. Les scénarios avec modèle (Haiku, faux bridge-mcp) ne tournent que si le secret
+# ANTHROPIC_API_KEY existe.
+on:
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'dev/paint/**'
+      - '.github/workflows/paint.yml'
+
+permissions: {}
+
+concurrency:
+  group: paint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  paint:
+    name: peinture (${{ matrix.claude }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # Version minimale annoncée par le mod, et la dernière.
+        claude: ['2.1.296', latest]
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      # node-pty se compile ici (pas de binaire précompilé Linux) : g++, make et python3 du runner.
+      - run: npm ci
+
+      - name: Install Claude Code
+        env:
+          CLAUDE_VERSION: ${{ matrix.claude }}
+        run: npm install -g "@anthropic-ai/claude-code@${CLAUDE_VERSION}"
+
+      - run: claude --version
+
+      # HOME jetable sous $RUNNER_TEMP, sorties dans $RUNNER_TEMP/paint-out (drive.ts).
+      - name: Peinture
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: npm run paint
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: paint-${{ matrix.claude }}
+          path: ${{ runner.temp }}/paint-out
+          if-no-files-found: ignore
+
+  # Seul job qui écrit : une issue par exécution hebdomadaire ou à la demande en échec, avec les écarts
+  # et le lien vers les artefacts (octets + grille texte).
+  report:
+    name: issue sur échec
+    needs: paint
+    if: failure() && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      issues: write
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh run download "$RUN_ID" -R "$REPO" -D "$RUNNER_TEMP/paint" || true
+          {
+            echo "La peinture du vrai terminal a échoué : $RUN_URL"
+            echo
+            echo "Artefacts \`paint-<version>\` : octets rejoués (\`<scénario>.bin\`), tous les octets (\`.full.bin\`), grille texte (\`.grid.txt\`)."
+            for f in "$RUNNER_TEMP"/paint/*/*.ecarts.txt; do
+              [ -s "$f" ] || continue
+              echo
+              echo "### $(basename "$(dirname "$f")") / $(basename "$f" .ecarts.txt)"
+              echo
+              echo '```'
+              cat "$f"
+              echo '```'
+            done
+          } > "$RUNNER_TEMP/body.md"
+          gh issue create -R "$REPO" --title "Peinture du terminal : écarts (exécution $RUN_ID)" --body-file "$RUNNER_TEMP/body.md"

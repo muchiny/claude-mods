@@ -1,0 +1,7 @@
+# bridge-mcp exec host-z uptime (faux bridge : « Error: Unknown host: host-z », code 3) puis /clair.
+# Pas encore observé (scénario avec modèle) : plages de lignes, à resserrer au premier passage.
+repere: ❯ /clair
++1..+8: machine inconnue
+signe: ✓
+signe: ✗
+signe: ?
