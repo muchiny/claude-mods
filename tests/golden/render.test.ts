@@ -1,6 +1,15 @@
 import { describe, expect, test } from 'claude-code/testing'
 import stringWidth from 'string-width'
-import { bandLines, callLine, cardLines, cardText, modeLabel, parseCard, statusText } from '../../mode-clair/hooks/view'
+import {
+  bandLines,
+  callLine,
+  cardLines,
+  cardText,
+  fit,
+  modeLabel,
+  parseCard,
+  statusText,
+} from '../../mode-clair/hooks/view'
 import { CASES, type Case } from './cases'
 // @ts-expect-error module .mjs sans déclaration de types
 import { readGolden, updating, writeGolden } from './io.mjs'
@@ -12,6 +21,11 @@ function render(c: Case): string {
   const parts = [`## bande (${ctx.columns} colonnes)`, serialize(bandLines(state, ctx))]
   for (const k of state.calls) parts.push(`## appel ${k.id}`, serialize([callLine(k, state, ctx.columns)]))
   parts.push('## carte /clair', serialize(cardLines(state, c.args ?? '', ctx.now)))
+  if (c.fitCard === true)
+    parts.push(
+      `## carte ajustée (${ctx.columns} colonnes)`,
+      serialize(cardLines(state, c.args ?? '', ctx.now).map((l) => fit(l, ctx.columns, true))),
+    )
   parts.push(
     '## ligne d’état et étiquette',
     `état : ${statusText(state) ?? '(aucune)'}`,

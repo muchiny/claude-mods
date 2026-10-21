@@ -1,0 +1,30 @@
+## bande (120 colonnes)
+●⟨accent⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩ssh_disk_usage⟨texte⟩
+# largeurs : 79
+## appel toolu_1#0
+✗⟨erreur⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩injoignable⟨erreur⟩ · rien n’a tourné⟨attenue⟩
+# largeurs : 94
+## appel toolu_2#0
+✗⟨attention⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩délai dépassé⟨attention⟩ · peut modifier⟨attenue⟩
+# largeurs : 94
+## appel toolu_3#0
+✗⟨erreur⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩injoignable⟨erreur⟩ · rien n’a tourné⟨attenue⟩
+# largeurs : 94
+## appel toolu_4#0
+●⟨accent⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩ssh_disk_usage⟨texte⟩
+# largeurs : 79
+## carte /clair
+machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩2 appels⟨texte⟩ · ⟨attenue⟩●⟨accent⟩ ssh_disk_usage⟨texte⟩ · ⟨attenue⟩✗⟨erreur⟩ ⟨texte⟩problème non vu⟨erreur⟩
+dernier appel sur ⟨attenue⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ :⟨attenue⟩
+●⟨accent⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩ssh_disk_usage⟨texte⟩
+○⟨attenue⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ ⟨texte⟩en cours⟨accent⟩
+# largeurs : 110 80 79 71
+## carte ajustée (120 colonnes)
+machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩2 appels⟨texte⟩ · ⟨attenue⟩●⟨accent⟩ ssh_disk_usage⟨texte⟩ · ⟨attenue⟩✗⟨erreur⟩ ⟨texte⟩problème non vu⟨erreur⟩
+dernier appel sur ⟨attenue⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ :⟨attenue⟩
+●⟨accent⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩ssh_disk_usage⟨texte⟩
+○⟨attenue⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ ⟨texte⟩en cours⟨accent⟩
+# largeurs : 110 80 79 71
+## ligne d’état et étiquette
+état : (aucune)
+pied : clair ✗ 3

@@ -5,7 +5,7 @@ import { EMPTY } from '../../mode-clair/hooks/state'
 import type { Ctx } from '../../mode-clair/hooks/view'
 import type { BridgeCall, ClairState, Superpowers, Workflow } from '../../mode-clair/types'
 
-export type Case = { name: string; state: ClairState; ctx: Ctx; args?: string }
+export type Case = { name: string; state: ClairState; ctx: Ctx; args?: string; fitCard?: boolean }
 
 export const COLUMNS = [40, 80, 120, 200] as const
 
@@ -86,7 +86,14 @@ const FULL_CARD = stateOf(
   { seenAt: 2_500, superpowers: plan(), workflows: [workflow()] },
 )
 
-const BASES: { name: string; state: ClairState; isWorking?: boolean; args?: string }[] = [
+const LONG_CARD = stateOf([
+  nth(1, { host: LONG_HOST, state: 'injoignable' }),
+  nth(2, { host: LONG_HOST, tool: 'ssh_file_write', nature: 'peut-modifier', state: 'delai-depasse' }),
+  nth(3, { host: LONG_HOST, state: 'injoignable', accord: 'formulaire-oui' }),
+  running(4, { host: LONG_HOST }),
+])
+
+const BASES: { name: string; state: ClairState; isWorking?: boolean; args?: string; fitCard?: boolean }[] = [
   { name: 'repos', state: EMPTY, isWorking: false },
   { name: 'appel-en-cours', state: stateOf([running(1)]) },
   { name: 'fait-lecture', state: stateOf([nth(1)]) },
@@ -131,6 +138,9 @@ const BASES: { name: string; state: ClairState; isWorking?: boolean; args?: stri
     name: 'nom-60-caracteres',
     state: stateOf([nth(1, { host: LONG_HOST }), running(2, { host: LONG_HOST, tool: 'ssh_disk_usage' })]),
   },
+  // La carte telle que register.tsx la dessine : chaque ligne passe par fit(ligne, colonnes, true) (D4, R93).
+  { name: 'nom-60-caracteres-carte', state: LONG_CARD, fitCard: true },
+  { name: 'nom-60-caracteres-carte-machine', state: LONG_CARD, args: LONG_HOST, fitCard: true },
   { name: 'carte-pleine', state: FULL_CARD },
   { name: 'carte-pleine-machine', state: FULL_CARD, args: 'host-b' },
   {
@@ -156,5 +166,6 @@ export const CASES: Case[] = BASES.flatMap((b) =>
     state: b.state,
     ctx: { now: 10_000, columns, isWorking: b.isWorking ?? true },
     ...(b.args === undefined ? {} : { args: b.args }),
+    ...(b.fitCard === true ? { fitCard: true } : {}),
   })),
 )
