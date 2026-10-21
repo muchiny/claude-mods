@@ -748,6 +748,12 @@ function fromHostEntry(entry: JsonObject, truncated: boolean): Outcome {
   return typeof code === 'number' && code !== 0 ? { state: 'code', code, truncated } : { state: 'fait', truncated }
 }
 
+/**
+ * Plus grand code de sortie que bridge-mcp écrit (bridge-mcp src/main.rs:59, :195, :204 ; src/cli/runner.rs:111-116).
+ * Au-delà (124 de `timeout`, 127, 130, 137…), le code vient d'un enrobage : incertain (arbitrage Q2, REFERENCE R52).
+ */
+const BRIDGE_EXIT_MAX = 6
+
 /** Code de la sous-commande exec : bloc `Exit code: N` (§3.10), sinon `"exit_code":N` de `exec --json` (§1.4). */
 function execCode(lines: readonly string[]): number | undefined {
   for (const line of lines) {
@@ -766,6 +772,7 @@ function classifySubcommand(tool: string, exit: number, lines: readonly string[]
   if (code !== undefined && (code !== 0 || exit === 0)) {
     return code === 0 ? { state: 'fait', truncated } : { state: 'code', code, truncated }
   }
+  if (exit > BRIDGE_EXIT_MAX) return { state: 'incertain', truncated }
   return exit === 0 ? { state: 'fait', truncated } : failed(headOf(lines), truncated)
 }
 
@@ -802,8 +809,11 @@ function classifyCli(p: ParsedCall, lines: readonly string[], isError: boolean, 
       return info?.codeWithoutError === true
         ? codeOutcome(remoteCode(body, info), truncated)
         : ranAndFailed(body, truncated)
-    default:
+    case 1:
       return failed(headOf(body), truncated)
+    default:
+      // Code au-delà de BRIDGE_EXIT_MAX, que la CLI n'écrit pas (arbitrage Q2) : rien n'est attribuable au bridge.
+      return { state: 'incertain', truncated }
   }
 }
 

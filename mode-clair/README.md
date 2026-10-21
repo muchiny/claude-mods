@@ -38,7 +38,8 @@ un nom de machine ou une nature (lecture, peut modifier) que si l'événement le
 prouve. Sinon :
 
 - résultat qu'il ne peut pas attribuer (par exemple un appel qui n'est pas la
-  dernière commande d'une ligne Bash, ou un appel dans une boucle) :
+  dernière commande d'une ligne Bash, un appel dans une boucle, ou un code de
+  sortie que bridge-mcp n'écrit pas, comme 124 quand `timeout` l'a tué) :
   `? incertain` ;
 - machine qu'il ne peut pas lire (variable du shell `host=$H`, session ssh
   dont il n'a pas vu l'ouverture) : `machine inconnue` ;

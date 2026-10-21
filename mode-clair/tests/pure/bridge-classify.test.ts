@@ -836,8 +836,9 @@ describe('ancres des textes : un texte au milieu d’une ligne n’est pas lu', 
   })
 
   test('« Exit code N » : la ligne entière, sur tout le nombre', () => {
+    // 12 lu en entier (pas 1) : code que la CLI n'écrit pas → incertain, la table des textes n'est pas lue.
     expect(classify(cli('ssh_service_status'), ko('Exit code 12\nError: Unknown host: x'), TOOLS)).toEqual({
-      state: 'machine-inconnue',
+      state: 'incertain',
       truncated: false,
     })
     expect(classify(cli('ssh_service_status'), ko('Exit code 1 de plus\nfoo'), TOOLS)).toStrictEqual({
@@ -1170,5 +1171,43 @@ describe('classify : isError l’emporte sur un « Exit code 0 » contradictoire
 
   test('sans erreur, « Exit code 0 » reste fait', () => {
     expect(classify(cli('ssh_disk_usage'), ok('Exit code 0'), TOOLS)).toStrictEqual({ state: 'fait', truncated: false })
+  })
+})
+
+// Arbitrage Q2 (2026-10-21, tâche 8) : bridge-mcp ne sort qu'avec 0 à 6 (bridge-mcp src/main.rs:59, :195, :204 ;
+// src/cli/runner.rs:111-116). Tout autre code (124 de `timeout`, 127, 130, 137, 101…) n'est pas attribuable au
+// bridge : la commande distante a pu tourner avant qu'un enrobage tue le processus. REFERENCE R52 : incertain.
+describe('classify : code de sortie que la CLI n’écrit pas → incertain', () => {
+  for (const code of [7, 101, 124, 127, 130, 137])
+    test(`outil CLI, Exit code ${code} → incertain, jamais ✗`, () => {
+      expect(
+        classify(cli('ssh_disk_usage'), ko(bash(code, 'Error: SSH connection failed to raspberry')), TOOLS),
+      ).toStrictEqual({ state: 'incertain', truncated: false })
+    })
+
+  test('exec sans bloc, Exit code 124 → incertain', () => {
+    expect(classify(cli('exec'), ko(bash(124, 'Terminated')), TOOLS)).toStrictEqual({
+      state: 'incertain',
+      truncated: false,
+    })
+  })
+
+  test('upload, Exit code 127 → incertain', () => {
+    expect(classify(cli('upload'), ko(bash(127, 'bridge-mcp: command not found')), TOOLS)).toStrictEqual({
+      state: 'incertain',
+      truncated: false,
+    })
+  })
+
+  test('upload, Exit code 6 (le plus grand code du bridge) → échec, pas incertain', () => {
+    expect(classify(cli('upload'), ko(bash(6, 'Error: boom')), TOOLS)).toStrictEqual({
+      state: 'echec',
+      truncated: false,
+      reason: 'boom',
+    })
+  })
+
+  test('exec avec bloc « Exit code: 3 » sous Exit code 124 : le bloc prouve le code distant', () => {
+    expect(classify(cli('exec'), ko(bash(124, 'Exit code: 3')), TOOLS)).toMatchObject({ state: 'code', code: 3 })
   })
 })
