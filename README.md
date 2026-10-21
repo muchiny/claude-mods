@@ -117,9 +117,27 @@ processus lit lui-même `__STRYKER_ACTIVE_MUTANT__`, plus besoin de copie jetabl
 | --- | --- |
 | `static` | Biome (`--error-on-warnings`), `tsc`, `npm audit` (échec à partir de « high ») |
 | `coverage` | 100 % des lignes et des fonctions des modules purs (`bun test --coverage`) |
+| `props-golden` | `bun test ./tests` (propriétés à graine fixe, goldens, outils de dev) et forme de `tools.generated.ts` |
+| `mod (2.1.296, node 22)` | `claude plugin validate` (marketplace et mod), `claude plugin test` sur la version minimale annoncée |
+| `mod (latest, node 24)` | les mêmes contrôles sur la dernière version de Claude Code |
 | `mutation-pr` | mutation des lignes de hooks modifiées par la PR, aucun survivant toléré |
-| `mod` | `claude plugin validate` (marketplace et mod), `claude plugin test` |
-| `hygiene` | aucun chemin personnel ni secret dans ce dépôt public |
+| `hygiene` | aucun chemin personnel ni secret, fixtures anonymes, gitleaks sur l'historique |
+| `actions-lint` | `actionlint` (binaire épinglé, somme SHA-256 vérifiée) et `zizmor` (`--min-severity medium`) sur les workflows |
+
+Les workflows n'ont aucune permission par défaut (`permissions: {}`, puis `contents: read` par job),
+`actions/checkout` ne garde pas le jeton, `step-security/harden-runner` tourne en mode audit en
+premier pas de chaque job, et chaque action est épinglée par son SHA complet (version en commentaire).
+Renovate (`renovate.json`) propose les mises à jour, groupées (`dev-tooling`, `github-actions`), après
+14 jours de mûrissement ; l'application Renovate doit être installée sur le dépôt. Les noms de jobs
+ci-dessus sont ceux à exiger dans la protection de la branche `main`.
+
+#### Régénérer `tools.generated.ts`
+
+`mode-clair/hooks/tools.generated.ts` (nature, hôte, session de chaque outil de bridge-mcp) n'a pas de
+générateur dans ce dépôt : il est produit à partir de la sortie de `bridge-mcp --json list-tools`
+(tous les groupes activés), puis recopié ici avec `BRIDGE_VERSION` et `GENERATED_AT`. Après
+régénération, `node dev/check-tools.mjs` vérifie sa forme (chaque entrée : `hostless`, `multi`,
+`session`, `codeWithoutError` booléens, `nature` ∈ `lecture` ou `peut-modifier`) ; la CI le lance.
 
 Pour écrire un autre mod, ajoute un dossier à la racine avec son
 `.claude-plugin/plugin.json`, puis déclare-le dans

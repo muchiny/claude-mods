@@ -1,0 +1,24 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "minimumReleaseAge": "14 days",
+  "rangeStrategy": "pin",
+  "packageRules": [
+    {
+      "description": "Outillage de développement (devDependencies npm)",
+      "groupName": "dev-tooling",
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["@biomejs/biome", "@stryker-mutator/**", "typescript", "bun", "fast-check", "string-width"]
+    },
+    {
+      "description": "Actions GitHub épinglées par SHA",
+      "groupName": "github-actions",
+      "matchManagers": ["github-actions"]
+    },
+    {
+      "description": "Claude Code s'installe en CI (matrice 2.1.296 / latest), ce n'est pas une dépendance du dépôt",
+      "matchPackageNames": ["@anthropic-ai/claude-code"],
+      "enabled": false
+    }
+  ]
+}

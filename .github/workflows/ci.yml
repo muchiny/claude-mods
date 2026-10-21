@@ -6,8 +6,7 @@ on:
   pull_request:
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -15,13 +14,21 @@ concurrency:
 
 jobs:
   static:
-    name: Lint, format, types
+    name: static
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
 
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
@@ -40,13 +47,21 @@ jobs:
         run: npm audit --audit-level=high
 
   coverage:
-    name: Coverage (modules purs)
+    name: coverage
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
 
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
@@ -62,16 +77,23 @@ jobs:
         run: npm run test:dev
 
   mutation-pr:
-    name: Mutation (lignes modifiées)
+    name: mutation-pr
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
@@ -85,20 +107,103 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: node dev/mutation-gate.mjs --base "origin/$BASE_REF"
 
-  mod:
-    name: Validate and test
+  props-golden:
+    name: props-golden
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
 
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
+          cache: npm
 
-      # Les mods demandent Claude Code 2.1.296 ou plus récent.
+      - run: npm ci
+
+      # tests/ : propriétés fast-check (graine 42, 200 exécutions), goldens de rendu, outils de dev.
+      - name: Propriétés, goldens, outils de développement
+        run: npm run test:dev
+
+      # tools.generated.ts vient de `bridge-mcp --json list-tools` (pas de générateur dans le dépôt) :
+      # on vérifie seulement sa forme.
+      - name: Forme de tools.generated.ts
+        run: node dev/check-tools.mjs
+
+  actions-lint:
+    name: actions-lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # actionlint : binaire officiel vérifié par sa somme SHA-256
+      # (actionlint_1.7.12_checksums.txt de la release v1.7.12).
+      - name: actionlint
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/actionlint.tar.gz" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -color
+
+      - name: zizmor
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pipx run zizmor==1.30.1 --min-severity medium .github/workflows
+
+  mod:
+    name: mod (${{ matrix.claude }}, node ${{ matrix.node }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # Deux couples (version minimale annoncée par le mod / dernière version), pas un produit croisé.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - claude: '2.1.296'
+            node: 22
+          - claude: latest
+            node: 24
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+
+      # Les mods demandent Claude Code 2.1.296 ou plus récent : on teste ce minimum et latest.
       - name: Install Claude Code
-        run: npm install -g @anthropic-ai/claude-code@latest
+        env:
+          CLAUDE_VERSION: ${{ matrix.claude }}
+        run: npm install -g "@anthropic-ai/claude-code@${CLAUDE_VERSION}"
 
       - run: claude --version
 
@@ -112,13 +217,20 @@ jobs:
         run: claude plugin test mode-clair
 
   hygiene:
-    name: Public repository hygiene
+    name: hygiene
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       # Ce dépôt est public : aucun chemin personnel ni secret ne doit y entrer.
       - name: No personal paths or secret-like strings
