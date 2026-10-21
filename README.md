@@ -102,6 +102,12 @@ processus lit lui-même `__STRYKER_ACTIVE_MUTANT__`, plus besoin de copie jetabl
   de `mutation.yml` lance `npm run mutate:pure` puis `node dev/mutation-floors.mjs
   reports/mutation-pure/mutation.json` : code 1 sous un plancher ; `--write` relève les planchers
   qu'un module dépasse.
+- **Durée de la mutation complète** : instrumentés par Stryker, les tests de `tests/props` et `tests/width` passent de 2 s
+  à environ 27 s ; avec 4 233 mutants et `coverageAnalysis: off` (runner `command`), `npm run mutate:pure` demande une
+  quinzaine d'heures à concurrence 2 : trop pour le job `floors` (60 min). Sur cette machine, seul `cells.ts` a été
+  mesuré à part (136 mutants, 100 %, 7 min : `mutate` ciblé sur `cells.ts` avec `pure/cells`, `pure/view`, `width` et
+  `golden`). Les autres planchers restent ceux de la dernière mesure complète ; à répartir par module (comme la matrice
+  de `mutation.yml`) avant de compter sur le job `floors`.
 - **Délai d'un mutant** : `timeoutMS` vaut 3000 ms. Des mutants de la boucle du découpeur shell de
   `bridge.ts` tournent à l'infini ; à 30 s chacun, la mutation complète dépasserait 8 h (12 min à
   3 s). Stryker compte un timeout comme un mutant tué : les planchers sont donc légèrement indulgents.
