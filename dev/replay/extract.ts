@@ -11,10 +11,11 @@
 //                      de l'échantillon par l'utilisateur)
 //   --sample <fichier> échantillon lisible de 10 scénarios tirés au hasard (défaut :
 //                      /var/tmp/replay-real/sample-10.md)
-//   --denylist <f>     liste noire (défaut : ~/.config/claude-mods/denylist.txt, obligatoire)
+//   --denylist <f>     liste noire (défaut : ~/.config/claude-mods/denylist.txt) : obligatoire, mode
+//                      600, au moins une entrée
 //
-// REPLAY_DEBUG=1 : relève tous les refus et montre les mots refusés (console locale seulement), puis
-// échoue sans rien écrire.
+// REPLAY_DEBUG=1 : relève tous les refus (champ et classe du mot, jamais le mot), puis échoue sans
+// rien écrire.
 //
 // Exécuté par bun, hors du programme TypeScript du dépôt (pas de types Node) ; select.ts et
 // anonymize.ts, purs, sont vérifiés par tsc et testés dans tests/dev.
@@ -178,22 +179,49 @@ function sampleOf(scenarios: readonly Scenario[], n: number): string {
   return `${lines.join('\n')}\n`
 }
 
+/**
+ * Liste noire : le fichier doit exister, n'être lisible que par son propriétaire (mode 600 ou plus
+ * strict) et porter au moins une entrée ; sinon l'extraction échoue (porte fermée par défaut).
+ */
+function readDenylist(path: string): string[] {
+  let mode: number
+  let text: string
+  try {
+    mode = statSync(path).mode
+    text = readFileSync(path, 'utf8')
+  } catch {
+    fail('liste noire absente ou illisible (~/.config/claude-mods/denylist.txt)')
+  }
+  if ((mode & 0o077) !== 0) fail('liste noire lisible par d’autres que son propriétaire : chmod 600')
+  const entries = text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l !== '' && !l.startsWith('#'))
+  if (entries.length === 0) fail('liste noire sans entrée')
+  return entries
+}
+
+/** Classe d'un mot refusé, sans le mot : longueur et écriture. */
+function wordClass(word: string): string {
+  const script = /^[a-z]+$/.test(word)
+    ? 'minuscules'
+    : /^[A-Za-z]+$/.test(word)
+      ? 'lettres'
+      : /^[A-Za-z0-9]+$/.test(word)
+        ? 'alphanumérique'
+        : 'non-ASCII'
+  return `${script}/${word.length}`
+}
+
 async function main() {
   const o = options(process.argv.slice(2))
+  if (o.commitOk && o.out !== undefined) fail('--out et --commit-ok ensemble : choisir l’un des deux')
   const out = o.commitOk ? REPO_OUT : resolve(o.out ?? join(PRIVATE_DIR, 'scenarios.generated.ts'))
   if (!o.commitOk && inside(out, REPO)) fail('sortie dans le dépôt sans --commit-ok')
   const samplePath = resolve(o.sample ?? join(PRIVATE_DIR, 'sample-10.md'))
   if (inside(samplePath, REPO)) fail('échantillon dans le dépôt : interdit')
   const denyPath = o.denylist ?? join(homedir(), '.config/claude-mods/denylist.txt')
-  let denylist: string[] = []
-  try {
-    denylist = readFileSync(denyPath, 'utf8')
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l !== '' && !l.startsWith('#'))
-  } catch {
-    fail('liste noire illisible (~/.config/claude-mods/denylist.txt)')
-  }
+  const denylist = readDenylist(denyPath)
 
   const files = jsonlFiles(resolve(o.root))
   const seen = new Set<string>()
@@ -216,11 +244,11 @@ async function main() {
       const s = anonymize({ id, events: c.events, files: readFiles(c.filePaths) }, newDict())
       if (debug) {
         // Débogage local : tous les refus relevés, l'extraction échoue à la fin sans rien écrire.
-        for (const u of unknownWords(s))
-          refused.set(
-            `${u.where.replace(/\d+/g, 'N')} ${u.word}`,
-            (refused.get(`${u.where.replace(/\d+/g, 'N')} ${u.word}`) ?? 0) + 1,
-          )
+        // Le mot n'est jamais écrit : seulement son champ et sa classe.
+        for (const u of unknownWords(s)) {
+          const key = `${u.where.replace(/\d+/g, 'N')} ${wordClass(u.word)}`
+          refused.set(key, (refused.get(key) ?? 0) + 1)
+        }
         try {
           assertClean(JSON.stringify(s), denylist)
         } catch (e) {
@@ -244,9 +272,16 @@ async function main() {
   }
   scenarios.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   const text = format(`${HEADER}export const SCENARIOS: readonly Scenario[] = ${JSON.stringify(scenarios, null, 2)}\n`)
-  assertClean(text, denylist)
+  const sample = o.commitOk ? null : sampleOf(scenarios, 10)
+  try {
+    assertClean(text, denylist)
+    if (sample !== null) assertClean(sample, denylist)
+  } catch (e) {
+    fail(`sortie refusée : ${(e as Error).message}`)
+  }
+  // Toutes les vérifications sont passées : on écrit.
   write(out, text, o.commitOk ? 0o644 : 0o600)
-  if (!o.commitOk) write(samplePath, sampleOf(scenarios, 10), 0o600)
+  if (sample !== null) write(samplePath, sample, 0o600)
   process.stdout.write(
     `${JSON.stringify({ fichiers: files.length, fenêtres: windowsSeen, scénarios: scenarios.length, parType: counts, octets: Buffer.byteLength(text) })}\n`,
   )

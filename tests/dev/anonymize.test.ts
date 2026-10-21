@@ -469,3 +469,102 @@ describe('assertKnownForms : formes gardées', () => {
     expect(() => assertKnownForms(s)).not.toThrow()
   })
 })
+
+describe('durcissement (revue 1)', () => {
+  test('lorem remplace toute lettre et tout chiffre, ASCII ou non, en gardant la largeur', () => {
+    for (const text of ['Секретная фраза', '漢字と仮名', 'ｍａｃｈｉｎｅ', 'éèçà ŒÆ', '١٢٣']) {
+      const out = lorem(text)
+      expect(stringWidth(out)).toBe(stringWidth(text))
+      expect(out).toMatch(/^[a-z ]*$/)
+    }
+  })
+
+  test('une phrase entièrement cyrillique en sortie libre est remplacée', () => {
+    const s = anonymize(
+      scenario([call('mcp__ssh-bridge__ssh_ls', 'toolu_1', { host: M1 }, 'Секретная фраза здесь')]),
+      newDict(),
+    )
+    expect(textOf(calls(s)[0] as Call)).toMatch(/^[a-z ]+$/)
+  })
+
+  test('assertKnownForms refuse un mot non ASCII et un mot court non ASCII', () => {
+    const base = (description: string): Scenario => ({
+      id: 'essai-0004',
+      source: 'replay',
+      files: {},
+      events: [
+        {
+          t: 0,
+          kind: 'tool.call',
+          tool: 'Agent',
+          toolUseId: 'toolu_r0001',
+          input: { description },
+          result: { result: 'ok', text: 'ok' },
+          afterMs: 0,
+        },
+      ],
+    })
+    expect(() => assertKnownForms(base('Секретная'))).toThrow(/forme inconnue/)
+    expect(() => assertKnownForms(base('lorem 漢字'))).toThrow(/forme inconnue/)
+  })
+
+  test('assertClean : écriture pleine chasse d’une entrée et IPv4 pleine chasse', () => {
+    expect(() => assertClean('ｍａｃｈｉｎｅ－ｒｅｅｌｌｅ－１', DENY)).toThrow(/liste noire/)
+    expect(() => assertClean('vers １０．２０．３０．４０ ok', [])).toThrow(/IPv4/)
+  })
+
+  test('assertClean : séparateurs ignorés de part et d’autre', () => {
+    for (const text of [
+      'machine_reelle_1',
+      'machine.reelle.1',
+      'machine reelle 1',
+      'machinereelle1',
+      'MACHINE-REELLE-1',
+    ])
+      expect(() => assertClean(`x ${text} y`, DENY)).toThrow(/liste noire/)
+  })
+
+  test('nom d’outil hors de la liste du bridge remplacé ; outil connu gardé', () => {
+    const s = anonymize(
+      scenario([
+        call('Bash', 'toolu_1', { command: `bridge-mcp tool ssh_zorglub_secret host=${M1}` }, 'ok'),
+        call('Bash', 'toolu_2', { command: `bridge-mcp tool ssh_disk_usage host=${M1}` }, 'ok'),
+        call('mcp__autre-bridge-prive__ssh_ls', 'toolu_3', { host: M1 }, 'ok'),
+        call('mcp__ssh-bridge__ssh_zorglub_secret', 'toolu_4', { host: M1 }, 'ok'),
+      ]),
+      newDict(),
+    )
+    const [a, b, c, d] = calls(s)
+    expect(fields(a).command).not.toContain('zorglub')
+    expect(fields(b).command).toContain('tool ssh_disk_usage host=host-a')
+    expect(c?.tool).not.toContain('autre')
+    expect(c?.tool).not.toContain('prive')
+    expect(d?.tool.startsWith('mcp__ssh-bridge__')).toBe(true)
+    expect(d?.tool).not.toContain('zorglub')
+    expect(() => assertKnownForms(s)).not.toThrow()
+  })
+
+  test('assertKnownForms refuse un nom d’outil ou de serveur hors liste', () => {
+    const one = (tool: string, input: unknown): Scenario => ({
+      id: 'essai-0005',
+      source: 'replay',
+      files: {},
+      events: [
+        {
+          t: 0,
+          kind: 'tool.call',
+          tool,
+          toolUseId: 'toolu_r0001',
+          input,
+          result: { result: 'ok', text: 'ok' },
+          afterMs: 0,
+        },
+      ],
+    })
+    expect(() => assertKnownForms(one('Bash', { command: 'bridge-mcp tool ssh_zorglub_secret' }))).toThrow(
+      /forme inconnue/,
+    )
+    expect(() => assertKnownForms(one('mcp__prive-bridge__ssh_ls', {}))).toThrow(/forme inconnue/)
+    expect(() => assertKnownForms(one('mcp__ssh-bridge__ssh_ls', {}))).not.toThrow()
+  })
+})

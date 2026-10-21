@@ -12,8 +12,10 @@
 // du lorem). Leurs messages ne recopient jamais la chaîne trouvée.
 
 import type { ToolCallResult } from 'claude-code'
+import stringWidth from 'string-width'
 import { RECORDED_REFUSALS } from '../../mode-clair/tests/pure/engine-texts'
 import type { ReplayEvent, Scenario } from '../../mode-clair/tests/replay/scenarios.generated'
+import { BRIDGE_SERVER, BRIDGE_TOOLS } from './bridge-tools'
 
 // --- Types -------------------------------------------------------------------------------------
 
@@ -72,16 +74,29 @@ const CSI_ALL = /\x1b\[[0-?]*[ -/]*[@-~]/g
 // biome-ignore lint/suspicious/noControlCharactersInRegex: l'ESC (0x1b) et BEL (0x07) bornent la séquence, c'est voulu
 const OSC = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g
 
+/** Lettre, chiffre (de toute écriture) ou `@`, et marque combinante (sans largeur). */
+const LETTER = /[\p{L}\p{N}@]|\p{M}/gu
+
 /**
- * Lorem de même largeur en cellules : chaque lettre ou chiffre ASCII (et `@`) devient une lettre du
- * flux, le reste (espaces, ponctuation, caractères non ASCII, séquences CSI) est gardé à sa place.
+ * Lorem de même largeur en cellules : chaque lettre ou chiffre, ASCII ou non (et `@`), devient une
+ * lettre ASCII du flux, autant que de cellules (deux pour un caractère large) ; une marque combinante
+ * disparaît. Le reste (espaces, ponctuation, symboles, séquences CSI) est gardé à sa place.
  */
 export function lorem(text: string, offset = 0): string {
   let i = offset
+  const next = () => LOREM[i++ % LOREM.length] as string
   return text
     .replace(OSC, '')
     .split(CSI)
-    .map((part, k) => (k % 2 === 1 ? part : part.replace(/[A-Za-z0-9@]/g, () => LOREM[i++ % LOREM.length] as string)))
+    .map((part, k) =>
+      k % 2 === 1
+        ? part
+        : part.replace(LETTER, (ch) => {
+            if (/\p{M}/u.test(ch)) return ''
+            const cells = ch.charCodeAt(0) < 0x80 ? 1 : stringWidth(ch)
+            return cells === 2 ? next() + next() : cells === 0 ? '' : next()
+          }),
+    )
     .join('')
 }
 
@@ -229,8 +244,11 @@ const EXT = new Set([
   'csv',
 ])
 
+/** Un ou deux caractères ASCII : gardés (aucune information). */
+const SHORT_ASCII = /^[!-~]{1,2}$/
+
 function componentOf(dict: Dict, c: string, prev: string | undefined): string {
-  if (c === '' || c === '.' || c === '..' || c === '~' || c.length <= 2) return c
+  if (c === '' || c === '.' || c === '..' || c === '~' || SHORT_ASCII.test(c)) return c
   if (prev === 'home') return 'user'
   if (STRUCT.has(c)) return c
   if (UUID.test(c)) return uuidOf(dict, c)
@@ -238,7 +256,7 @@ function componentOf(dict: Dict, c: string, prev: string | undefined): string {
   const hasExt = dot > 0 && EXT.has(c.slice(dot + 1))
   const base = hasExt ? c.slice(0, dot) : c
   const ext = hasExt ? c.slice(dot) : ''
-  if (STRUCT.has(base) || base.length <= 2) return base + ext
+  if (STRUCT.has(base) || SHORT_ASCII.test(base)) return base + ext
   if (UUID.test(base)) return uuidOf(dict, base) + ext
   const host = dict.hosts.get(base)
   if (host !== undefined) return host + ext
@@ -621,11 +639,9 @@ function requote(q: string, inner: string): string {
   return q + inner + q
 }
 
-const TOOL_SHAPE = /^(?:ssh|win|mcp)_[a-z0-9_]+$/
-
 /** Nom d'outil du bridge gardé ; tout autre nom devient du lorem. */
 function toolName(name: string): string {
-  return TOOL_SHAPE.test(name) ? name : lorem(name)
+  return BRIDGE_TOOLS.has(name) ? name : lorem(name)
 }
 
 function isPathLike(word: string): boolean {
@@ -678,7 +694,7 @@ function argValue(dict: Dict, kind: Seg['expect'], word: string): string {
 /** `k=v` d'un outil du bridge : clé gardée si connue, valeur selon la clé. */
 function toolArg(dict: Dict, word: string): string {
   const m = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/s.exec(word)
-  if (m === null) return TOOL_SHAPE.test(word) ? word : lorem(word)
+  if (m === null) return BRIDGE_TOOLS.has(word) ? word : lorem(word)
   const key = String(m[1])
   const value = String(m[2])
   const { q, inner } = unquote(value)
@@ -730,7 +746,7 @@ function bridgeWord(dict: Dict, seg: Seg, word: string): string {
     if (seg.sub !== 'exec' && isPathLike(unquote(word).inner)) return argValue(dict, 'path', word)
     return lorem(word)
   }
-  return TOOL_SHAPE.test(word) ? word : lorem(word)
+  return BRIDGE_TOOLS.has(word) ? word : lorem(word)
 }
 
 function otherWord(dict: Dict, word: string): string {
@@ -882,7 +898,7 @@ export function bridgeCalls(command: string): { sub: string; tool: string }[] {
       if (seg.mode === 'bridge' && found.length > 0) {
         const last = found[found.length - 1] as { sub: string; tool: string }
         if (seg.sub !== undefined) last.sub = SUBCOMMANDS.has(seg.sub) ? seg.sub : '?'
-        if (seg.tool !== undefined) last.tool = TOOL_SHAPE.test(seg.tool) ? seg.tool : '?'
+        if (seg.tool !== undefined) last.tool = BRIDGE_TOOLS.has(seg.tool) ? seg.tool : '?'
       }
       if (seg.mode === 'shell' && seg.shellC === false && atStart === false) {
         const { q, inner } = unquote(p.text)
@@ -1229,7 +1245,7 @@ function anonValue(dict: Dict, key: string, value: unknown): unknown {
   if (PATH_KEYS.has(key) || (key === 'path' && isPathLike(value))) return pathOf(dict, value)
   if (ENUM_KEYS.has(key)) return enumOf(value)
   if (key === 'skill' || key === 'commandName') return skillOf(dict, value)
-  if (key === 'name') return TOOL_SHAPE.test(value) ? value : labelOf(dict, value)
+  if (key === 'name') return BRIDGE_TOOLS.has(value) ? value : labelOf(dict, value)
   if (key === 'workflowName') return labelOf(dict, value)
   if (key === 'description' || key === 'prompt') return loremExcept(value.slice(0, 4 * MAX_LINE), AGENT_KEEPS)
   if (key === 'script') return anonymizeScript(dict, value)
@@ -1278,8 +1294,7 @@ function toolOf(dict: Dict, tool: string): string {
   if (m === null) return labelOf(dict, tool)
   const server = String(m[1])
   const name = String(m[2])
-  const keepServer = /^[a-z0-9-]*bridge[a-z0-9-]*$/.test(server)
-  return `mcp__${keepServer ? server : labelOf(dict, server)}__${TOOL_SHAPE.test(name) ? name : labelOf(dict, name)}`
+  return `mcp__${server === BRIDGE_SERVER ? server : labelOf(dict, server)}__${BRIDGE_TOOLS.has(name) ? name : labelOf(dict, name)}`
 }
 
 function anonResult(dict: Dict, tool: string, r: ToolCallResult): ToolCallResult {
@@ -1344,8 +1359,17 @@ export function anonymize(s: RawScenario, dict: Dict): Scenario {
 
 // --- Barrières ---------------------------------------------------------------------------------
 
+/**
+ * Forme de comparaison avec la liste noire : NFKC (pleine chasse, ligatures), accents retirés,
+ * minuscules, espaces et séparateurs `-`, `_`, `.` retirés ; appliquée aux deux côtés.
+ */
 function fold(text: string): string {
-  return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+  return text
+    .normalize('NFKC')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[\s\-_.]/g, '')
 }
 
 const LEAKS: readonly { what: string; re: RegExp }[] = [
@@ -1375,11 +1399,12 @@ export function assertClean(text: string, denylist: readonly string[]): void {
     if (e !== '' && folded.includes(e))
       throw new Error(`liste noire : une entrée (${e.length} caractères) paraît à la position ${folded.indexOf(e)}`)
   }
+  const plain = text.normalize('NFKC')
   for (const { what, re } of LEAKS) {
-    const m = re.exec(text)
+    const m = re.exec(plain)
     if (m !== null) throw new Error(`${what} à la position ${m.index}`)
   }
-  for (const m of text.matchAll(BASE64_RUN)) {
+  for (const m of plain.matchAll(BASE64_RUN)) {
     const run = m[0]
     if (/\d/.test(run) && /[A-Z]/.test(run) && /[a-z]/.test(run))
       throw new Error(`suite base64 longue à la position ${m.index}`)
@@ -1409,21 +1434,23 @@ const VOCAB_SOURCES: readonly string[] = [
   'export const meta name phases title Implementation Plan Task Tâche final code review code-reviewer.md',
   'TRACE DEBUG INFO WARN ERROR agentId label phase',
 ]
-const WORD = /[A-Za-z0-9]+/g
+const WORD = /[\p{L}\p{N}]+/gu
 const VOCAB = new Set(VOCAB_SOURCES.flatMap((s) => (s.match(WORD) ?? []).map((w) => w.toLowerCase())))
 /** Formes entières acceptées avant le découpage en mots. */
-const WHOLE_FORMS: readonly RegExp[] = [
-  CSI_ALL,
-  /\d{4}-\d{2}-\d{2}T[\d:.]+Z/g,
-  /\bmcp__[a-z0-9-]*bridge[a-z0-9-]*__[a-z0-9_]+\b/g,
-  /\b(?:ssh|win|mcp)_[a-z0-9_]+\b/g,
-  UUID_ANY,
-]
+const WHOLE_FORMS: readonly RegExp[] = [CSI_ALL, /\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, UUID_ANY]
+/** `mcp__ssh-bridge__<outil>` et `<outil>` seulement pour un outil de la liste du bridge. */
+function withoutBridgeTools(text: string): string {
+  return text
+    .replace(/\bmcp__([a-z0-9-]+)__([a-z0-9_]+)\b/g, (m, server: string, tool: string) =>
+      server === BRIDGE_SERVER && BRIDGE_TOOLS.has(tool) ? ' ' : m,
+    )
+    .replace(/\b[a-z][a-z0-9_]*\b/g, (m) => (BRIDGE_TOOLS.has(m) ? ' ' : m))
+}
 
 function knownWord(w: string): boolean {
   const lower = w.toLowerCase()
   return (
-    w.length <= 2 ||
+    /^[A-Za-z0-9]{1,2}$/.test(w) ||
     /^\d+$/.test(w) ||
     VOCAB.has(lower) ||
     LOREM.repeat(Math.ceil(lower.length / LOREM.length) + 1).includes(lower) ||
@@ -1438,6 +1465,7 @@ function knownWord(w: string): boolean {
 function unknownIn(text: string): string | null {
   let rest = text
   for (const re of WHOLE_FORMS) rest = rest.replace(re, ' ')
+  rest = withoutBridgeTools(rest)
   for (const w of rest.match(WORD) ?? []) if (!knownWord(w)) return w
   return null
 }
