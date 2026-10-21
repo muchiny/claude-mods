@@ -530,6 +530,12 @@ const OSC = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g
 /** Caractères de contrôle restants : C0 sauf \n et \t, DEL, C1. */
 // biome-ignore lint/suspicious/noControlCharactersInRegex: c'est précisément ce qu'on retire
 const CONTROLS = /[\x00-\x08\x0b-\x1f\x7f-\x9f]/g
+/**
+ * Caractères d'usurpation d'affichage : tout Cf (bidi U+202A-202E et U+2066-2069, largeur nulle et marques
+ * U+200B-200F, U+061C, ZWJ…), séparateurs de ligne et de paragraphe U+2028/2029. Le ZWJ est retiré aussi :
+ * un emoji ZWJ s'affiche décomposé, mais la largeur reste comptée en cellules, sans débordement.
+ */
+const SPOOFING = /[\p{Cf}\p{Zl}\p{Zp}]/gu
 
 /** Ce qui suit le dernier \r de la ligne, \r finaux exclus. Linéaire : pas d'expression à ancre finale (quadratique sur une suite de \r). */
 function afterLastCr(line: string): string {
@@ -542,10 +548,17 @@ function afterLastCr(line: string): string {
  * Texte tel qu'un terminal l'afficherait, sans ses commandes : séquences CSI et OSC retirées, puis tout
  * caractère C0 (sauf \n et \t), DEL et C1. Un \r non suivi de \n ramène au début de la ligne : seul ce
  * qui suit le dernier \r de la ligne reste (barres de progression). \r+\n est un saut de ligne, et un \r final
- * sans rien après lui n'efface rien (un terminal garde le texte).
+ * sans rien après lui n'efface rien (un terminal garde le texte). Les caractères d'usurpation d'affichage (SPOOFING) sont retirés.
  */
 export function stripControls(text: string): string {
-  return text.replace(OSC, '').replace(CSI, '').split('\n').map(afterLastCr).join('\n').replace(CONTROLS, '')
+  return text
+    .replace(OSC, '')
+    .replace(CSI, '')
+    .split('\n')
+    .map(afterLastCr)
+    .join('\n')
+    .replace(CONTROLS, '')
+    .replace(SPOOFING, '')
 }
 
 /** Ligne du journal tracing de bridge-mcp, couleur retirée (amendement A3, bridge-facts §0.1.1). */
