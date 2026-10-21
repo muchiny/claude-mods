@@ -10,6 +10,14 @@
 // Deux barrières, indépendantes de l'anonymiseur : assertClean (liste noire, chemins personnels,
 // adresses, jetons) et assertKnownForms (chaque mot de chaque champ est d'un vocabulaire connu ou
 // du lorem). Leurs messages ne recopient jamais la chaîne trouvée.
+//
+// Formes synthétiques : horodatages en époque 2000-01-01 (décalage relatif au scénario), UUID
+// 00000000-0000-4000-8000-<n>, machines host-a…, dossiers de projet -home-user-proj-a…, identifiants
+// <préfixe>_rNNNN, nombres de plus de 3 chiffres en 9 (sauf codes de sortie et délais).
+// Risque résiduel connu : le lorem garde la largeur et la ponctuation (tirets, points) des libellés
+// (workflow, phases, clés inconnues) et des composants de chemin de 3 caractères ou plus ; les décalages
+// `t` et `afterMs` gardent le rythme réel d'une session. Une ré-identification par dictionnaire de
+// longueurs reste théoriquement possible sur ces formes.
 
 import type { ToolCallResult } from 'claude-code'
 import stringWidth from 'string-width'
