@@ -1,29 +1,63 @@
 // Réduit un fichier de scénarios de rejeu sous une taille maximale :
 //   bun dev/replay/reduce-run.ts <entrée> --max-bytes <n> [--out <fichier>] [--denylist <f>]
+//                                [--private-dir <dossier>]
 //
-// L'entrée est le fichier complet écrit par extract.ts (hors dépôt, jamais modifié). La sortie
-// (défaut : mode-clair/tests/replay/scenarios.generated.ts) est formatée par Biome, passée à
-// assertClean avec la liste noire (mode 600, obligatoire) ; au moindre refus rien n'est écrit.
+// L'entrée est le fichier complet écrit par extract.ts (hors dépôt, jamais modifié). Elle est importée
+// (exécutée) : elle doit donc être un fichier à soi, non inscriptible par d'autres, sous le dossier privé
+// (défaut /var/tmp/replay-real, ou --private-dir : un dossier à soi, mode 700, hors du dépôt), liens
+// résolus ; sinon rien n'est importé. La sortie (défaut : mode-clair/tests/replay/scenarios.generated.ts)
+// est formatée par Biome ; chaque scénario gardé passe assertClean (liste noire, mode 600, obligatoire) et
+// assertKnownForms, puis le fichier entier assertClean ; au moindre refus rien n'est écrit.
 // Aucun contenu de scénario n'est jamais affiché : seulement des comptes et des tailles.
 //
 // Exécuté par bun, hors du programme TypeScript du dépôt (pas de types Node) ; reduce.ts, pur,
 // est vérifié par tsc et testé dans tests/dev.
 
 import { spawnSync } from 'node:child_process'
-import { readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join, relative, resolve } from 'node:path'
 import type { Scenario } from '../../mode-clair/tests/replay/scenarios.generated'
-import { assertClean } from './anonymize'
+import { assertClean, assertFixture } from './anonymize'
 import { reduceScenarios, typeOf } from './reduce'
 
 const REPO = resolve(import.meta.dirname, '../..')
 const REPO_OUT = join(REPO, 'mode-clair/tests/replay/scenarios.generated.ts')
 const MARK = 'export const SCENARIOS: readonly Scenario[] = '
+const PRIVATE_DIR = '/var/tmp/replay-real'
 
 function fail(message: string): never {
   process.stderr.write(`replay:reduce : ${message}\n`)
   process.exit(1)
+}
+
+function inside(path: string, dir: string): boolean {
+  const rel = relative(dir, path)
+  return rel === '' || (!rel.startsWith('..') && !rel.startsWith('/'))
+}
+
+/**
+ * L'entrée, liens résolus, si elle peut être importée sans risque : un fichier .ts à soi, non inscriptible
+ * par le groupe ni les autres, sous `dir` (un dossier à soi, mode 700, hors du dépôt). Sinon échec.
+ */
+function privateInput(input: string, dir: string): string {
+  let realDir: string
+  let real: string
+  try {
+    realDir = realpathSync(dir)
+    real = realpathSync(input)
+  } catch {
+    fail('entrée ou dossier privé introuvable')
+  }
+  const uid = process.getuid?.()
+  const d = statSync(realDir)
+  if (!d.isDirectory() || d.uid !== uid || (d.mode & 0o077) !== 0) fail('dossier privé : un dossier à soi, mode 700')
+  if (inside(realDir, REPO)) fail('dossier privé dans le dépôt : interdit')
+  if (!inside(real, realDir) || real === realDir) fail('entrée hors du dossier privé : non importée')
+  const f = statSync(real)
+  if (!f.isFile() || f.uid !== uid || (f.mode & 0o022) !== 0 || !real.endsWith('.ts'))
+    fail('entrée : un fichier .ts à soi, non inscriptible par d’autres')
+  return real
 }
 
 function readDenylist(path: string): string[] {
@@ -61,17 +95,20 @@ async function main() {
   let out = REPO_OUT
   let max = 0
   let deny = join(homedir(), '.config/claude-mods/denylist.txt')
+  let dir = PRIVATE_DIR
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i] as string
     if (a === '--max-bytes') max = Number(argv[++i])
     else if (a === '--out') out = resolve(argv[++i] as string)
     else if (a === '--denylist') deny = argv[++i] as string
+    else if (a === '--private-dir') dir = resolve(argv[++i] as string)
     else if (a.startsWith('--')) fail(`option inconnue ${a}`)
     else input = resolve(a)
   }
   if (input === undefined) fail('fichier d’entrée manquant')
   if (!Number.isFinite(max) || max <= 0) fail('--max-bytes <n> obligatoire')
   const denylist = readDenylist(deny)
+  input = privateInput(input, dir)
   const source = readFileSync(input, 'utf8')
   const at = source.indexOf(MARK)
   if (at < 0) fail('entrée sans SCENARIOS')
@@ -89,6 +126,7 @@ async function main() {
       continue
     }
     try {
+      assertFixture(kept, denylist)
       assertClean(text, denylist)
     } catch (e) {
       fail(`sortie refusée : ${(e as Error).message}`)

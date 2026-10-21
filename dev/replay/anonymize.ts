@@ -1554,3 +1554,18 @@ export function unknownWords(s: Scenario): { where: string; word: string }[] {
   }
   return found
 }
+
+/**
+ * Les deux barrières sur chaque scénario d'une fixture (garde locale, réduction) : lève au premier refus,
+ * message préfixé de l'identifiant du scénario, jamais de contenu.
+ */
+export function assertFixture(scenarios: readonly Scenario[], denylist: readonly string[]): void {
+  for (const s of scenarios) {
+    try {
+      assertClean(JSON.stringify(s), denylist)
+    } catch (e) {
+      throw new Error(`${s.id} : ${(e as Error).message}`)
+    }
+    assertKnownForms(s)
+  }
+}
