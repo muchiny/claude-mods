@@ -86,8 +86,8 @@ jamais dans le corps (§5.1 Classement).
 | R20 | `tool.call` levé, dialogue de permission pas encore passé | l'appel est `en cours` dès le début du `tool.call` (le moteur lève `tool.call` avant le dialogue, `dev/claude-code.d.ts:4044-4046` ; amendement A1) ; refusé au dialogue : R22 (tranché D7) | `dev/claude-code.d.ts:4044-4046` ; A1 ; D7 |
 | R21 | `tool.call` en cours, pas de résultat | bande `● host-a · ssh_disk_usage` ; `● en cours`, ton accent | §5.1 Cycle de vie ; §4.2 |
 | R22 | refus de Claude Code : `classic.PermissionDenied` sur le `tool_use_id`, refus au dialogue (« The user doesn't want to proceed with this tool use… »), refus du classifieur (« Permission for this action was denied by the Claude Code auto mode classifier… »), `deny` d'un hook | `○ host-a · refusé par Claude Code · rien n'a tourné`, atténué, non compté | §5.1 règle 0 ; moteur (`engine-texts.ts:13-16`) |
-| R23 | `next.signal.aborted` après `next(e)`, ou `isInterrupted` au rendu | `○ host-a · interrompu`, atténué ; la machine n'est pas mise en cause ; compté comme appel | §5.1 règle 1 |
-| R24 | `turn.complete` d'une boucle (même `agentId`) avec un appel de cette boucle encore en cours | cet appel devient `○ interrompu` ; les appels d'une autre boucle ne bougent pas | §5.1 Cycle de vie |
+| R23 | `next.signal.aborted` après `next(e)`, `isInterrupted` au rendu, ou résultat Bash `interrupted: true` (le champ du résultat du moteur, `dev/claude-code.d.ts:21147-21148`) | `○ host-a · interrompu`, atténué ; la machine n'est pas mise en cause ; compté comme appel | §5.1 règle 1 ; `dev/claude-code.d.ts:21147-21148` (arbitrage tâche 8) |
+| R24 | `turn.complete` d'une boucle (même `agentId`) avec un appel de cette boucle encore en cours | cet appel devient `○ interrompu` ; les appels d'une autre boucle ne bougent pas ; filet seulement : un résultat arrivé ensuite décide (le hook ferme l'appel dans un `finally`) | §5.1 Cycle de vie (spec l. 246) ; arbitrage tâche 8 |
 | R25 | MCP, pas d'`isError`, texte sans motif | `✓ host-a · ssh_disk_usage · lecture`, ton ok | §5.1 règle 5 ; §4.3 |
 | R26 | CLI sortie 0 (texte Bash sans `Exit code`) | `✓ host-a · <outil> · <nature>` | §5.1 règle 5 ; bridge-mcp/src/cli/runner.rs:111-116 |
 | R27 | CLI `Exit code 2` (outil inconnu, argument invalide, erreur clap `error: unexpected argument …`) | `✗ host-a · erreur d'usage · rien n'a tourné`, attention ; non compté dans `clair ✗ n` ni comme appel | §5.1 règle 2 ; bridge-mcp/src/cli/runner.rs:58-76 ; faits §1.2, §3.4 |
@@ -101,7 +101,7 @@ jamais dans le corps (§5.1 Classement).
 | R35 | CLI `Exit code 1` + première ligne de la table des textes (ex. `SSH command execution failed: WinRM HTTP error: error sending request for url …`) | l'état de la table (ici `✗ host-a · injoignable · rien n'a tourné`) | §5.1 règle 2 et table ; §9 (WinRM sort en 1) ; faits §2.3 |
 | R36 | CLI `Exit code 1` + `Rate limit exceeded for host 'host-a'…` | `✗ host-a · limité · rien n'a tourné`, attention | §5.1 table ; bridge-mcp/src/error.rs:128 ; faits §3.3 |
 | R37 | CLI `Exit code 1`, première ligne hors table (`Output cache is not available. …`) | rangée `✗ host-a · échec · voir /clair` ; la phrase brute n'apparaît que dans la carte, entre guillemets | §4.1 Langue ; §5.1 règle 2 ; faits §1.4 |
-| R38 | `bridge-mcp exec host-a <cmd>` : le processus sort **avec le code distant lui-même**, et la sortie d'une commande qui a tourné commence toujours par le bloc `Host: …` / `Command: …` / `Exit code: N` | le code du processus ne se lit pas sur la table des codes (2 peut être un code distant) ; bloc `Exit code: N` lu : `code N` (0 : `fait`) ; sans bloc, rien n'a tourné : table des textes sur la première ligne utile, sinon `échec` | bridge-mcp/src/cli/runner.rs:1021-1052 ; bridge-mcp/src/domain/use_cases/execute_command.rs:647-651 ; faits §3.10 |
+| R38 | `bridge-mcp exec host-a <cmd>` : le processus sort 0 seulement par le chemin `Ok` avec un code distant 0, et 1 pour **tout** code distant non nul (`process::exit(1)`, bridge-mcp/src/cli/runner.rs:904-924) ; une erreur sort avec son code de la table ; la sortie d'une commande qui a tourné commence par le bloc `Host: …` / `Command: …` / `Exit code: N` | bloc `Exit code: N` lu : `code N` (0 : `fait`) ; sortie 0 sans bloc : `fait` ; sortie non nulle sans bloc, rien n'a tourné : table des textes sur la première ligne utile, sinon `échec` | bridge-mcp/src/cli/runner.rs:904-924 ; bridge-mcp/src/domain/use_cases/execute_command.rs:647-651 ; faits §3.10 ; arbitrage tâche 8 (Q3) |
 | R39 | MCP `isError`, première ligne `[exit:N]` | `✗ host-a · échec sur la machine · <nature>` (la commande a tourné), avant tout autre motif | §5.1 règle 3 ; bridge-mcp/src/domain/use_cases/execute_command.rs:106-109 |
 | R40 | MCP sans `isError`, outil `freeCommand` (ou outil à code distant, ex. `ssh_service_status`) avec `[exit:N]`, N ≠ 0 | `✓ host-a · code N · <nature>`, neutre | §5.1 règle 4 et `freeCommand` ; bridge-mcp/src/mcp/tool_handlers/ssh_exec.rs:334 ; faits §3.9 |
 | R41 | MCP `isError` + `Unknown host: host-z` (Display sans `Error: `) | `✗ machine inconnue · rien n'a tourné` | §5.1 table ; faits §3.2 |
@@ -115,7 +115,7 @@ jamais dans le corps (§5.1 Classement).
 | R49 | `SSH command timeout after 60s` | `✗ host-a · délai dépassé · <nature>`, attention, compté dans `clair ✗ n` et comme appel (la commande a pu tourner) (tranché D5) | §5.1 table, amendée D5 ; bridge-mcp/src/error.rs:59 ; faits §3.6 |
 | R50 | `Request cancelled by client` | `○ interrompu`, atténué, compté comme appel : par le signal (R23) ou par le texte seul (tranché D5) | bridge-mcp/src/error.rs:161 ; faits §3.6 |
 | R51 | drapeau tronqué : `output_id="`, `--- [truncated: `, `[output stopped at the`, marque de sortie persistée (`<persisted-output>` / `Output too large (…)`) ; que l'appel réussisse ou non | suffixe `· tronqué` (ton attention) sur l'état principal, inchangé ; nature affichée ; dans « à regarder » ; le drapeau n'a pas de signe : le signe de tête reste celui de l'état (tranché D13) | §5.1 drapeau ; bridge-mcp/src/domain/output_truncator.rs:41, :92, :99 ; bridge-mcp/src/ssh/client.rs:990 ; moteur (`engine-texts.ts:22`) |
-| R52 | résultat illisible ou sans preuve : pas de code de sortie attribuable, texte vide ou forme inconnue, résultat sans appel correspondant | `? incertain` (atténué), jamais ✓/✗ ; la machine seulement si elle est prouvée | règle ; spec vérif. §1 |
+| R52 | résultat illisible ou sans preuve : segment qui ne possède pas le code de sortie, code de sortie CLI hors de 0 à 6 (124 de `timeout`, 127, 130, 137, 101… : bridge-mcp ne sort qu'avec 0 à 6, bridge-mcp/src/main.rs:59, :195, :204 ; src/cli/runner.rs:111-116), forme inconnue, résultat sans appel correspondant ; un texte vide seulement quand ni `isError` ni un code de sortie ne parlent (MCP réussi au texte vide : `fait`, execute_command.rs:95-99 rend la sortie brute pour un code 0 ; MCP `isError` au texte vide : `échec`, R46) | `? incertain` (atténué), jamais ✓/✗ ; la machine seulement si elle est prouvée | règle ; spec vérif. §1 ; arbitrage tâche 8 (Q1, Q2) |
 
 ## Pipeline et accord
 
@@ -214,3 +214,14 @@ R12 (critère 4 : `ssh_status` n'est pas compté, donc un outil `hostless` n'a p
 R38 (bloc `Exit code: N` toujours écrit par `exec` quand la commande a tourné,
 `bridge-mcp/src/domain/use_cases/execute_command.rs:647-651`). Les deux ont été remarquées en
 lisant le mod ; la décision repose sur la spec et sur la source du bridge.
+
+## Arbitrages de la tâche 8 (rejeu) — 2026-10-21
+
+Relevés par l'oracle du rejeu (`tests/replay/oracle.ts`), tranchés par l'utilisateur :
+
+| id | lignes | question | décision |
+|---|---|---|---|
+| Q1 | R25, R46, R52 | résultat MCP au texte vide | réussi : `fait` (le mod avait raison) ; `isError` : `échec` (R46) ; R52 réécrite |
+| Q2 | R52 | code de sortie CLI hors de 0 à 6 | `? incertain` : le mod avait tort (il rendait `échec`), corrigé derrière un test rouge |
+| Q3 | R38 | `exec` sorti 0 sans bloc `Exit code: N` | `fait` (le mod avait raison) ; R38 réécrite, son erreur de fait corrigée (sortie 1 pour tout code distant non nul) |
+| — | R23, R24 | `interrupted` du résultat Bash ; résultat après la fin de boucle | R23 : `interrupted: true` = interrompu ; R24 : filet, le résultat arrivé ensuite décide |

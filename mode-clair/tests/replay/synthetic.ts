@@ -8,7 +8,7 @@
 import type { ToolCallResult } from 'claude-code'
 
 import { RECORDED_PERSISTED, RECORDED_REFUSALS } from '../pure/engine-texts'
-import type { AnyEvent, AnyScenario, Outcome } from './oracle'
+import type { AnyEvent, AnyScenario } from './oracle'
 
 // --- Briques ------------------------------------------------------------------------------------
 
@@ -269,7 +269,7 @@ export const SYNTHETIC: readonly AnyScenario[] = [
       'L’oracle gardait « interrompu » après la fin de boucle ; or R24 n’est qu’un filet pour un appel resté ouvert : ' +
       'spec §5.1 « Cycle de vie » (les hooks d’appel ferment toujours l’appel dans un finally) et la règle (un état ' +
       'prouvé par l’événement) font que le résultat arrivé ensuite décide. L’état « interrompu » intermédiaire est ' +
-      'vérifié par tests/engine/events.test.tsx (« turn.complete »).',
+      'vérifié par tests/engine/events.test.tsx (« turn.complete »). R24 amendée en ce sens (arbitrage tâche 8).',
   },
   synth('cli-codes', [
     // R26 sortie 0 ; R27 code 2 ; R28 code 5 ; R29, R30 code 3 ; R31, R32 code 4 ; R33, R34 code 6.
@@ -335,7 +335,8 @@ export const SYNTHETIC: readonly AnyScenario[] = [
       sh(1, 'Error: Output cache is not available. This tool is only supported in MCP server mode.'),
     ),
     // R38 : exec sort avec le code distant ; bloc Exit code: N lu ; sans bloc, rien n'a tourné.
-    bash(3_000, 'toolu_r1054', 'bridge-mcp exec host-a false', sh(2, EXEC_BLOCK(2))),
+    // exec sort 1 pour tout code distant non nul (bridge-mcp src/cli/runner.rs:904-924), le bloc donne le code.
+    bash(3_000, 'toolu_r1054', 'bridge-mcp exec host-a false', sh(1, EXEC_BLOCK(2))),
     bash(4_000, 'toolu_r1055', 'bridge-mcp exec host-z uptime', sh(1, 'Error: Unknown host: host-z')),
   ]),
   synth('mcp-erreurs', [
@@ -411,8 +412,9 @@ export const SYNTHETIC: readonly AnyScenario[] = [
       mcp(200, 'toolu_r1073', 'ssh_exec', { host: 'host-a', command: 'x' }, ko('[exit:2]')),
     ]),
     oracleNote:
-      'L’oracle ne lisait pas `interrupted` du résultat Bash et rendait fait ; or c’est la preuve d’interruption ' +
-      'que le moteur porte dans le résultat (spec §5.1 Classement, règle 1 ; R23 : la machine n’est pas mise en cause).',
+      'L’oracle ne lisait pas `interrupted` du résultat Bash et rendait fait ; or le résultat Bash du moteur porte ' +
+      '« Whether the command was interrupted » (dev/claude-code.d.ts:21147-21148), preuve d’interruption ' +
+      '(spec §5.1 Classement, règle 1) ; R23 amendée en ce sens (arbitrage tâche 8).',
   },
 
   // --- Workflows (R74-R82) ----------------------------------------------------------------------
@@ -497,47 +499,44 @@ export const SYNTHETIC: readonly AnyScenario[] = [
   ]),
 ]
 
-// --- Questions ouvertes ---------------------------------------------------------------------------
+// --- Arbitrages de la tâche 8 (REFERENCE.md, section « Arbitrages de la tâche 8 ») ----------------
 
-/**
- * Cas où deux lignes de REFERENCE.md (ou la table et le mod) donnent des réponses différentes sans
- * que la table tranche : question posée à l'utilisateur (rapport de la tâche 8), rien n'est deviné.
- * L'oracle garde la lecture littérale de la table ; le test accepte, pour l'appel visé, l'une des
- * deux réponses (`candidates`), et toute autre réponse fait échouer le rejeu.
- */
-export type Question = { id: string; question: string; scenario: AnyScenario; candidates: Record<string, Outcome[]> }
-
-export const QUESTIONS: readonly Question[] = [
-  {
-    id: 'Q1',
-    question:
-      'Résultat MCP au texte vide : R52 (« texte vide » → ? incertain) contre R25 (sans isError → ✓ fait) et ' +
-      'R46 (isError hors table → ✗ échec). Le mod suit R25/R46.',
-    scenario: synth('question-texte-vide', [
-      mcp(0, 'toolu_r1088', 'ssh_disk_usage', { host: 'host-a' }, ok('')),
-      mcp(100, 'toolu_r1089', 'ssh_disk_usage', { host: 'host-a' }, ko('')),
-    ]),
-    candidates: { toolu_r1088: ['inconnu', 'succes'], toolu_r1089: ['inconnu', 'echec'] },
-  },
-  {
-    id: 'Q2',
-    question:
-      'Code de sortie que la CLI n’écrit pas (127 commande introuvable, 130, 137…) : R52 (« pas de code de sortie ' +
-      'attribuable » → ? incertain) ou ✗ échec ? Le mod rend échec (spec §5.1 règle 2 n’énumère que 1 à 6).',
-    scenario: synth('question-code-inconnu', [
-      bash(0, 'toolu_r1080', 'bridge-mcp tool ssh_disk_usage host=host-a', sh(127, 'bridge-mcp: command not found')),
-    ]),
-    candidates: { toolu_r1080: ['inconnu', 'echec'] },
-  },
-  {
-    id: 'Q3',
-    question:
-      '`bridge-mcp exec` sorti 0 sans bloc `Exit code: N` : R38 (« sans bloc, rien n’a tourné : table des textes, ' +
-      'sinon échec ») ou ✓ fait par le code 0 du processus ? Le mod rend fait ; R38 ne dit rien non plus de ' +
-      '`exec --json` (`"exit_code":N`), que le mod lit.',
-    scenario: synth('question-exec-sans-bloc', [
-      bash(0, 'toolu_r1081', 'bridge-mcp exec host-a uptime', sh(0, 'no block here')),
-    ]),
-    candidates: { toolu_r1081: ['echec', 'succes'] },
-  },
+export const RULINGS: readonly AnyScenario[] = [
+  // Q1 : MCP réussi au texte vide → fait (R25) ; isError au texte vide → échec (R46).
+  synth('arbitrage-texte-vide', [
+    mcp(0, 'toolu_r1088', 'ssh_disk_usage', { host: 'host-a' }, ok('')),
+    mcp(100, 'toolu_r1089', 'ssh_disk_usage', { host: 'host-a' }, ko('')),
+  ]),
+  // Q2 : code de sortie hors de 0 à 6 → incertain (R52).
+  synth('arbitrage-code-inconnu', [
+    bash(0, 'toolu_r1090', 'bridge-mcp tool ssh_disk_usage host=host-a', sh(127, 'bridge-mcp: command not found')),
+    bash(100, 'toolu_r1091', 'timeout 5 bridge-mcp tool ssh_disk_usage host=host-a', sh(124, DF)),
+  ]),
+  // Q3 : exec sorti 0 sans bloc → fait (R38).
+  synth('arbitrage-exec-sans-bloc', [bash(0, 'toolu_r1092', 'bridge-mcp exec host-a uptime', sh(0, 'no block here'))]),
+  // isError sans en-tête `Exit code N` : sortie non nulle prouvée, échec (R46) ; texte hors table.
+  synth('bash-erreur-sans-entete', [
+    bash(0, 'toolu_r1093', 'bridge-mcp tool ssh_disk_usage host=host-a', {
+      result: { stdout: '', stderr: 'boom', interrupted: false },
+      text: 'boom',
+      isError: true,
+    }),
+  ]),
+  // R13, D11 par la CLI : chaque hôte sur son élément de `results` ; hôte sans élément → incertain.
+  synth('cli-multi', [
+    bash(
+      0,
+      'toolu_r1094',
+      `bridge-mcp tool ssh_exec_multi hosts='["host-a","host-b"]' command=uptime`,
+      sh(0, MULTI_JSON),
+    ),
+    bash(
+      1_000,
+      'toolu_r1095',
+      `bridge-mcp tool ssh_exec_multi hosts='["host-a","host-c"]' command=uptime`,
+      sh(0, '{"total_hosts":2,"results":[{"host":"host-a","success":true,"exit_code":0}]}'),
+    ),
+    // `hosts=a,b` n'est pas du JSON (runner.rs:2312) : aucune machine lisible, rien de prouvé.
+    bash(2_000, 'toolu_r1096', 'bridge-mcp tool ssh_exec_multi hosts=host-a,host-b command=uptime', sh(0, MULTI_JSON)),
+  ]),
 ]

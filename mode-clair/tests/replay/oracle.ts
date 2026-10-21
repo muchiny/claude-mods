@@ -224,7 +224,8 @@ type Parsed = {
   ownsExit: boolean // R17 : reçoit le code de sortie et le texte
   inLoop: boolean // R18
   json: boolean // R19
-  multiHost: string | null // R13 : l'hôte dont l'élément de `results` décide
+  multi: boolean // R13 : outil multi, classé par élément de `results`
+  multiHost: string | null // l'hôte dont l'élément de `results` décide (null : aucun hôte lisible)
 }
 
 /** Machine d'une valeur d'argument : une valeur qui commence par `$` n'est pas affirmée (R11). */
@@ -239,32 +240,42 @@ function rowsFor(
   tool: string,
   args: Record<string, unknown>,
   sessions: Map<string, string>,
-  base: Omit<Parsed, 'via' | 'tool' | 'host' | 'multiHost'>,
+  base: Omit<Parsed, 'via' | 'tool' | 'host' | 'multi' | 'multiHost'>,
   hit: Hit,
 ): Parsed[] {
   if (META_TOOLS.has(tool)) return tag(hit, 'R04', [])
   if (HOSTLESS.has(tool)) return tag(hit, 'R12', [])
   if (MULTI.has(tool)) {
     // R13 : une rangée par hôte de `hosts`.
-    const raw = args.hosts
-    const hosts = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(',') : []
+    // La CLI lit un argument tableau comme du JSON (bridge-mcp src/cli/runner.rs:2312) : `hosts='["a","b"]'`.
+    let raw = args.hosts
+    if (typeof raw === 'string') {
+      try {
+        raw = JSON.parse(raw)
+      } catch {
+        raw = undefined
+      }
+    }
+    const hosts = Array.isArray(raw) ? raw : []
     if (hosts.length > 0) {
       hit('R13')
       return hosts.map((h) => {
         const host = base.inLoop ? null : hostValue(h, hit)
-        return { via, tool, host, multiHost: host, ...base }
+        return { via, tool, host, multi: true, multiHost: host, ...base }
       })
     }
+    // hosts illisible : une rangée sans machine, qu'aucun élément de `results` ne peut prouver.
+    return [{ via, tool, host: null, multi: true, multiHost: null, ...base }]
   }
   if (SESSION_TOOLS.has(tool)) {
     // R15 : session vue créée ; R16 : sinon machine inconnue.
     const id = args.session_id
     const known = typeof id === 'string' ? sessions.get(id) : undefined
     hit(known === undefined ? 'R16' : 'R15')
-    return [{ via, tool, host: base.inLoop ? null : (known ?? null), multiHost: null, ...base }]
+    return [{ via, tool, host: base.inLoop ? null : (known ?? null), multi: false, multiHost: null, ...base }]
   }
   hit(via === 'mcp' ? 'R01' : 'R05')
-  return [{ via, tool, host: base.inLoop ? null : hostValue(args.host, hit), multiHost: null, ...base }]
+  return [{ via, tool, host: base.inLoop ? null : hostValue(args.host, hit), multi: false, multiHost: null, ...base }]
 }
 
 /** R01, R02, R03 : `mcp__<serveur>__<outil>`, préfixe `plugin_<plugin>_` retiré, mode progressif. */
@@ -444,7 +455,16 @@ function parseSegment(
   }
   // exec, upload, download : hôte en premier argument positionnel (bridge-mcp src/cli/mod.rs:164-301).
   hit('R05')
-  return [{ via: 'cli', tool: sub, host: inLoop ? null : hostValue(positional[0], hit), multiHost: null, ...base }]
+  return [
+    {
+      via: 'cli',
+      tool: sub,
+      host: inLoop ? null : hostValue(positional[0], hit),
+      multi: false,
+      multiHost: null,
+      ...base,
+    },
+  ]
 }
 
 /**
@@ -529,22 +549,37 @@ function classify(p: Parsed, r: ToolCallResult, hit: Hit): Verdict {
     hit('R47')
   // R22 : refus du moteur (dialogue, classifieur) lu sur son texte.
   if (isError && refusedByEngine(text)) return tag(hit, 'R22', { outcome: 'refus' })
-  // R23 : le résultat se dit interrompu (`interrupted` du résultat Bash, oracleNote de synth-resultats-limites).
+  // R23 : le résultat Bash se dit interrompu (`interrupted`, dev/claude-code.d.ts:21147-21148).
   const inner = r.result as { interrupted?: unknown } | null | undefined
   if (inner !== null && typeof inner === 'object' && inner.interrupted === true)
     return tag(hit, 'R23', { outcome: 'interrompu' })
   if (p.via === 'cli') {
     // R17 : un segment qui n'est pas la dernière commande simple n'a pas de preuve.
     if (!p.ownsExit) return tag(hit, 'R52', { outcome: 'inconnu' })
-    const code = Number(/^Exit code (\d+)/.exec(text)?.[1] ?? 0)
+    // Sortie : l'en-tête `Exit code N` de Bash ; sans lui, isError prouve un échec (R46 : sortie non nulle).
+    const header = /^Exit code (\d+)$/m.exec(text.split('\n')[0] ?? '')
+    const code = header !== null ? Number(header[1]) : isError ? 1 : 0
     const body = p.json ? jsonText(text, hit) : text
     const first = firstLine(body)
+    // R52 : bridge-mcp ne sort qu'avec 0 à 6 ; un autre code vient d'un enrobage (arbitrage Q2).
+    const foreign = code > 6
     if (p.sub === 'exec') {
-      // R38 : le code du processus est le code distant ; le bloc `Exit code: N` prouve que la commande a tourné.
+      // R38 : bloc `Exit code: N` : code distant ; sortie 0 sans bloc : fait (Q3) ; sinon table des textes, ou échec.
       hit('R38')
       if (usefulLines(body).some((l) => /^Exit code: \d+$/.test(l))) return { outcome: 'succes' }
+      if (code === 0) return { outcome: 'succes' }
+      if (foreign) return tag(hit, 'R52', { outcome: 'inconnu' })
       return textTable(first, hit) ?? { outcome: 'echec' }
     }
+    if (p.multi) {
+      // R13 : chaque hôte sur son propre élément de `results` ; sans élément, sortie 0 ou 6 : incertain (D11).
+      const v = classifyHost(p, usefulLines(body).join('\n'), hit)
+      if (v !== null) return v
+      if (code === 0 || code === 6) return tag(hit, 'R52', { outcome: 'inconnu' })
+    }
+    if (foreign) return tag(hit, 'R52', { outcome: 'inconnu' })
+    if (p.sub === 'upload' || p.sub === 'download')
+      return code === 0 ? { outcome: 'succes' } : (textTable(first, hit) ?? { outcome: 'echec' })
     switch (code) {
       case 0:
         return tag(hit, 'R26', { outcome: 'succes' })
@@ -560,37 +595,36 @@ function classify(p: Parsed, r: ToolCallResult, hit: Hit): Verdict {
       case 6:
         if (FREE_COMMAND.has(p.tool) && /^\[exit:\d+\]/.test(first)) return tag(hit, 'R33', { outcome: 'succes' })
         return tag(hit, 'R34', { outcome: 'echec' })
-      case 1: {
+      default: {
+        // Sortie 1 : table des textes (R35, R36), sinon échec (R37).
         const v = textTable(first, hit)
         if (v !== null) return v
         return tag(hit, 'R37', { outcome: 'echec' })
       }
-      default:
-        // R52 : un code que la CLI n'écrit pas (127, 130…) n'est attribuable à rien.
-        return tag(hit, 'R52', { outcome: 'inconnu' })
     }
   }
-  if (p.multiHost !== null && !isError) return classifyHost(p, text, hit)
+  if (p.multi && !isError) {
+    // R13 : sans élément pour cet hôte : incertain (D11).
+    return classifyHost(p, text, hit) ?? tag(hit, 'R52', { outcome: 'inconnu' })
+  }
   const first = firstLine(text)
   if (isError) {
-    if (first === '') return tag(hit, 'R52', { outcome: 'inconnu' })
     // R39 : `[exit:N]` en isError : la commande a tourné, échec sur la machine.
     if (/^\[exit:\d+\]/.test(first)) return tag(hit, 'R39', { outcome: 'echec' })
     if (first.includes('Unknown hosts')) return tag(hit, 'R14', { outcome: 'echec', hostless: true })
     const v = textTable(first, hit)
     if (v !== null) return v
+    // R46 : hors table, texte vide compris (arbitrage Q1) : isError prouve l'échec.
     return tag(hit, 'R46', { outcome: 'echec' })
   }
-  // R52 : un résultat vide ne prouve rien.
-  if (first === '') return tag(hit, 'R52', { outcome: 'inconnu' })
-  // R40 : `[exit:N]` sans isError : code N, neutre ; R25 : sinon fait.
+  // R40 : `[exit:N]` sans isError : code N, neutre ; R25 : sinon fait, texte vide compris (arbitrage Q1).
   if (/^\[exit:[1-9]\d*\]/.test(first)) hit('R40')
   hit('R25')
   return { outcome: 'succes' }
 }
 
-/** R13 : un hôte d'un outil multi classé sur son propre élément de `results` ; sans élément : incertain (D11). */
-function classifyHost(p: Parsed, text: string, hit: Hit): Verdict {
+/** R13 : un hôte d'un outil multi classé sur son propre élément de `results` ; null : pas d'élément pour lui. */
+function classifyHost(p: Parsed, text: string, hit: Hit): Verdict | null {
   let results: unknown[] = []
   try {
     const v = JSON.parse(text) as { results?: unknown }
@@ -602,7 +636,8 @@ function classifyHost(p: Parsed, text: string, hit: Hit): Verdict {
     (x): x is { host: string; success?: unknown; error?: unknown; exit_code?: unknown } =>
       x !== null && typeof x === 'object' && (x as { host?: unknown }).host === p.multiHost,
   )
-  if (el === undefined) return tag(hit, 'R52', { outcome: 'inconnu' })
+  if (el === undefined) return null
+  hit('R13')
   if (el.success === true) return { outcome: 'succes' }
   if (typeof el.error === 'string') return textTable(el.error, hit) ?? { outcome: 'echec' }
   if (typeof el.exit_code === 'number' && FREE_COMMAND.has(p.tool)) return { outcome: 'succes' }

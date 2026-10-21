@@ -1,7 +1,8 @@
 // Rejeu sous le moteur : chaque scénario (réel anonymisé, ou synthétique) passe dans le vrai mod
 // (register monté par `claude plugin test`), sous le monde de tests/engine/world.ts ; l'état final,
 // ramené au vocabulaire de l'oracle par `project`, doit égaler la vérité que l'oracle indépendant
-// tire des seuls événements (`truthOf`, REFERENCE.md). Un désaccord : voir oracle-notes.ts.
+// tire des seuls événements (`truthOf`, REFERENCE.md). Un désaccord tranché en faveur du mod porte son
+// `oracleNote` dans le scénario synthétique (synthetic.ts) ; aucun scénario réel n'en a eu besoin.
 
 import type { On, ToolCallInput } from 'claude-code'
 import type { TestBody } from 'claude-code/testing'
@@ -10,7 +11,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import { lastState, world, writeFile } from '../engine/world'
 import { type AnyEvent, type AnyScenario, project, truthOf } from './oracle'
 import { SCENARIOS } from './scenarios.generated'
-import { QUESTIONS, SYNTHETIC } from './synthetic'
+import { RULINGS, SYNTHETIC } from './synthetic'
 
 type Dollar = Parameters<TestBody>[0]
 
@@ -31,6 +32,8 @@ async function play($: Dollar, on: On, s: AnyScenario) {
   await $.session.start({ cwd: CWD, surface: null, isInteractive: true })
   const start = w.clock.now() - (s.events[0]?.t ?? 0)
   const pending: Promise<unknown>[] = []
+  // Un appel d'outil rejeté (le cœur ou un hook qui lève) est noté : aucun scénario n'en attend.
+  const rejections: string[] = []
   const until = async (at: number) => {
     const now = w.clock.now()
     if (at > now) await w.clock.advance(at - now)
@@ -46,7 +49,11 @@ async function play($: Dollar, on: On, s: AnyScenario) {
           tool_use_id: e.toolUseId,
           ...(e.agentId === undefined ? {} : { agentId: e.agentId }),
         } as ToolCallInput
-        pending.push($.tool.call(input).catch(() => undefined))
+        pending.push(
+          $.tool.call(input).catch((err: unknown) => {
+            rejections.push(`${e.toolUseId}: ${err instanceof Error ? err.message : String(err)}`)
+          }),
+        )
         break
       }
       case 'turn.complete':
@@ -96,15 +103,16 @@ async function play($: Dollar, on: On, s: AnyScenario) {
   await until(start + Math.max(0, ...s.events.map(endOf)))
   await Promise.all(pending)
   await w.clock.settle()
-  return w
+  return { w, rejections }
 }
 
-const ALL: readonly AnyScenario[] = [...SCENARIOS, ...SYNTHETIC]
+const ALL: readonly AnyScenario[] = [...SCENARIOS, ...SYNTHETIC, ...RULINGS]
 
 describe('rejeu des sessions réelles et synthétiques contre l’oracle', () => {
   for (const s of ALL)
     test(s.id, async ($, on) => {
-      const w = await play($, on, s)
+      const { w, rejections } = await play($, on, s)
+      expect(rejections).toEqual([])
       expect(project(lastState(w))).toEqual(truthOf(s))
     })
 })
@@ -113,33 +121,21 @@ describe('rejeu des sessions réelles et synthétiques contre l’oracle', () =>
 describe('Review Focus 5', () => {
   const byId = (id: string) => SYNTHETIC.find((s) => s.id === id) as AnyScenario
 
+  // « Résultat sans appel connu » : le format de rejeu ne peut pas livrer un résultat de tool.call sans son
+  // début (le hook enveloppe tout l'appel) ; il est approché par ce qui vise un id jamais vu :
+  // classic.PermissionDenied, classic.ElicitationResult sans formulaire en attente, turn.complete.
   test('résultat sans appel connu : aucun appel', async ($, on) => {
-    const w = await play($, on, byId('synth-resultat-sans-appel'))
+    const { w } = await play($, on, byId('synth-resultat-sans-appel'))
     expect(project(lastState(w)).calls).toEqual([])
   })
 
   test('tool_use_id dupliqué : un seul appel', async ($, on) => {
-    const w = await play($, on, byId('synth-id-duplique'))
+    const { w } = await play($, on, byId('synth-id-duplique'))
     expect(project(lastState(w)).calls.filter((c) => c.toolUseId === 'toolu_r1007')).toHaveLength(1)
   })
 
   test('reprise après /clear : rien d’affirmé sur un appel jamais vu', async ($, on) => {
-    const w = await play($, on, byId('synth-reprise-apres-clear'))
+    const { w } = await play($, on, byId('synth-reprise-apres-clear'))
     expect(project(lastState(w)).calls.map((c) => c.toolUseId)).toEqual(['toolu_r1008'])
   })
-})
-
-// Questions ouvertes (synthetic.ts) : l'appel visé rend l'une des réponses candidates, le reste égale l'oracle.
-describe('questions ouvertes', () => {
-  for (const q of QUESTIONS)
-    test(`${q.id} ${q.scenario.id}`, async ($, on) => {
-      const w = await play($, on, q.scenario)
-      const got = project(lastState(w))
-      const want = truthOf(q.scenario)
-      expect(got.calls.map((c) => [c.toolUseId, c.host])).toEqual(want.calls.map((c) => [c.toolUseId, c.host]))
-      for (const c of got.calls)
-        expect(q.candidates[c.toolUseId] ?? [want.calls.find((x) => x.toolUseId === c.toolUseId)?.outcome]).toContain(
-          c.outcome,
-        )
-    })
 })
