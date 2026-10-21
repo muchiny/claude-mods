@@ -23,4 +23,10 @@ describe('compare', () => {
     expect(r.below).toHaveLength(2)
     expect(r.raised).toEqual({ 'b.ts': 100 })
   })
+
+  test('module mesuré sans plancher : échec (jamais ignoré en silence)', () => {
+    const r = compare({ 'a.ts': 100, 'neuf.ts': 100 }, { 'a.ts': 100 })
+    expect(r.below).toEqual(['neuf.ts : mesuré mais sans plancher dans dev/mutation-floors.json'])
+    expect(r.raised).toEqual({})
+  })
 })

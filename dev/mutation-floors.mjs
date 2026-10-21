@@ -37,6 +37,9 @@ export function compare(measured, floors) {
     else if (score < floor) below.push(`${mod} : ${score} % < plancher ${floor} %`)
     else if (score > floor) raised[mod] = score
   }
+  // Un module mesuré sans plancher échouerait sans bruit : on exige une entrée pour chacun.
+  for (const mod of Object.keys(measured))
+    if (!(mod in floors)) below.push(`${mod} : mesuré mais sans plancher dans dev/mutation-floors.json`)
   return { below, raised }
 }
 

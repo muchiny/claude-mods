@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        file: [bridge.ts, colors.ts, fr.ts, state.ts, superpowers.ts, view.ts, workflow.ts]
+        file: [bridge.ts, cells.ts, colors.ts, fr.ts, state.ts, superpowers.ts, view.ts, workflow.ts]
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
