@@ -143,7 +143,8 @@ function numberOf(key: string, value: number): number {
 // --- Dictionnaire ------------------------------------------------------------------------------
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const UUID_ANY = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi
+/** UUID synthétique (uuidOf) : la seule forme d'UUID qui sort de l'anonymiseur. */
+const SYNTHETIC_UUID = /\b00000000-0000-4000-8000-\d{12}\b/g
 
 function letters(n: number): string {
   return n < 26 ? String.fromCharCode(97 + n) : letters(Math.floor(n / 26) - 1) + letters(n % 26)
@@ -1435,6 +1436,16 @@ const LEAKS: readonly { what: string; re: RegExp }[] = [
   { what: 'adresse e-mail', re: /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/ },
   { what: 'adresse IPv4', re: /(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])/ },
   { what: 'adresse IPv6', re: /\b(?:[0-9a-f]{1,4}:){5,7}[0-9a-f]{1,4}\b/i },
+  // Forme compressée (`fe80::1`, `::1`) : au moins un chiffre dans la suite hexadécimale (pas `std::fs`).
+  {
+    what: 'adresse IPv6 compressée',
+    re: /(?<![0-9A-Za-z:])(?=[0-9a-f:]*\d)(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?::(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?(?![0-9A-Za-z:])/i,
+  },
+  { what: 'adresse MAC', re: /(?<![0-9A-Za-z-])[0-9a-f]{2}(?:-[0-9a-f]{2}){5}(?![0-9A-Za-z-])/i },
+  {
+    what: 'UUID non synthétique',
+    re: /(?<![0-9a-f-])(?!00000000-0000-4000-8000-\d{12}(?![0-9a-f-]))[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![0-9a-f-])/i,
+  },
   { what: 'jeton sk-', re: /\bsk-[A-Za-z0-9_-]{10,}/ },
   { what: 'jeton GitHub', re: /\bgh[pousr]_[A-Za-z0-9]{20,}/ },
   { what: 'jeton Slack', re: /\bxox[abprs]-[A-Za-z0-9-]{10,}/ },
@@ -1499,7 +1510,7 @@ const SYNTHETIC_TS = /\b2000-01-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\
 /** Nombres gardés tels quels par l'anonymiseur (clés blanchies) : délai et code de sortie. */
 const KEPT_NUMBERS =
   /(?:\btimeout=|(?:--timeout|(?<![\w-])-t)[= ]|"(?:timeout|exit_code)":\s*|\bExit code:? |\[exit:)-?\d+/g
-const WHOLE_FORMS: readonly RegExp[] = [CSI_ALL, SYNTHETIC_TS, UUID_ANY, KEPT_NUMBERS]
+const WHOLE_FORMS: readonly RegExp[] = [CSI_ALL, SYNTHETIC_TS, SYNTHETIC_UUID, KEPT_NUMBERS]
 /** Formes refusées même si chacun de leurs mots est connu : horodatage ISO hors de la plage synthétique. */
 const REFUSED_FORMS: readonly RegExp[] = [/\d{4}-\d{2}-\d{2}T\d/]
 /** `mcp__ssh-bridge__<outil>` et `<outil>` seulement pour un outil de la liste du bridge. */

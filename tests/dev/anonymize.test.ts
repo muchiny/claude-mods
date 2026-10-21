@@ -685,3 +685,37 @@ describe('passe C : nombres (L1)', () => {
     ).not.toThrow()
   })
 })
+
+describe('passe C : barrière, UUID, IPv6 compressée, MAC (L3)', () => {
+  const REAL_UUID = 'deadbeef-cafe-4bad-9fed-0123456789ab'
+  const SYNTH_UUID = '00000000-0000-4000-8000-000000000001'
+
+  test('assertKnownForms : seul l’UUID synthétique est blanchi', () => {
+    expect(() => assertKnownForms(anonCall({}, `lorem ${REAL_UUID}`))).toThrow(/forme inconnue/)
+    expect(() => assertKnownForms(anonCall({}, `lorem ${SYNTH_UUID}`))).not.toThrow()
+  })
+
+  test('assertClean : UUID non synthétique, IPv6 compressée et MAC à tirets refusés, sans recopie', () => {
+    for (const leak of [
+      REAL_UUID,
+      'fe80::1',
+      '::1',
+      '2001:db8::ff00:42:8329',
+      'fe80::1ff:fe23:4567:890a',
+      '00-1A-2B-3C-4D-5E',
+    ]) {
+      expect(() => assertClean(`lorem ${leak} ipsum`, DENY)).toThrow()
+      try {
+        assertClean(`lorem ${leak} ipsum`, DENY)
+      } catch (e) {
+        expect(String(e)).not.toContain(leak)
+      }
+    }
+  })
+
+  test('assertClean : formes voisines acceptées (UUID synthétique, chemin Rust, ::, heure)', () => {
+    for (const ok of [SYNTH_UUID, 'loremi_psu::mdo: sit', 'a :: b', 'std::fs::read', '10:00:01', 'lo-re-mi-ps-um']) {
+      expect(() => assertClean(`lorem ${ok} ipsum`, DENY)).not.toThrow()
+    }
+  })
+})

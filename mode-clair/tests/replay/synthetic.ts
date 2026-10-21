@@ -12,10 +12,10 @@ import type { AnyEvent, AnyScenario } from './oracle'
 
 // --- Briques ------------------------------------------------------------------------------------
 
-/** bridge-facts §0.1 (1) : journal de la CLI sur stderr, avant tout (ANSI retiré). */
+/** bridge-facts §0.1 (1) : journal de la CLI sur stderr, avant tout (ANSI retiré ; époque synthétique du rejeu). */
 const CLI_LOG = [
-  '2026-10-14T23:33:55.485691Z  INFO Loading configuration config=/path/config.yaml',
-  '2026-10-14T23:33:55.485705Z  INFO Entropy-based secret detection enabled',
+  '2000-01-01T00:00:00.000Z  INFO Loading configuration config=/path/config.yaml',
+  '2000-01-01T00:00:00.014Z  INFO Entropy-based secret detection enabled',
 ].join('\n')
 /** Sortie de ssh_disk_usage (bridge-mcp src/mcp/tool_handlers/ssh_disk_usage.rs:344). */
 const DF = 'Filesystem Size Used Avail Use% Mounted\n/dev/sda1 10G 5G 5G 50% /\n'
@@ -29,7 +29,7 @@ const CONFIRM_NO_ARGS =
 const EXEC_BLOCK = (code: number) =>
   `Host: host-a\nCommand: uptime\nExit code: ${code}\nDuration: 412ms\n\n--- STDOUT ---\n 10:00:01 up 3 days`
 /** bridge-facts §6.1 : SessionInfo de ssh_session_create, réponse de ssh_session_exec. */
-const SESSION = '7f6d1c2e-3b4a-4c5d-8e9f-0a1b2c3d4e5f'
+const SESSION = '00000000-0000-4000-8000-000000000101'
 const SESSION_INFO = `{"id":"${SESSION}","host":"host-a","cwd":"/home/user","created_at_secs_ago":0,"last_used_secs_ago":0}`
 const SESSION_EXEC = `{"cwd":"/home/user","exit_code":0,"output":"up 3 days","session_id":"${SESSION}"}`
 /** bridge-facts §6.1 : JSON de ssh_exec_multi, un hôte classé, l'autre en échec. */
@@ -44,7 +44,7 @@ const PLAN = '# Exemple\n\n### T1 — Première\n\n### T2 — Deuxième\n'
 /** Bloc meta d'un script Workflow (D:17484). */
 const SCRIPT = "export const meta = { name: 'audit-disques', phases: [{ title: 'Review' }] }"
 const WF_DIR =
-  '/home/user/.claude/projects/-home-user-projet/11111111-2222-4333-8444-555555555555/subagents/workflows/wf_1'
+  '/home/user/.claude/projects/-home-user-projet/00000000-0000-4000-8000-000000000102/subagents/workflows/wf_1'
 const notice = (taskId: string, toolUseId: string, status: string) =>
   `<task-notification>\n<task-id>${taskId}</task-id>\n<tool-use-id>${toolUseId}</tool-use-id>\n<status>${status}</status>\n<summary>Dynamic workflow "audit-disques" ${status}</summary>\n</task-notification>`
 
