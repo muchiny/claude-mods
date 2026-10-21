@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 // @ts-expect-error module .mjs sans déclaration de types
-import { grepFinds, hygienePattern } from './workflows.mjs'
+import { grepFinds, hygienePattern, workflow } from './workflows.mjs'
 
 const finds = (text: string): boolean => grepFinds(hygienePattern(), text)
 
@@ -19,5 +19,30 @@ describe('ci.yml : grep d’hygiène des fixtures de rejeu (motif exécuté)', (
     expect(finds('/home/quelquun/x')).toBe(true)
     expect(finds('toolu_01ABCdef')).toBe(true)
     expect(finds('10.0.0.1')).toBe(true)
+  })
+})
+
+/** Le pas `name:` (ou `uses:` d'une action) de `wf` et son corps, jusqu'au pas suivant. */
+function step(wf: string, marker: string): string {
+  const at = wf.indexOf(marker)
+  expect(at).toBeGreaterThan(-1)
+  const next = wf.indexOf('\n      - ', at + marker.length)
+  return wf.slice(at, next < 0 ? undefined : next)
+}
+
+describe('paint.yml : rien du terminal brut n’est publié (L5)', () => {
+  const wf = workflow('paint.yml') as string
+  test('artefact : seulement les .grid.txt et .ecarts.txt, jamais les octets (.bin, .full.bin)', () => {
+    const upload = step(wf, 'actions/upload-artifact@')
+    expect(upload).toContain('paint-out/*.grid.txt')
+    expect(upload).toContain('paint-out/*.ecarts.txt')
+    expect(upload).not.toMatch(/\.bin|paint-out\s*$/m)
+  })
+  test('issue : les lignes de bannière (compte, organisation) sont masquées avant publication', () => {
+    const issue = step(wf, '- name: Issue')
+    expect(issue).not.toMatch(/cat "\$f"/)
+    expect(issue).toContain("sed -E '/@|[Oo]rgani[sz]ation|")
+    expect(issue).toContain('[ligne de bannière masquée]')
+    expect(issue).not.toContain('.full.bin')
   })
 })

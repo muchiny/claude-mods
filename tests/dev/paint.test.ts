@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { check, parseExpected } from '../../dev/paint/check'
+import { check, maskBanner, parseExpected } from '../../dev/paint/check'
 import { gridOf, gridText } from '../../dev/paint/replay'
 import { isLoginScreen, SCENARIOS } from '../../dev/paint/scenarios'
 
@@ -101,6 +101,28 @@ describe('check : écarts entre la grille et l’attendu', () => {
     expect(check(g, parseExpected(EXP))).toEqual([
       'ligne +2 : « rien depuis le début de la session » absent (lu : «  »)',
     ])
+  })
+
+  test('ligne lue de bannière (compte, organisation) : masquée dans l’écart', async () => {
+    for (const banner of [
+      '  quelquun@example.org’s Organization',
+      '▝▜█████▛▘  Opus · Claude Max',
+      'Acme Organisation',
+    ]) {
+      const g = await gridOf(bytes(`❯ /clair\r\n\r\n${banner}\r\n`), 100, 10)
+      const [ecart] = check(g, parseExpected(EXP))
+      expect(ecart).toBe(
+        'ligne +2 : « rien depuis le début de la session » absent (lu : « [ligne de bannière masquée] »)',
+      )
+    }
+  })
+
+  test('maskBanner : seules les lignes de bannière sont masquées', () => {
+    expect(maskBanner('  a@b.c’s Organization')).toBe('[ligne de bannière masquée]')
+    expect(maskBanner(' ▐▛███▜▌   Claude Code v2.1.306')).toBe('[ligne de bannière masquée]')
+    expect(maskBanner('Claude Pro')).toBe('[ligne de bannière masquée]')
+    expect(maskBanner('API Usage Billing')).toBe('[ligne de bannière masquée]')
+    expect(maskBanner('rien depuis le début de la session')).toBe('rien depuis le début de la session')
   })
 
   test('fond posé sur une cellule du mod : écart', async () => {

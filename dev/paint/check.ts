@@ -28,6 +28,18 @@ const DIM_MARK = '⟨attenue⟩'
  * est aussi accepté.
  */
 export const DIM_COLORS: readonly string[] = ['#999999']
+/**
+ * Ligne de la bannière de Claude Code (logo, abonnement, compte ou organisation) : jamais recopiée dans un écart
+ * ni une grille publiés (artefact, issue). Large exprès : une ligne du mod qui y ressemble est masquée aussi.
+ */
+const BANNER = /@|organi[sz]ation|claude (?:pro|max|team|enterprise)|api usage billing|[▐▛▜▝▘]/i
+export const BANNER_MASK = '[ligne de bannière masquée]'
+
+/** La ligne, ou BANNER_MASK si elle ressemble à une ligne de bannière. */
+export function maskBanner(text: string): string {
+  return BANNER.test(text) ? BANNER_MASK : text
+}
+
 const LINE = /^\+(\d+)(?:\.\.\+(\d+))?: (.*)$/
 const KEYED = /^(repere|absent|signe): (.*)$/
 
@@ -96,7 +108,7 @@ function checkLine(g: Grid, anchor: number, l: ExpectedLine, signs: readonly str
   }
   if (cols === null) {
     if (l.from !== l.to) return [`${label(l)} : « ${l.text} » absent`]
-    return [`${label(l)} : « ${l.text} » absent (lu : « ${g.rows[anchor + l.from]?.text ?? ''} »)`]
+    return [`${label(l)} : « ${l.text} » absent (lu : « ${maskBanner(g.rows[anchor + l.from]?.text ?? '')} »)`]
   }
   const row = g.rows[y] as GridRow
   const where = `ligne +${y - anchor}`

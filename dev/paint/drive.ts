@@ -18,7 +18,8 @@
 // Sorties dans --out (défaut $RUNNER_TEMP/paint-out ou /var/tmp/paint-out ; dossier en 700, fichiers en 600 :
 // les octets du terminal peuvent porter le compte ou l'organisation de la bannière) : <scénario>.full.bin
 // (tous les octets) ; par capture, <capture>.bin (octets rejoués), <capture>.grid.txt (grille en texte),
-// <capture>.ecarts.txt. Code 1 si un écart. Au démarrage, les HOME jetables périmés sont balayés.
+// <capture>.ecarts.txt (grille et écarts : lignes de bannière masquées, seuls publiés par paint.yml).
+// Code 1 si un écart. Au démarrage, les HOME jetables périmés sont balayés.
 // Garde-fous WSL : refus sous 2 Gio de mémoire disponible ; 120 s au plus par scénario ; un seul Claude à la
 // fois ; arrêt du groupe de processus par son PID, jamais par motif.
 //
@@ -29,7 +30,7 @@ import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import pty from 'node-pty'
-import { check, parseExpected } from './check.ts'
+import { check, maskBanner, parseExpected } from './check.ts'
 import { createHome, installCleanup, killGroup, removeHome, sweepHomes } from './home.mjs'
 import { gridOf, gridText } from './replay.ts'
 import { isLoginScreen, SCENARIOS, type Scenario, type Step } from './scenarios.ts'
@@ -235,7 +236,8 @@ async function main(): Promise<number> {
       const bytes = cut?.bytes ?? r.full
       writePrivate(join(out, `${name}.bin`), bytes)
       const grid = await gridOf(new Uint8Array(bytes), COLS, ROWS)
-      writePrivate(join(out, `${name}.grid.txt`), `${gridText(grid)}\n`)
+      // Grille publiée en artefact par paint.yml : lignes de bannière (compte, organisation) masquées.
+      writePrivate(join(out, `${name}.grid.txt`), `${gridText(grid).split('\n').map(maskBanner).join('\n')}\n`)
       const ecarts = r.error === null ? [] : [`session : ${r.error}`]
       if (cut === undefined) ecarts.push('session : capture non faite (grille de tous les octets)')
       ecarts.push(...check(grid, parseExpected(readFileSync(join(HERE, 'expected', `${name}.txt`), 'utf8'))))
