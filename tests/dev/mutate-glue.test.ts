@@ -1,6 +1,16 @@
 import { describe, expect, test } from 'claude-code/testing'
-// @ts-expect-error module .mjs sans déclaration de types
-import { apply, diffOf, draw, mutants, readEquivalents, readGlue } from '../../dev/mutate-glue.mjs'
+import {
+  apply,
+  diffOf,
+  draw,
+  fingerprint,
+  mutants,
+  readEquivalents,
+  readGlue,
+  staleEquivalents,
+  verdict,
+  // @ts-expect-error module .mjs sans déclaration de types
+} from '../../dev/mutate-glue.mjs'
 
 type Mutant = { id: string; line: number; from: string; to: string; offset: number }
 
@@ -109,13 +119,64 @@ describe('mutants', () => {
 })
 
 describe('readEquivalents', () => {
-  test('chaque équivalent relu existe dans register.tsx et porte sa raison', () => {
-    const ids = new Set(all(readGlue()).map((m) => m.id))
-    const list: Record<string, string> = readEquivalents()
-    for (const [id, reason] of Object.entries(list)) {
-      expect(ids.has(id)).toBe(true)
-      expect(reason.length).toBeGreaterThan(20)
-    }
+  test('chaque équivalent relu décrit un mutant actuel de register.tsx et porte sa raison', () => {
+    const list: Record<string, { fingerprint: string; reason: string }> = readEquivalents()
+    expect(staleEquivalents(readGlue(), list)).toEqual([])
+    for (const entry of Object.values(list)) expect(entry.reason.length).toBeGreaterThan(20)
+  })
+})
+
+describe('staleEquivalents', () => {
+  const src = 'f()\nif (a === b) g(2)'
+  const m = all(src).find((x) => x.to === '!==') as Mutant
+  const list = { [m.id]: { fingerprint: fingerprint(src, m), reason: 'raison' } }
+
+  test('à jour : rien à relire', () => {
+    expect(staleEquivalents(src, list)).toEqual([])
+  })
+
+  test('ligne déplacée : l’identifiant ne correspond plus', () => {
+    expect(staleEquivalents(`\n${src}`, list)).toEqual([m.id])
+  })
+
+  test('même position, ligne réécrite : l’empreinte ne correspond plus', () => {
+    expect(staleEquivalents('f()\nif (a === c) g(2)', list)).toEqual([m.id])
+  })
+})
+
+describe('verdict', () => {
+  const summary = (pass: number, fail: number) =>
+    `tests/engine/x.test.tsx:\n (pass) a\n ${pass} pass\n ${fail} fail\nRan 3 tests`
+
+  test('des tests échouent : tué', () => {
+    expect(verdict({ status: 1, reason: null, output: summary(2, 1) })).toEqual({ kind: 'killed' })
+  })
+
+  test('tout passe : survivant', () => {
+    expect(verdict({ status: 0, reason: null, output: summary(3, 0) })).toEqual({ kind: 'survived' })
+  })
+
+  test('délai, mémoire, lancement : erreur, pas tué', () => {
+    expect(verdict({ status: 124, reason: null, output: '' })).toEqual({ kind: 'error', cause: 'timeout' })
+    expect(verdict({ status: null, reason: 'timeout', output: summary(2, 1) })).toEqual({
+      kind: 'error',
+      cause: 'timeout',
+    })
+    expect(verdict({ status: null, reason: 'rss', output: '' })).toEqual({ kind: 'error', cause: 'rss-killed' })
+    expect(verdict({ status: null, reason: 'spawn', output: 'ENOENT' })).toEqual({
+      kind: 'error',
+      cause: 'spawn-error',
+    })
+  })
+
+  test('plantage avant le bilan, ou bilan incohérent : erreur de chargement', () => {
+    expect(verdict({ status: 1, reason: null, output: 'error: module not found' })).toEqual({
+      kind: 'error',
+      cause: 'load-error',
+    })
+    expect(verdict({ status: 1, reason: null, output: summary(3, 0) })).toEqual({ kind: 'error', cause: 'load-error' })
+    expect(verdict({ status: 0, reason: null, output: summary(0, 0) })).toEqual({ kind: 'error', cause: 'load-error' })
+    expect(verdict({ status: 0, reason: null, output: 'rien' })).toEqual({ kind: 'error', cause: 'load-error' })
   })
 })
 

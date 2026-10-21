@@ -9,6 +9,7 @@
 // Usage : node dev/mutate-glue.mjs [--sample N --seed S] [--only id,id] [--concurrency C]
 //         [--out reports/mutation-glue/result.json] [--list]
 import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -271,7 +272,8 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const MOD = join(ROOT, 'mode-clair')
 const GLUE = join(MOD, 'hooks', 'register.tsx')
 const WORK = '/var/tmp'
-const MIN_AVAILABLE_MB = 8192
+// 8 Go par défaut (règle WSL) ; GLUE_MIN_AVAILABLE_MB l'ajuste pour un runner de CI.
+const MIN_AVAILABLE_MB = Number(process.env.GLUE_MIN_AVAILABLE_MB ?? 8192)
 const RSS_LIMIT_KB = 1.5 * 1024 * 1024
 const TIMEOUT_S = 180
 
@@ -281,11 +283,49 @@ export function readGlue() {
 }
 
 /**
- * Mutants équivalents relus (identifiant → raison) : ni lancés ni comptés survivants. Un identifiant
- * dépend de la ligne et de la colonne : une modification de register.tsx impose de relire la liste.
+ * Mutants équivalents relus (identifiant → { empreinte, raison }) : ni lancés ni comptés survivants.
  */
 export function readEquivalents() {
   return JSON.parse(readFileSync(join(ROOT, 'dev', 'mutate-glue-equivalents.json'), 'utf8'))
+}
+
+/** Empreinte d'un mutant : from, to et le texte des lignes touchées (16 chiffres hexadécimaux). */
+export function fingerprint(source, m) {
+  const start = source.lastIndexOf('\n', m.offset - 1) + 1
+  const endAt = source.indexOf('\n', m.offset + m.from.length)
+  const lines = source.slice(start, endAt === -1 ? source.length : endAt)
+  return createHash('sha256').update(`${m.from}\0${m.to}\0${lines}`).digest('hex').slice(0, 16)
+}
+
+/**
+ * Les entrées de la liste qui ne décrivent plus un mutant de `source` : identifiant absent (ligne
+ * ou colonne déplacée) ou empreinte différente (ligne réécrite). Une telle liste est à relire.
+ */
+export function staleEquivalents(source, list) {
+  const byId = new Map(mutants(source).map((m) => [m.id, m]))
+  return Object.entries(list)
+    .filter(([id, entry]) => {
+      const m = byId.get(id)
+      return m === undefined || entry.fingerprint !== fingerprint(source, m)
+    })
+    .map(([id]) => id)
+}
+
+/**
+ * Verdict d'une exécution de `claude plugin test` : `killed` seulement si des tests ont échoué ;
+ * `survived` si tous ont passé ; sinon `error` (délai, mémoire, lancement impossible, module ou
+ * suite qui plante avant le bilan) : on ne sait pas, ce n'est pas un mutant tué.
+ */
+export function verdict(run) {
+  if (run.reason === 'spawn') return { kind: 'error', cause: 'spawn-error' }
+  if (run.reason === 'rss') return { kind: 'error', cause: 'rss-killed' }
+  if (run.reason === 'timeout' || run.status === 124) return { kind: 'error', cause: 'timeout' }
+  const passed = /^\s*(\d+) pass\s*$/m.exec(run.output)
+  const failed = /^\s*(\d+) fail\s*$/m.exec(run.output)
+  if (passed === null || failed === null) return { kind: 'error', cause: 'load-error' }
+  if (Number(failed[1]) > 0) return run.status === 0 ? { kind: 'error', cause: 'load-error' } : { kind: 'killed' }
+  if (run.status !== 0) return { kind: 'error', cause: 'load-error' }
+  return Number(passed[1]) > 0 ? { kind: 'survived' } : { kind: 'error', cause: 'load-error' }
 }
 
 function availableMb() {
@@ -293,7 +333,21 @@ function availableMb() {
   return line ? Number(line[1]) / 1024 : 0
 }
 
-// Mémoire résidente (kB) de tous les processus du groupe `pgid`.
+// Mémoire (kB) de tous les processus du groupe `pgid` : la PSS (/proc/<pid>/smaps_rollup), qui
+// partage entre processus les pages communes ; la somme des VmRSS les compterait plusieurs fois
+// (claude et ses enfants bun partagent l'essentiel de leur code : 1,0 à 1,5 Go en VmRSS cumulé pour
+// une exécution saine, mesuré). VmRSS en repli si smaps_rollup est illisible.
+function memKb(pid) {
+  try {
+    const pss = readFileSync(`/proc/${pid}/smaps_rollup`, 'utf8').match(/^Pss:\s+(\d+) kB/m)
+    if (pss) return Number(pss[1])
+  } catch {
+    // repli sur VmRSS
+  }
+  const rss = readFileSync(`/proc/${pid}/status`, 'utf8').match(/^VmRSS:\s+(\d+) kB/m)
+  return rss ? Number(rss[1]) : 0
+}
+
 function groupRssKb(pgid) {
   let total = 0
   for (const pid of readdirSync('/proc')) {
@@ -302,8 +356,7 @@ function groupRssKb(pgid) {
       const stat = readFileSync(`/proc/${pid}/stat`, 'utf8')
       const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ')
       if (Number(fields[2]) !== pgid) continue
-      const rss = readFileSync(`/proc/${pid}/status`, 'utf8').match(/^VmRSS:\s+(\d+) kB/m)
-      if (rss) total += Number(rss[1])
+      total += memKb(pid)
     } catch {
       // processus terminé entre la liste et la lecture
     }
@@ -313,8 +366,13 @@ function groupRssKb(pgid) {
 
 // Lance `timeout 180 claude plugin test <copie>` dans son propre groupe, sous garde-fou mémoire.
 export function runTests(dir) {
-  return new Promise((resolve) => {
+  return new Promise((done) => {
     const started = Date.now()
+    let settled = false
+    const resolve = (r) => {
+      if (!settled) done(r)
+      settled = true
+    }
     const child = spawn('timeout', [String(TIMEOUT_S), 'claude', 'plugin', 'test', dir], {
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -334,16 +392,24 @@ export function runTests(dir) {
         // groupe déjà terminé
       }
     }
+    let peakKb = 0
     const watchdog = setInterval(() => {
-      if (groupRssKb(child.pid) > RSS_LIMIT_KB) kill('rss')
+      const kb = groupRssKb(child.pid)
+      peakKb = Math.max(peakKb, kb)
+      if (kb > RSS_LIMIT_KB) kill('rss')
     }, 2000)
     const hard = setTimeout(() => kill('timeout'), (TIMEOUT_S + 20) * 1000)
+    child.on('error', (err) => {
+      clearInterval(watchdog)
+      clearTimeout(hard)
+      resolve({ status: null, reason: 'spawn', ms: Date.now() - started, output: String(err), peakKb })
+    })
     child.on('close', (status) => {
       clearInterval(watchdog)
       clearTimeout(hard)
       kill(null) // les petits-enfants éventuels du groupe
       if (reason === null && status === 124) reason = 'timeout'
-      resolve({ status, reason: reason ?? (status === 0 ? null : 'tests'), ms: Date.now() - started, output })
+      resolve({ status, reason, ms: Date.now() - started, output, peakKb })
     })
   })
 }
@@ -374,9 +440,9 @@ async function main(argv) {
   const concurrency = Math.max(1, Number(option(argv, '--concurrency') ?? 1))
   const out = option(argv, '--out') ?? join(ROOT, 'reports', 'mutation-glue', 'result.json')
   const equivalents = readEquivalents()
-  const stale = Object.keys(equivalents).filter((id) => !every.some((m) => m.id === id))
+  const stale = staleEquivalents(source, equivalents)
   if (stale.length > 0) {
-    console.error(`::error::équivalents absents de register.tsx, liste à relire : ${stale.join(', ')}`)
+    console.error(`::error::équivalents périmés (ligne déplacée ou réécrite), liste à relire : ${stale.join(', ')}`)
     return 2
   }
   const candidates = every.filter((m) => !(m.id in equivalents))
@@ -394,15 +460,20 @@ async function main(argv) {
     if (mb < MIN_AVAILABLE_MB) throw new Error(`mémoire disponible ${Math.round(mb)} Mo < ${MIN_AVAILABLE_MB} Mo`)
   }
   preflight()
+  // Témoin : la copie non mutée doit passer, tests réellement lancés, avant tout mutant.
   const baseline = await runMutant(source, null)
-  if (baseline.status !== 0) {
-    console.error(`::error::la colle d'origine ne passe pas ses tests (${baseline.reason})\n${baseline.output}`)
+  const reference = verdict(baseline)
+  if (reference.kind !== 'survived') {
+    console.error(
+      `::error::la colle d'origine ne passe pas ses tests (${reference.cause ?? 'tests'})\n${baseline.output}`,
+    )
     return 2
   }
   console.log(`référence : ${baseline.ms} ms ; ${chosen.length} / ${every.length} mutants`)
 
   const killed = []
   const survived = []
+  const errors = []
   const queue = [...chosen]
   let done = 0
   const worker = async () => {
@@ -411,9 +482,12 @@ async function main(argv) {
       const r = await runMutant(source, m)
       done++
       const base = { id: m.id, line: m.line, from: m.from, to: m.to, ms: r.ms }
-      if (r.status === 0) survived.push({ ...base, diff: diffOf(source, m) })
-      else killed.push({ ...base, reason: r.reason })
-      console.log(`[${done}/${chosen.length}] ${m.id} ${r.status === 0 ? 'SURVIT' : `tué (${r.reason})`} ${r.ms} ms`)
+      const v = verdict(r)
+      if (v.kind === 'survived') survived.push({ ...base, diff: diffOf(source, m) })
+      else if (v.kind === 'killed') killed.push(base)
+      else errors.push({ ...base, cause: v.cause, peakKb: r.peakKb, output: r.output.slice(-2000) })
+      const label = v.kind === 'survived' ? 'SURVIT' : v.kind === 'killed' ? 'tué' : `ERREUR (${v.cause})`
+      console.log(`[${done}/${chosen.length}] ${m.id} ${label} ${r.ms} ms, ${Math.round(r.peakKb / 1024)} Mo`)
     }
   }
   await Promise.all(Array.from({ length: concurrency }, worker))
@@ -428,17 +502,20 @@ async function main(argv) {
     baselineMs: baseline.ms,
     equivalent: every
       .filter((m) => m.id in equivalents)
-      .map((m) => ({ id: m.id, line: m.line, from: m.from, to: m.to, reason: equivalents[m.id] })),
+      .map((m) => ({ id: m.id, line: m.line, from: m.from, to: m.to, reason: equivalents[m.id].reason })),
     killed: killed.sort(byId),
     survived: survived.sort(byId),
+    error: errors.sort(byId),
   }
   mkdirSync(dirname(out), { recursive: true })
   writeFileSync(out, `${JSON.stringify(report, null, 2)}\n`)
   console.log(
-    `tués ${killed.length}, survivants ${survived.length}, équivalents écartés ${report.equivalent.length} → ${out}`,
+    `tués ${killed.length}, survivants ${survived.length}, erreurs ${errors.length}, équivalents écartés ${report.equivalent.length} → ${out}`,
   )
   for (const s of report.survived) console.log(`::warning::survivant ${s.id}\n${s.diff}`)
-  return survived.length === 0 ? 0 : 1
+  // Tolérance zéro : une erreur est un verdict inconnu (la passe locale complète n'en a aucune).
+  for (const e of report.error) console.log(`::error::mutant ${e.id} sans verdict (${e.cause})`)
+  return survived.length === 0 && errors.length === 0 ? 0 : 1
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)

@@ -118,8 +118,11 @@ ciblées (`===`↔`!==`, `&&`↔`||`, `return next(e)` sans l'appel, `if (cond)`
 littéraux numériques ±1), jamais dans les chaînes, commentaires, regex, gabarits, texte JSX, ni dans
 l'événement et le filtre d'un `on(`. Chaque mutant tourne sur une copie du mod dans `/var/tmp`, sous
 `timeout 180 claude plugin test` et un garde-fou qui tue le groupe de processus au-delà de 1,5 Go ;
-le lancement exige 8 Go de mémoire disponible. Rapport : `reports/mutation-glue/result.json` (tués,
-survivants avec ligne et diff).
+le lancement exige 8 Go de mémoire disponible (`GLUE_MIN_AVAILABLE_MB` ajuste ce seuil sur un runner
+de CI). Une copie non mutée doit d'abord passer. Rapport : `reports/mutation-glue/result.json` :
+`killed` (des tests ont échoué), `survived` (ligne et diff), `error` (délai, mémoire, lancement
+impossible, plantage avant le bilan des tests : verdict inconnu). Un survivant ou une erreur fait
+sortir en code 1.
 
 ```bash
 node dev/mutate-glue.mjs --list                 # les mutants, sans rien lancer
@@ -127,9 +130,10 @@ node dev/mutate-glue.mjs --sample 30 --seed 1   # un tirage reproductible, concu
 node dev/mutate-glue.mjs --only L87C12-next     # un mutant précis
 ```
 
-Les mutants équivalents relus sont dans `dev/mutate-glue-equivalents.json` avec leur raison ;
-l'identifiant suit ligne et colonne, une modification de `register.tsx` impose de relire la liste
-(le runner refuse une liste périmée). Le job `glue` de `mutation.yml` lance la mutation complète
+Les mutants équivalents relus sont dans `dev/mutate-glue-equivalents.json`, chacun avec sa raison et
+une empreinte (from, to et texte des lignes touchées) : une ligne déplacée ou réécrite rend l'entrée
+périmée et le runner refuse de tourner tant que la liste n'est pas relue. Les équivalents qui
+reposent sur le `.catch` des hooks sont épinglés par `mode-clair/tests/engine/catch.test.tsx`. Le job `glue` de `mutation.yml` lance la mutation complète
 chaque lundi (environ 4 s par mutant) ; un survivant le fait échouer.
 
 ### CI

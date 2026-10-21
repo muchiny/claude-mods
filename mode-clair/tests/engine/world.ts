@@ -59,6 +59,8 @@ export type World = {
   rowWrites: string[]
   /** Nombre de lectures de l'état du mod (`$.state.get`). */
   stateReads: number
+  /** Le tool_use_id de chaque appel d'outil arrivé au cœur, dans l'ordre. */
+  coreCalls: string[]
 }
 
 export function world(on: On): World {
@@ -79,6 +81,7 @@ export function world(on: On): World {
     stateWrites: 0,
     rowWrites: [],
     stateReads: 0,
+    coreCalls: [],
   }
   on('state.set', { plugin: PLUGIN, key: 'rows' }, ($, e, next) => {
     w.rows.set(e.id, e.value)
@@ -121,6 +124,7 @@ export function world(on: On): World {
   on('turn.complete', ($, e) => ({ text: e.answer }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('tool.call', async ($, e) => {
+    w.coreCalls.push(e.tool_use_id)
     const answer = w.answers.get(e.tool_use_id)
     if (answer === undefined) return { result: {}, text: '' }
     if (answer.afterMs !== undefined) await clock.sleep(answer.afterMs)
