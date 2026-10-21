@@ -168,9 +168,11 @@ function stateWordAt(rest: string, sign: string): number {
   // Débuts de mot : 0 et chaque position qui suit une espace.
   const starts = [0]
   for (let i = rest.indexOf(' '); i >= 0; i = rest.indexOf(' ', i + 1)) starts.push(i + 1)
-  // Le signe de l'étape est celui de son état (§5.4) : un nom de machine égal à un mot d'état, derrière un autre signe (« ✓ inconnue »), reste un nom.
-  // « code N » suit aussi bien ✓ (ça a tourné) que ✗ (échec de la machine).
-  return starts.find((at) => CODE_WORD.test(rest.slice(at)) || rowOf(rest.slice(at))?.sign === sign) ?? -1
+  // Les étapes ✓ du bridge sont « machine » ou « machine code N » (steps) : un mot d'état derrière ✓ (« ✓ inconnue ») est un nom de machine.
+  // « code N » est un état derrière ✓ comme derrière ✗ ; ✗ et ○ portent tous les autres états.
+  return (
+    starts.find((at) => CODE_WORD.test(rest.slice(at)) || (sign !== '✓' && rowOf(rest.slice(at)) !== undefined)) ?? -1
+  )
 }
 
 /**
