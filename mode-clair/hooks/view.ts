@@ -19,7 +19,8 @@ import type {
   Waiting,
   Workflow,
 } from '../types'
-import { steps } from './bridge'
+import { steps, stripControls } from './bridge'
+import { cellWidth } from './cells'
 import { fr } from './fr'
 import { hostIndex, machines, problems, STATE_TABLE, unseenProblems } from './state'
 import { active, currentPhase } from './workflow'
@@ -75,9 +76,9 @@ type IndexOf = (name: string) => number
 // Stryker disable next-line ArrowFunction: wordTone ne lit l'index que par « i >= 0 » : undefined >= 0 est faux comme -1 >= 0.
 const NO_HOSTS: IndexOf = () => -1
 
-/** Identifiant affiché sur une seule ligne, tel quel par ailleurs. */
+/** Identifiant affiché sur une seule ligne, sans caractère de contrôle (un ESC dessiné par la carte reconfigurerait le terminal). */
 function one(s: string): string {
-  return s.replace(/[\r\n\t]+/g, ' ')
+  return stripControls(s.replace(/[\r\n\t]+/g, ' '))
 }
 
 /** Un ton se compare par sa clé : son nom, ou « machine:N » (deux objets de même machine sont le même ton). */
@@ -223,13 +224,6 @@ function pipelineText(c: BridgeCall): string {
   return parts.join(SEP)
 }
 
-/** Largeur en cellules : un point de code par cellule, sélecteurs de variante et jointures exclus. */
-function width(text: string): number {
-  let n = 0
-  for (const ch of text) if (!/[\uFE00-\uFE0F\u200B-\u200D]/.test(ch)) n += 1
-  return n
-}
-
 function stateIndex(s: ClairState): IndexOf {
   return (name) => hostIndex(s, name)
 }
@@ -242,7 +236,7 @@ function stateIndex(s: ClairState): IndexOf {
 export function fit(line: Line, columns: number): Line {
   const max = Number.isFinite(columns) ? Math.floor(columns) : 0
   if (max < 1) return []
-  if (width(textOf(line)) <= max) return line
+  if (cellWidth(textOf(line)) <= max) return line
   const chars: Piece[] = []
   for (const p of line) for (const ch of p.text) chars.push({ text: ch, tone: p.tone })
   const seps: number[] = []
@@ -258,14 +252,14 @@ export function fit(line: Line, columns: number): Line {
   // De la dernière séparation à la deuxième : la première borne « signe machine », qui ne se coupe qu'en dernier.
   for (const at of seps.slice(1).reverse()) {
     const head = chars.slice(0, at)
-    const w = width(textOf(head))
+    const w = cellWidth(textOf(head))
     if (w + 2 <= max) return norm([...head, { text: ' …', tone: 'attenue' }])
     if (w <= max) return norm([...head, { text: w < max ? '…' : '', tone: 'attenue' }])
   }
   const kept: Piece[] = []
   let used = 0
   for (const c of chars) {
-    const w = width(c.text)
+    const w = cellWidth(c.text)
     if (used + w > max - 1) break
     kept.push(c)
     used += w
@@ -291,7 +285,7 @@ function waitingCallLine(c: BridgeCall, s: ClairState, columns: number): Line {
   ]
   const tool = [...one(c.tool)]
   const max = Number.isFinite(columns) ? Math.floor(columns) : 0
-  const room = max - width(textOf([...head, ...tail])) - SEP.length
+  const room = max - cellWidth(textOf([...head, ...tail])) - SEP.length
   if (tool.length <= room)
     return norm([...head, { text: SEP, tone: 'attenue' }, { text: tool.join(''), tone: 'texte' }, ...tail])
   if (room >= 2) {

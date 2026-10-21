@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import type { ParsedCall } from '../../hooks/bridge'
-import { isBridgeServer, parseCli, parseMcp, serverOf, splitShell } from '../../hooks/bridge'
+import { isBridgeServer, parseCli, parseMcp, serverOf, splitShell, usefulLines } from '../../hooks/bridge'
 import { TOOLS } from '../../hooks/tools.generated'
 
 /** Un appel CLI attendu : ssh_disk_usage sur raspberry, sauf ce que `patch` change. */
@@ -666,5 +666,28 @@ describe('serverOf et isBridgeServer : ancres', () => {
     expect(isBridgeServer('xplugin_x_ssh-bridge')).toBe(false)
     expect(isBridgeServer('plugin_x_ssh-bridge\n')).toBe(false)
     expect(isBridgeServer('plugin_x_ssh-bridge')).toBe(true)
+  })
+})
+
+describe('usefulLines : séquences de contrôle', () => {
+  test('OSC (lien hypertexte) retiré, terminé par BEL ou ST', () => {
+    expect(usefulLines('a\x1b]8;;http://x\x07lien\x1b]8;;\x07b')).toEqual(['alienb'])
+    expect(usefulLines('a\x1b]0;titre\x1b\\b')).toEqual(['ab'])
+  })
+
+  test('\r non suivi de \n : seul ce qui suit le dernier \r reste', () => {
+    expect(usefulLines('10%\r50%\r100%')).toEqual(['100%'])
+    expect(usefulLines('a\r\nb')).toEqual(['a', 'b'])
+  })
+
+  test('CSI autre que SGR retiré', () => {
+    expect(usefulLines('x\x1b[2Ky')).toEqual(['xy'])
+    expect(usefulLines('\x1b[31mrouge\x1b[0m')).toEqual(['rouge'])
+  })
+
+  test('C0 (sauf \n et \t), DEL et C1 retirés', () => {
+    expect(usefulLines('\x07bip')).toEqual(['bip'])
+    expect(usefulLines('a\x00b\x7fc\x85d\x9fe')).toEqual(['abcde'])
+    expect(usefulLines('a\tb')).toEqual(['a\tb'])
   })
 })

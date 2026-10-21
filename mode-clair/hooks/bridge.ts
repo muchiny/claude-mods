@@ -521,9 +521,32 @@ export function parseMcp(tool: string, input: unknown, tools: Readonly<Record<st
 type Step = { label: string; mark: 'ok' | 'ko' | 'off' }
 type JsonObject = Record<string, unknown>
 
-/** Couleurs SGR du journal de bridge-mcp (bridge-facts §0.1.1). */
-// biome-ignore lint/suspicious/noControlCharactersInRegex: l'ESC (0x1b) ouvre les séquences SGR, c'est voulu
-const ANSI_SGR = /\x1b\[[0-9;]*m/g
+/** Séquence CSI (couleurs SGR du journal de bridge-mcp, bridge-facts §0.1.1, mais aussi effacement, curseur…). */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: l'ESC (0x1b) ouvre les séquences, c'est voulu
+const CSI = /\x1b\[[0-?]*[ -/]*[@-~]/g
+/** Séquence OSC (lien hypertexte, titre de fenêtre), terminée par BEL ou ST. */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: l'ESC (0x1b) et BEL (0x07) bornent la séquence, c'est voulu
+const OSC = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g
+/** Caractères de contrôle restants : C0 sauf \n et \t, DEL, C1. */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: c'est précisément ce qu'on retire
+const CONTROLS = /[\x00-\x08\x0b-\x1f\x7f-\x9f]/g
+
+/**
+ * Texte tel qu'un terminal l'afficherait, sans ses commandes : séquences CSI et OSC retirées, puis tout
+ * caractère C0 (sauf \n et \t), DEL et C1. Un \r non suivi de \n ramène au début de la ligne : seul ce
+ * qui suit le dernier \r de la ligne reste (barres de progression).
+ */
+export function stripControls(text: string): string {
+  return text
+    .replace(OSC, '')
+    .replace(CSI, '')
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((line) => line.slice(line.lastIndexOf('\r') + 1))
+    .join('\n')
+    .replace(CONTROLS, '')
+}
+
 /** Ligne du journal tracing de bridge-mcp, couleur retirée (amendement A3, bridge-facts §0.1.1). */
 const TRACING_LINE = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z\s+(TRACE|DEBUG|INFO|WARN|ERROR)\s/
 /** Première ligne du texte d'un Bash sorti en erreur (bridge-facts §0). */
@@ -614,10 +637,9 @@ export const BRIDGE_TEXTS: readonly { re: RegExp; state: CallState }[] = [
   { re: /^'sudo' (is not supported on Windows host|requires a POSIX shell)/, state: 'erreur-usage' },
 ]
 
-/** Lignes utiles : couleurs ANSI retirées, lignes de journal du bridge et lignes vides sautées, chaque ligne rognée. */
+/** Lignes utiles : séquences de contrôle retirées (stripControls), lignes de journal du bridge et lignes vides sautées, chaque ligne rognée. */
 export function usefulLines(text: string): string[] {
-  return text
-    .replace(ANSI_SGR, '')
+  return stripControls(text)
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line !== '' && !TRACING_LINE.test(line))

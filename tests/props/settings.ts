@@ -4,7 +4,6 @@
 //   hebdomadaire de mutation.yml (10 000).
 // - SEED : `PROPS_SEED` si défini, 42 en CI (`CI` défini : exécution reproductible), sinon aléatoire et
 //   affiché, pour rejouer un contre-exemple avec `PROPS_SEED=<graine> npm run props`.
-import { test } from 'claude-code/testing'
 import * as fc from 'fast-check'
 // @ts-expect-error module .mjs sans déclaration de types
 import { env, log } from './env.mjs'
@@ -31,12 +30,3 @@ export const SEED: number = seedOf()
 export function check<T>(property: fc.IPropertyWithHooks<T> | fc.IProperty<T>): void {
   fc.assert(property, { numRuns: NUM_RUNS, seed: SEED })
 }
-
-type TodoTest = (name: string, body: () => void) => void
-
-/**
- * `test.todo` de bun:test (sous `bun test`, 'claude-code/testing' est bun:test, dev/bun-claude-code-testing.ts) :
- * le corps n'est exécuté que par `bun test --todo`, où il doit alors échouer (contre-exemple documenté dans
- * le commentaire du test). Quand la tâche 5 corrige le défaut, on repasse en `test`.
- */
-export const todo: TodoTest = (test as unknown as { todo: TodoTest }).todo
