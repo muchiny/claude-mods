@@ -49,7 +49,9 @@ function main(argv) {
   }
   const targets = [...ranges].flatMap(([file, list]) => list.map(([a, b]) => `${file}:${a}-${b}`))
   console.log(`mutation-gate : ${targets.join(' ')}`)
-  const run = spawnSync('npx', ['stryker', 'run', 'stryker.pure.json', '--mutate', ...targets], { stdio: 'inherit' })
+  const run = spawnSync('npx', ['stryker', 'run', 'stryker.pure.json', '--mutate', targets.join(',')], {
+    stdio: 'inherit',
+  })
   return run.status ?? 1
 }
 

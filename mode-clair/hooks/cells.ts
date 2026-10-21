@@ -88,10 +88,11 @@ const WIDE: readonly (readonly [number, number])[] = [
   [0x30000, 0x3fffd],
 ]
 
-const ZERO = /^(?:[\p{Cc}\p{Cf}\p{Mn}\p{Me}]|[\u200b-\u200d]|[\ufe00-\ufe0f])$/u
-const EMOJI_BY_DEFAULT = /^(?![\u{1f1e6}-\u{1f1ff}])\p{Emoji_Presentation}$/u
-const EMOJI_BASE = /^[^\p{ASCII}]$/u
-const TEXT_PICTO = /^\p{Extended_Pictographic}$/u
+// Chaque test ne reçoit qu'un point de code : pas d'ancres.
+const ZERO = /[\p{Cc}\p{Cf}\p{Mn}\p{Me}\p{Default_Ignorable_Code_Point}]/u
+const EMOJI_BY_DEFAULT = /(?![\u{1f1e6}-\u{1f1ff}])\p{Emoji_Presentation}/u
+const TEXT_PICTO = /(?![\p{ASCII}\u{1f1e6}-\u{1f1ff}])\p{Emoji}/u
+const KEYCAP_BASE = /[0-9#*]/
 const VS16 = 0xfe0f
 const KEYCAP = 0x20e3
 
@@ -105,16 +106,19 @@ export function cellWidth(text: string): number {
   let n = 0
   for (let i = 0; i < chars.length; i += 1) {
     const ch = chars[i] as string
-    const cp = ch.codePointAt(0) as number
-    if (/^[0-9#*]$/.test(ch) && chars[i + 1]?.codePointAt(0) === VS16 && chars[i + 2]?.codePointAt(0) === KEYCAP) {
+    const next = chars[i + 1]?.codePointAt(0)
+    if (KEYCAP_BASE.test(ch) && next === VS16 && chars[i + 2]?.codePointAt(0) === KEYCAP) {
       n += 2
       i += 2
-      continue
+    } else if (ZERO.test(ch)) {
+      // largeur nulle
+    } else if (inWide(ch.codePointAt(0) as number) || EMOJI_BY_DEFAULT.test(ch)) {
+      n += 2
+    } else if (TEXT_PICTO.test(ch) && next === VS16) {
+      n += 2
+    } else {
+      n += 1
     }
-    if (ZERO.test(ch) || (cp >= 0xe0000 && cp <= 0xe0fff)) continue
-    if (inWide(cp) || EMOJI_BY_DEFAULT.test(ch)) n += 2
-    else if (TEXT_PICTO.test(ch) && EMOJI_BASE.test(ch) && chars[i + 1]?.codePointAt(0) === VS16) n += 2
-    else n += 1
   }
   return n
 }

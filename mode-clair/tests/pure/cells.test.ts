@@ -40,16 +40,23 @@ describe('cellWidth', () => {
     expect(cellWidth('1\ufe0f\u20e3')).toBe(2)
     expect(cellWidth('#\ufe0f')).toBe(1)
     expect(cellWidth('1\ufe0f')).toBe(1)
+    expect(cellWidth('1\u0301\u20e3')).toBe(1)
+    expect(cellWidth('node1 v2')).toBe(8)
   })
 
   test('contrôles et étiquettes : largeur nulle', () => {
     expect(cellWidth('a\tb\n')).toBe(2)
     expect(cellWidth('\u{e0020}x')).toBe(1)
+    expect(cellWidth('\u{e0000}')).toBe(0)
+    expect(cellWidth('\u{e0fff}')).toBe(0)
+    expect(cellWidth('\u{e1000}')).toBe(1)
+    expect(cellWidth('\u00ad')).toBe(0)
   })
 
   test('indicateurs régionaux : une cellule chacun, un drapeau en fait deux', () => {
     expect(cellWidth('\u{1f1eb}')).toBe(1)
     expect(cellWidth('\u{1f1eb}\u{1f1f7}')).toBe(2)
+    expect(cellWidth('\u{1f1eb}\ufe0f')).toBe(1)
   })
 
   test('les bornes des plages larges', () => {
