@@ -115,6 +115,20 @@ describe('propriétés : rendu', () => {
     )
   })
 
+  // L9 de la revue finale : bidi, largeur nulle et séparateurs de ligne d'une sortie distante ou d'un nom produit
+  // par le modèle ne doivent jamais atteindre l'écran. Aucun point de code Cf, Zl ou Zp n'est admis (liste vide) :
+  // le mod ne dessine lui-même aucun de ces caractères (le sélecteur U+FE0E du signe d'attente est un Mn).
+  test('pas d’usurpation : aucun texte dessiné ne contient de point de code Cf, Zl ou Zp', () => {
+    const SPOOF = /[\p{Cf}\p{Zl}\p{Zp}]/u
+    check(
+      fc.property(arbState({ controls: true }), arbColumns, fc.boolean(), (s, columns, isWorking) => {
+        for (const line of drawn(s, columns, isWorking)) expect(textOf(line)).not.toMatch(SPOOF)
+        const view = cardLines(s, ` ${s.hostOrder[0] ?? ''} `, 20_000)
+        for (const line of view) expect(textOf(line)).not.toMatch(SPOOF)
+      }),
+    )
+  })
+
   // view.ts:422 : bandLines rend [] sauf appel en cours, attente, workflow actif (en-cours ou distant) ou
   // étape Superpowers affichée (isWorking, ou agent lancé sous le plan encore en route).
   test('repos vide : sans appel en cours, attente, workflow actif ni Superpowers actif, la bande est vide', () => {

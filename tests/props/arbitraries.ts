@@ -41,6 +41,22 @@ const arbTool = (): fc.Arbitrary<string> =>
 /** Contrôles C0 (hors \t \n \r), DEL, C1 et ESC : ce que le terminal interpréterait. */
 export const CONTROLS = ['\x00', '\x07', '\x08', '\x0b', '\x0c', '\x1b', '\x1b[31m', '\x7f', '\x85', '\x9b']
 
+/** Usurpation d'affichage : bidi, largeur nulle, marques directionnelles, séparateurs de ligne, ZWJ, BOM. */
+export const SPOOFING = [
+  '\u202e',
+  '\u202a',
+  '\u2066',
+  '\u2069',
+  '\u200b',
+  '\u200d',
+  '\u200f',
+  '\u061c',
+  '\u2028',
+  '\u2029',
+  '\ufeff',
+  '\u00ad',
+]
+
 const FIXED_HOSTS = [
   'host-a',
   'host-b',
@@ -71,7 +87,7 @@ export const arbText = (controls = false): fc.Arbitrary<string> => {
   const plain = fc.string({ unit: 'grapheme', maxLength: 100 })
   if (!controls) return plain
   return fc
-    .tuple(plain, fc.constantFrom(...CONTROLS), plain)
+    .tuple(plain, fc.constantFrom(...CONTROLS, ...SPOOFING), plain)
     .map(([a, c, b]) => `${a}${c}${b}`)
     .chain((t) => fc.constantFrom(t, t.replaceAll(' ', '\x1b')))
 }
