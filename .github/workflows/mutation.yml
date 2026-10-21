@@ -155,4 +155,9 @@ jobs:
       - run: npm ci
 
       - name: Propriétés
-        run: PROPS_RUNS=10000 node_modules/.bin/bun test ./tests/props --timeout 3000000
+        # Graine variable (entier < 2^30) à chaque exécution hebdomadaire (les PR gardent 42) ; affichée par settings.ts
+        # (« props : graine N ») pour rejouer un contre-exemple avec PROPS_SEED=N.
+        run: |
+          PROPS_SEED="$(( (RANDOM << 15) | RANDOM ))"
+          echo "graine de la passe hebdomadaire : $PROPS_SEED"
+          PROPS_SEED="$PROPS_SEED" PROPS_RUNS=10000 node_modules/.bin/bun test ./tests/props --timeout 3000000
