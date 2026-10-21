@@ -12,17 +12,28 @@ const SKIP: readonly (readonly [number, number])[] = [
   [0x20002, 0x2fffb],
   [0x30002, 0x3fffb],
 ]
+// Écarts admis, par excès seulement : xterm unicode11 / wcwidth les rendent sur 2 cellules, string-width sur 0 ou 1.
+const WIDER_THAN_STRING_WIDTH = [0x115f, 0x3164, 0x1f93b, 0x1f946]
 const skipped = (cp: number): boolean => SKIP.some(([lo, hi]) => cp >= lo && cp <= hi)
 
 describe('cellWidth : exhaustif', () => {
   test('chaque point de code seul vaut string-width', { timeoutMs: 30_000 }, () => {
     const diffs: number[] = []
     for (let cp = 0; cp <= LAST; cp += 1) {
-      if ((cp >= 0xd800 && cp <= 0xdfff) || skipped(cp)) continue
+      if ((cp >= 0xd800 && cp <= 0xdfff) || skipped(cp) || WIDER_THAN_STRING_WIDTH.includes(cp)) continue
       const ch = String.fromCodePoint(cp)
       if (cellWidth(ch) !== stringWidth(ch)) diffs.push(cp)
     }
     expect(diffs).toEqual([])
+  })
+
+  test('les quatre écarts admis valent 2 cellules (maximum de string-width et de xterm unicode11)', () => {
+    for (const cp of WIDER_THAN_STRING_WIDTH) {
+      const s = String.fromCodePoint(cp)
+      expect(cellWidth(s)).toBe(2)
+      expect(cellWidth(s)).toBeGreaterThanOrEqual(stringWidth(s))
+    }
+    expect(cellWidth('\u{3164}'.repeat(5))).toBe(10)
   })
 
   test('les étiquettes E0000 à E0FFF sont de largeur nulle, E1000 non', () => {
@@ -36,7 +47,7 @@ describe('cellWidth : exhaustif', () => {
     for (let cp = 0xa9; cp <= 0x1faff; cp += 1) {
       if (cp >= 0xd800 && cp <= 0xdfff) continue
       const s = `${String.fromCodePoint(cp)}️`
-      if (cellWidth(s) !== stringWidth(s)) diffs.push(cp)
+      if (cellWidth(s) !== stringWidth(s) && !WIDER_THAN_STRING_WIDTH.includes(cp)) diffs.push(cp)
     }
     expect(diffs).toEqual([])
   })

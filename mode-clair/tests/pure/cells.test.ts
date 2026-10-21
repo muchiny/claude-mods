@@ -68,4 +68,12 @@ describe('cellWidth', () => {
     expect(cellWidth('\u{1f300}')).toBe(2)
     expect(cellWidth('\u{1f9ff}')).toBe(2)
   })
+
+  test('maximum de string-width et xterm unicode11 : fillers Hangul et deux pictogrammes valent 2', () => {
+    for (const cp of [0x115f, 0x3164, 0x1f93b, 0x1f946]) expect(cellWidth(String.fromCodePoint(cp))).toBe(2)
+    expect(cellWidth('\u3164\u3164\u3164')).toBe(6)
+    // voisins : U+1160 (ignorable) reste nul, U+1F93A (emoji) et U+3163 gardent leur largeur
+    expect(cellWidth('\u1160')).toBe(0)
+    expect(cellWidth('\u3163')).toBe(2)
+  })
 })

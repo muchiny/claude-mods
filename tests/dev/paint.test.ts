@@ -139,20 +139,20 @@ describe('check : écarts entre la grille et l’attendu', () => {
   })
 
   test('largeur de la grille différente de cellWidth : écart (xterm Unicode 11 ≠ table du mod)', async () => {
-    // U+1F93B (MODERN PENTATHLON) : large pour addon-unicode11, ignorable pour string-width et cellWidth.
-    const exp = parseExpected('repere: ❯ /clair\n+1: a\u{1f93b}b')
-    const g = await gridOf(bytes('❯ /clair\r\na\u{1f93b}b\r\n'), 40, 5)
+    // U+2630 (TRIGRAMME DU CIEL) : étroit pour addon-unicode11 (Unicode 11), large pour string-width et cellWidth.
+    const exp = parseExpected('repere: ❯ /clair\n+1: a\u{2630}b')
+    const g = await gridOf(bytes('❯ /clair\r\na\u{2630}b\r\n'), 40, 5)
     expect(check(g, exp)).toEqual([
-      'ligne +1 : « a\u{1f93b}b » occupe 4 cellules dans le terminal, cellWidth en compte 3',
+      'ligne +1 : « a\u{2630}b » occupe 3 cellules dans le terminal, cellWidth en compte 4',
     ])
   })
 
   test('signe dont la largeur dans le terminal diffère de cellWidth : écart', async () => {
-    const exp = parseExpected('repere: ❯ /clair\n+1: x\u{1f93b}\nsigne: \u{1f93b}')
-    const g = await gridOf(bytes('❯ /clair\r\nx\u{1f93b}\r\n'), 40, 5)
+    const exp = parseExpected('repere: ❯ /clair\n+1: x\u{2630}\nsigne: \u{2630}')
+    const g = await gridOf(bytes('❯ /clair\r\nx\u{2630}\r\n'), 40, 5)
     expect(check(g, exp)).toEqual([
-      'ligne +1 : « x\u{1f93b} » occupe 3 cellules dans le terminal, cellWidth en compte 2',
-      'ligne +1 : signe « \u{1f93b} » sur 2 cellules, cellWidth en compte 1',
+      'ligne +1 : « x\u{2630} » occupe 2 cellules dans le terminal, cellWidth en compte 3',
+      'ligne +1 : signe « \u{2630} » sur 1 cellules, cellWidth en compte 2',
     ])
   })
 

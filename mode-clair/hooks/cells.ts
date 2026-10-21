@@ -15,8 +15,9 @@
  * point de code par point de code : tests/width/cells.test.ts le vérifie sur tout le plan 0 à 4. Elle
  * diffère d'@xterm/addon-unicode11 (Unicode 11, consulté hors dépôt) sur environ 1 980 points de code
  * récents (trigrammes, hexagrammes, Tangut, emoji récents…) et sur U+1F93B, U+1F946, U+115F, U+3164
- * (larges pour xterm, ignorables ou étroits pour string-width). On suit string-width : si un terminal plus
- * ancien compte plus large, la ligne peut déborder de quelques cellules sur ces seuls caractères rares.
+ * (larges pour xterm, ignorables ou étroits pour string-width). On suit string-width, sauf sur ces quatre
+ * points de code où l'on prend le maximum des deux tables (2 cellules) : un terminal qui les rend sur 2
+ * cellules ne voit pas la ligne déborder.
  *
  * Écarts assumés avec string-width, qui segmente en graphèmes (Intl.Segmenter) : une séquence jointe par
  * U+200D (famille), un emoji à teinte (U+1F3FB-1F3FF) ou une voyelle jointe (thaï) vaut 1 grappe pour
@@ -107,6 +108,9 @@ const TEXT_PICTO = /(?![\p{ASCII}\u{1f1e6}-\u{1f1ff}])\p{Emoji}/u
 const KEYCAP_BASE = /[0-9#*]/
 const VS16 = 0xfe0f
 const KEYCAP = 0x20e3
+// Points de code que string-width compte 0 ou 1 et que @xterm/addon-unicode11 (et wcwidth de glibc) rend sur
+// 2 cellules : on prend le maximum des deux tables, car une ligne coupée trop tôt vaut mieux qu'un débordement.
+const WIDE_FOR_TERMINALS: ReadonlySet<number> = new Set([0x115f, 0x3164, 0x1f93b, 0x1f946])
 
 function inWide(cp: number): boolean {
   return WIDE.some(([lo, hi]) => cp >= lo && cp <= hi)
@@ -122,6 +126,8 @@ export function cellWidth(text: string): number {
     if (KEYCAP_BASE.test(ch) && next === VS16 && chars[i + 2]?.codePointAt(0) === KEYCAP) {
       n += 2
       i += 2
+    } else if (WIDE_FOR_TERMINALS.has(ch.codePointAt(0) as number)) {
+      n += 2
     } else if (ZERO.test(ch)) {
       // largeur nulle
     } else if (inWide(ch.codePointAt(0) as number) || EMOJI_BY_DEFAULT.test(ch)) {

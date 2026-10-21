@@ -73,6 +73,23 @@ describe('propriétés : rendu', () => {
     )
   })
 
+  // Largeur de terminal (xterm unicode11 / wcwidth) : U+115F, U+3164, U+1F93B et U+1F946 valent 2 cellules ;
+  // une ligne de N fillers occupe 2N cellules et doit être coupée comme le reste (I2 de la revue finale).
+  test('largeur : une ligne de fillers Hangul et de pictogrammes larges est coupée à columns cellules', () => {
+    const arbFiller = fc.constantFrom('\u3164', '\u115f', '\u{1f93b}', '\u{1f946}', 'a', ' ')
+    check(
+      fc.property(fc.array(arbFiller, { maxLength: 40 }), fc.integer({ min: 0, max: 80 }), (chars, columns) => {
+        const line: Line = [{ text: chars.join(''), tone: 'texte' }]
+        // Largeur d'un terminal xterm unicode11 : 2 cellules par filler, string-width pour le reste.
+        const terminal = [...textOf(fit(line, columns))].reduce(
+          (n, ch) => n + (ch === 'a' || ch === ' ' || ch === '…' ? 1 : 2),
+          0,
+        )
+        expect(terminal).toBeLessThanOrEqual(columns)
+      }),
+    )
+  })
+
   // Review Focus 1 et 3. Contre-exemple de la tâche 4, corrigé en tâche 5 (hooks/cells.ts) : view.ts comptait un
   // point de code par cellule, string-width en compte 2 pour le CJK et l'emoji. Réduit à la main : un appel
   // `fait` sur l'hôte « ホ », callLine(…, columns = 4) → « ✓ ホ… » = 5 cellules > 4.
