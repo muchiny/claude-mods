@@ -769,6 +769,7 @@ function classifySubcommand(tool: string, exit: number, lines: readonly string[]
   const truncated = hasTruncation(lines, true)
   const code = tool === 'exec' ? execCode(lines) : undefined
   // Un code distant 0 ne rend pas ✓ un Bash en échec : la sortie locale non nulle reste un échec.
+  // Stryker disable next-line ConditionalExpression: `exit === 0` → false est équivalent (code distant 0 : la suite rend `fait` pour exit 0)
   if (code !== undefined && (code !== 0 || exit === 0)) {
     return code === 0 ? { state: 'fait', truncated } : { state: 'code', code, truncated }
   }

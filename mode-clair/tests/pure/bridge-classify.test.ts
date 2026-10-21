@@ -365,6 +365,14 @@ describe('CLI, sous-commande tool : codes de sortie (A3, A4, A7)', () => {
     })
   })
 
+  test('--json : la marque de sortie persistée est lue aussi dans content[].text (échappement JSON \\u003c : absente de la ligne brute)', () => {
+    const json = '{"content":[{"type":"text","text":"\\u003cpersisted-output>\\nOutput too large (51.2KB)."}]}'
+    expect(classify(cli('ssh_history', { host: null }), ok(bash(0, json)), TOOLS)).toEqual({
+      state: 'fait',
+      truncated: true,
+    })
+  })
+
   test('--json et sortie 6 : [exit:N] lu dans content[].text (§1.4, §3.9)', () => {
     const json = [
       '{',
