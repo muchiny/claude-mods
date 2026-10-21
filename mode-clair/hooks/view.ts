@@ -283,16 +283,22 @@ function waitingCallLine(c: BridgeCall, s: ClairState, columns: number): Line {
     { text: SEP, tone: 'attenue' },
     { text: WAITS, tone: 'attention' },
   ]
-  const tool = [...one(c.tool)]
+  const tool = one(c.tool)
   const max = Number.isFinite(columns) ? Math.floor(columns) : 0
   const room = max - cellWidth(textOf([...head, ...tail])) - SEP.length
-  if (tool.length <= room)
-    return norm([...head, { text: SEP, tone: 'attenue' }, { text: tool.join(''), tone: 'texte' }, ...tail])
+  if (cellWidth(tool) <= room)
+    return norm([...head, { text: SEP, tone: 'attenue' }, { text: tool, tone: 'texte' }, ...tail])
   if (room >= 2) {
+    // Coupé en cellules (un caractère large en vaut 2), « … » compris.
+    let cut = ''
+    for (const ch of tool) {
+      if (cellWidth(cut + ch) > room - 1) break
+      cut += ch
+    }
     return norm([
       ...head,
       { text: SEP, tone: 'attenue' },
-      { text: tool.slice(0, room - 1).join(''), tone: 'texte' },
+      { text: cut, tone: 'texte' },
       { text: '…', tone: 'attenue' },
       ...tail,
     ])

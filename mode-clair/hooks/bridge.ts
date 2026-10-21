@@ -534,14 +534,15 @@ const CONTROLS = /[\x00-\x08\x0b-\x1f\x7f-\x9f]/g
 /**
  * Texte tel qu'un terminal l'afficherait, sans ses commandes : séquences CSI et OSC retirées, puis tout
  * caractère C0 (sauf \n et \t), DEL et C1. Un \r non suivi de \n ramène au début de la ligne : seul ce
- * qui suit le dernier \r de la ligne reste (barres de progression).
+ * qui suit le dernier \r de la ligne reste (barres de progression). \r+\n est un saut de ligne, et un \r final
+ * sans rien après lui n'efface rien (un terminal garde le texte).
  */
 export function stripControls(text: string): string {
   return text
     .replace(OSC, '')
     .replace(CSI, '')
-    .replace(/\r\n/g, '\n')
     .split('\n')
+    .map((line) => line.replace(/\r+$/, ''))
     .map((line) => line.slice(line.lastIndexOf('\r') + 1))
     .join('\n')
     .replace(CONTROLS, '')

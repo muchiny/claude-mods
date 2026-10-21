@@ -680,6 +680,13 @@ describe('usefulLines : séquences de contrôle', () => {
     expect(usefulLines('a\r\nb')).toEqual(['a', 'b'])
   })
 
+  test('\\r+\\n est un saut de ligne ; un \\r final ne vide pas la ligne', () => {
+    expect(usefulLines('abc\r\r\ndef\r\n10%\r50%\r')).toEqual(['abc', 'def', '50%'])
+    expect(usefulLines('50%\r')).toEqual(['50%'])
+    expect(usefulLines('50%\r\r')).toEqual(['50%'])
+    expect(usefulLines('a\rb\r\rc')).toEqual(['c'])
+  })
+
   test('CSI autre que SGR retiré', () => {
     expect(usefulLines('x\x1b[2Ky')).toEqual(['xy'])
     expect(usefulLines('\x1b[31mrouge\x1b[0m')).toEqual(['rouge'])

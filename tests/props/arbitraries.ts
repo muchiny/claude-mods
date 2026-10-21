@@ -28,6 +28,15 @@ export type Ev =
 const STATES = Object.keys(STATE_TABLE) as CallState[]
 const FINAL_STATES = STATES.filter((s) => s !== 'en-cours')
 const TOOL_NAMES = [...Object.keys(TOOLS).slice(0, 40), 'exec', 'upload', 'download']
+/** Outil tel qu'un serveur MCP tiers pourrait le nommer : ASCII du bridge, ou large (CJK, emoji, accents). */
+const arbTool = (): fc.Arbitrary<string> =>
+  fc.oneof(
+    { weight: 6, arbitrary: fc.constantFrom(...TOOL_NAMES) },
+    {
+      weight: 1,
+      arbitrary: fc.constantFrom('\u5de5\u5177', '\u30c4\u30fc\u30eb'.repeat(8), 'run-\u{1f680}', 'caf\u00e9'),
+    },
+  )
 
 /** Contrôles C0 (hors \t \n \r), DEL, C1 et ESC : ce que le terminal interpréterait. */
 export const CONTROLS = ['\x00', '\x07', '\x08', '\x0b', '\x0c', '\x1b', '\x1b[31m', '\x7f', '\x85', '\x9b']
@@ -176,7 +185,7 @@ const arbCallWith = (i: number, controls: boolean): fc.Arbitrary<BridgeCall> =>
       n: fc.integer({ min: 0, max: 2 }),
       agentId: arbAgent,
       via: fc.constantFrom<'cli' | 'mcp'>('cli', 'mcp'),
-      tool: fc.constantFrom(...TOOL_NAMES),
+      tool: arbTool(),
       host: fc.option(fc.oneof(arbHost(), arbHostMaybeDirty(controls)), { nil: null }),
       nature: arbNature,
       state: fc.constantFrom(...STATES),
@@ -260,7 +269,7 @@ export const arbState = (options: { controls?: boolean } = {}): fc.Arbitrary<Cla
         fc.integer({ min: 0, max: 100_000 }),
         fc.option(
           fc.record({
-            tool: fc.constantFrom(...TOOL_NAMES),
+            tool: arbTool(),
             host: fc.option(fc.oneof(arbHost(), arbHostMaybeDirty(controls)), { nil: null }),
             pick: fc.nat(),
             since: fc.integer({ min: 0, max: 100_000 }),

@@ -2,18 +2,30 @@
  * Largeur d'affichage en cellules de terminal, pure et sans dépendance (les hooks sont chargés par le runtime
  * de Claude Code : aucun import de module).
  *
- * Règles, point de code par point de code (comme @xterm/addon-unicode11, que le terminal de Claude Code
- * suit, et non par grappe de graphèmes) :
- * - 0 : marques combinantes (Mn, Me), sélecteurs de variante U+FE00–FE0F, U+200B–200D ;
- * - 2 : East Asian Wide et Fullwidth, emoji à présentation emoji par défaut ;
- * - 2 : un pictogramme à présentation texte (✓ ⚠ ☂ …) suivi de U+FE0F ; sans U+FE0F, 1 ;
+ * Règles, point de code par point de code (comme @xterm/addon-unicode11, et non par grappe de graphèmes) :
+ * - 0 : contrôles (Cc), formats (Cf), marques combinantes (Mn, Me), ignorables Unicode (dont U+FE00-FE0F,
+ *   U+200B-200D, étiquettes U+E0000-E0FFF) ;
+ * - 2 : East Asian Wide et Fullwidth, emoji à présentation emoji par défaut (les indicateurs régionaux
+ *   valent 1 chacun, un drapeau 2) ;
+ * - 2 : un pictogramme à présentation texte (U+2600-27BF, etc.) suivi de U+FE0F, et une keycap (chiffre,
+ *   # ou * + U+FE0F + U+20E3) ; sans U+FE0F, 1 ;
  * - 1 : tout le reste.
  *
+ * Référence : la table des plages larges suit string-width 8.3.0 (Unicode récent, celui des goldens),
+ * point de code par point de code : tests/width/cells.test.ts le vérifie sur tout le plan 0 à 4. Elle
+ * diffère d'@xterm/addon-unicode11 (Unicode 11, consulté hors dépôt) sur environ 1 980 points de code
+ * récents (trigrammes, hexagrammes, Tangut, emoji récents…) et sur U+1F93B, U+1F946, U+115F, U+3164
+ * (larges pour xterm, ignorables ou étroits pour string-width). On suit string-width : si un terminal plus
+ * ancien compte plus large, la ligne peut déborder de quelques cellules sur ces seuls caractères rares.
+ *
  * Écarts assumés avec string-width, qui segmente en graphèmes (Intl.Segmenter) : une séquence jointe par
- * U+200D (👨‍👩‍👧), un drapeau (deux indicateurs régionaux) ou un emoji à teinte (👍🏽) vaut 1 grappe de
- * 2 cellules pour string-width, la somme de ses points de code ici. Le résultat est toujours >= celui de
- * string-width : on coupe trop tôt plutôt que de déborder de la ligne. Les écarts sont énumérés, et seulement eux,
- * par tests/props/render.test.ts.
+ * U+200D (famille), un emoji à teinte (U+1F3FB-1F3FF) ou une voyelle jointe (thaï) vaut 1 grappe pour
+ * string-width, la somme de ses points de code ici. Jamais en dessous de string-width, par construction :
+ * (1) un point de code seul vaut exactement sa largeur string-width (test exhaustif) ; (2) une grappe vaut
+ * pour string-width la largeur de sa base (au plus 2, les autres points sont de largeur nulle ou ignorés),
+ * et la somme de nos largeurs contient cette base ; (3) les suites qui changent la largeur d'un point
+ * (FE0F, keycap) sont traitées à l'identique de string-width. La borne est aussi testée par fuzz sur tout
+ * Unicode (tests/props/render.test.ts). On coupe trop tôt plutôt que de déborder.
  */
 
 /**

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { steps } from '../../hooks/bridge'
+import { cellWidth } from '../../hooks/cells'
 import { colorOf } from '../../hooks/colors'
 import { fr } from '../../hooks/fr'
 import { STATE_TABLE, setWaiting } from '../../hooks/state'
@@ -289,6 +290,28 @@ describe('callLine pendant le formulaire de confirmation (« à toi » sur la li
   })
 })
 
+describe('callLine en attente : outil large', () => {
+  const wide = call({
+    id: 'toolu_c#0',
+    toolUseId: 'toolu_c',
+    tool: '\u5de5\u5177\u5de5\u5177\u5de5\u5177',
+    state: 'en-cours',
+    endedAt: undefined,
+  })
+  const s = stateOf([wide], { waiting: { tool: wide.tool, host: 'raspberry', callId: 'toolu_c#0', since: 2_000 } })
+
+  test('l’outil se coupe en cellules, jamais au-delà des colonnes', () => {
+    for (let columns = 25; columns <= 60; columns += 1)
+      expect(cellWidth(text(callLine(wide, s, columns)))).toBeLessThanOrEqual(columns)
+    const full = text(callLine(wide, s, 80))
+    expect(full).toBe(`${WAIT_SIGN} raspberry \u00b7 \u5de5\u5177\u5de5\u5177\u5de5\u5177 \u00b7 attend ton accord`)
+    // 12 cellules d'outil : 11 colonnes de moins, un caractère de moins (« 工具工具工 » = 10 cellules + « … »).
+    expect(text(callLine(wide, s, cellWidth(full) - 1))).toBe(
+      `${WAIT_SIGN} raspberry \u00b7 \u5de5\u5177\u5de5\u5177\u5de5\u2026 \u00b7 attend ton accord`,
+    )
+  })
+})
+
 describe('pipeline : le pipeline réel (spec §5.1)', () => {
   // §5.4 : injoignable, décliné, fait, refusé par Claude Code
   test('les étapes de bridge.steps, ✓ ok, ✗ erreur, ○ atténué, dans leur ordre ; la conclusion sans signe', () => {
@@ -365,7 +388,7 @@ describe('fit : priorité machine · état (spec §4.1, critère 13)', () => {
       const c = call({ host: 'win2025ntlm', tool: 'ssh_win_disk_usage', state: st, code: 1, truncated: true })
       const head = st === 'en-cours' || st === 'fait' ? 'ssh_win_disk_usage' : st === 'code' ? 'code 1' : label(st)
       const t = text(callLine(c, s, 40))
-      expect(width(t)).toBeLessThanOrEqual(40)
+      expect(cellWidth(t)).toBeLessThanOrEqual(40)
       expect(t.startsWith(`${STATE_TABLE[st].sign} win2025ntlm · ${head}`)).toBe(true)
     }
   })
