@@ -79,7 +79,6 @@ groupe ; les autres groupes ne sont pas touchés.
 ✗ host-b · injoignable · rien n’a tourné
 ✗ host-a · échec · voir /clair
 ○ host-a · refusé par Claude Code · rien n’a tourné
-⚠ host-a · ssh_exec · attend ton accord
 ```
 
 Le résultat vient d'abord : `machine · état`, puis la nature ou la raison.
@@ -133,11 +132,16 @@ problèmes arrivés depuis ton dernier `/clair` ; elle disparaît après
 | `●` | accent | en cours |
 | `✓` | vert | fait |
 | `✓` | texte | `code N` : une commande libre (`ssh_exec`…) a rendu un code non nul ; ce n'est pas un échec du bridge |
-| `✗` | rouge | injoignable, machine inconnue, refusé (liste noire), accès refusé, confirmation impossible, échec sur la machine, échec |
-| `✗` | jaune | limité, confirmation manquante (`--yes`), délai dépassé, erreur d'usage, erreur de config |
+| `✗` | rouge | injoignable, machine inconnue, refusé (liste noire), confirmation impossible, échec sur la machine, échec |
+| `✗` | jaune | limité, confirmation manquante (`--yes`), erreur d'usage, erreur de config |
 | `○` | atténué | refusé par Claude Code, décliné (formulaire), interrompu |
 | `?` | atténué | incertain |
 | `⚠` | jaune | à toi : ta réponse est attendue |
+
+**En attente de la décision D5** (`tests/replay/REFERENCE.md`) : le plugin
+affiche aujourd'hui aussi `accès refusé` (authentification SSH, clé d'hôte) et
+`délai dépassé` (commande trop longue), que la spec 0.2 range sous `échec`. Ces
+deux états peuvent changer.
 
 `tronqué` s'ajoute en jaune à la fin d'une ligne quand la sortie a été coupée,
 par le bridge ou par Claude Code.

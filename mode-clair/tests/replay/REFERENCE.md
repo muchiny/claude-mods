@@ -145,6 +145,9 @@ jamais dans le corps (§5.1 Classement).
 | R73 | problème (colonne `clair ✗ n`) plus récent que le dernier `/clair` | étiquette atténuée `clair ✗ n` au pied de saisie ; disparaît après `/clair` | §4.6 |
 | R93 | toute ligne du mod, à 40 colonnes utiles | `machine · état` reste lisible en entier, la raison peut être coupée ; aucune ligne ne dépasse la largeur (voir D4 pour un nom de machine plus long que la ligne) | §4.1 ; §3 critère 13 |
 
+R93, ajoutée à l'étape 2, est rangée avec les surfaces ; les numéros ne sont pas réordonnés pour
+garder stables les renvois des désaccords.
+
 ## Workflows
 
 | id | situation (événements) | ce qui doit s'afficher | source |
