@@ -12,5 +12,5 @@
     "lib": ["ES2023"],
     "types": []
   },
-  "include": ["dev/claude-code.d.ts", "mode-clair/hooks", "mode-clair/types", "mode-clair/tests"]
+  "include": ["dev/claude-code.d.ts", "mode-clair/hooks", "mode-clair/types", "mode-clair/tests", "tests"]
 }

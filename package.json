@@ -15,7 +15,10 @@
     "validate": "claude plugin validate . && claude plugin validate mode-clair",
     "test": "claude plugin test mode-clair",
     "mutate": "stryker run",
-    "coverage": "bun test mode-clair/tests/pure --coverage"
+    "coverage": "bun test mode-clair/tests/pure --coverage",
+    "test:dev": "bun test ./tests",
+    "mutate:pure": "stryker run stryker.pure.json",
+    "mutate:gate": "node dev/mutation-gate.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

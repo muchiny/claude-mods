@@ -59,6 +59,8 @@ npm run validate    # claude plugin validate (marketplace et mod)
 npm test            # claude plugin test mode-clair
 npm run format      # applique le format Biome
 npm run coverage    # couverture des modules purs sous bun:test (seuil : 100 % des lignes et fonctions)
+npm run test:dev    # tests des outils de développement (dev/*.mjs)
+npm run mutate:pure # mutation de tous les modules purs sous Bun (rapide, seuil break = 100)
 ```
 
 ### Couverture
@@ -85,6 +87,22 @@ inscrivant le mutant actif. Compte environ 4,5 s par mutant ; le module `bridge.
 La CI le lance chaque lundi et à la demande (`.github/workflows/mutation.yml`), un job par module,
 et publie le rapport HTML en artefact.
 
+#### Mutation rapide sous Bun
+
+`npm run mutate:pure` (`stryker.pure.json`) rejoue `mode-clair/tests/pure` sous `bun test` : le
+processus lit lui-même `__STRYKER_ACTIVE_MUTANT__`, plus besoin de copie jetable. Le rapport est dans
+`reports/mutation-pure/`. Lance-le avec `TMPDIR=/var/tmp` et un peu de mémoire libre.
+
+- **Porte de PR** : `node dev/mutation-gate.mjs --base origin/main` ne mute que les lignes de
+  `mode-clair/hooks` ajoutées ou modifiées depuis la base (`register.tsx` et `tools.generated.ts`
+  exclus) ; un mutant survivant fait échouer le job `mutation-pr` de la CI.
+- **Planchers** : `dev/mutation-floors.json` donne le score minimal de chaque module. Le job `floors`
+  de `mutation.yml` lance `npm run mutate:pure` puis `node dev/mutation-floors.mjs
+  reports/mutation-pure/mutation.json` : code 1 sous un plancher ; `--write` relève les planchers
+  qu'un module dépasse.
+- **Branches** : Bun ne mesure pas les branches (seuils `lines` et `functions` seulement, `statements`
+  accepté mais non appliqué, doc Bun 1.4). La mutation en tient lieu.
+
 ### CI
 
 `.github/workflows/ci.yml`, à chaque push et pull request :
@@ -93,6 +111,7 @@ et publie le rapport HTML en artefact.
 | --- | --- |
 | `static` | Biome (`--error-on-warnings`), `tsc`, `npm audit` (échec à partir de « high ») |
 | `coverage` | 100 % des lignes et des fonctions des modules purs (`bun test --coverage`) |
+| `mutation-pr` | mutation des lignes de hooks modifiées par la PR, aucun survivant toléré |
 | `mod` | `claude plugin validate` (marketplace et mod), `claude plugin test` |
 | `hygiene` | aucun chemin personnel ni secret dans ce dépôt public |
 
