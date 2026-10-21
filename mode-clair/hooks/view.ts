@@ -159,14 +159,10 @@ function signAt(seg: string): string | null {
 function stateWordAt(rest: string, sign: string): number {
   // Une machine non prouvée seule après ✓ est la machine d'un appel fait, pas l'état « machine inconnue ».
   if (rest === UNKNOWN_HOST && sign !== '✗') return -1
-  let at = 0
-  for (;;) {
-    const word = rest.slice(at)
-    if (rowOf(word) !== undefined) return at
-    const space = rest.indexOf(' ', at)
-    if (space < 0) return -1
-    at = space + 1
-  }
+  // Débuts de mot : 0 et chaque position qui suit une espace.
+  const starts = [0]
+  for (let i = rest.indexOf(' '); i >= 0; i = rest.indexOf(' ', i + 1)) starts.push(i + 1)
+  return starts.find((at) => rowOf(rest.slice(at)) !== undefined) ?? -1
 }
 
 /**
@@ -293,6 +289,8 @@ function stateIndex(s: ClairState): IndexOf {
 type NameSpan = { from: number; to: number; end: number }
 
 const MACHINE_COUNT = /^\d+ appels?$/
+/** « 2 machines » : tête du résumé de la carte, qui n'est pas une machine. */
+const SUMMARY_HEAD = /^\d+ machines?$/
 /** Début d'une ligne à signe qui n'a pas de machine : workflow, « N appels » en cours. */
 const NO_NAME = /^(workflow|\d+ appels$)/
 
@@ -309,7 +307,7 @@ function nameSpan(chars: readonly Piece[], seps: readonly number[]): NameSpan | 
   const sign0 = signAt(first)
   if (sign0 === null) {
     // `count` manque pour une ligne sans séparation : test(undefined) lit « undefined », jamais « N appels ».
-    return MACHINE_COUNT.test(segs[1] as string)
+    return !SUMMARY_HEAD.test(first) && MACHINE_COUNT.test(segs[1] as string)
       ? { from: 0, to: ends[0] as number, end: ends[2] ?? chars.length }
       : null
   }
@@ -355,6 +353,22 @@ function cutMachine(chars: readonly Piece[], span: NameSpan, max: number): Line 
 }
 
 /**
+ * De la dernière séparation à la deuxième (la première borne « signe machine », qui ne se coupe qu'en
+ * dernier) : la plus longue tête qui tient, finie par « … » ; seules comptent les têtes d'au moins
+ * `minEnd` points de code.
+ */
+function tryHeads(chars: readonly Piece[], seps: readonly number[], max: number, minEnd: number): Line | null {
+  for (const at of seps.slice(1).reverse()) {
+    if (at < minEnd) continue
+    const head = chars.slice(0, at)
+    const w = cellWidth(textOf([...head]))
+    if (w + 2 <= max) return norm([...head, { text: ' …', tone: 'attenue' }])
+    if (w <= max) return norm([...head, { text: w < max ? '…' : '', tone: 'attenue' }])
+  }
+  return null
+}
+
+/**
  * Coupe une ligne à `columns` cellules. Les détails partent d'abord, par
  * segments entiers depuis la fin (remplacés par « … ») ; la tête
  * « signe machine · état » n'est coupée que si elle ne tient pas seule. `cutName` (lignes d'appel) :
@@ -377,18 +391,16 @@ export function fit(line: Line, columns: number, cutName = false): Line {
     )
       seps.push(i)
   })
-  // De la dernière séparation à la deuxième : la première borne « signe machine », qui ne se coupe qu'en dernier.
-  for (const at of seps.slice(1).reverse()) {
-    const head = chars.slice(0, at)
-    const w = cellWidth(textOf(head))
-    if (w + 2 <= max) return norm([...head, { text: ' …', tone: 'attenue' }])
-    if (w <= max) return norm([...head, { text: w < max ? '…' : '', tone: 'attenue' }])
-  }
-  if (cutName) {
-    const span = nameSpan(chars, seps)
-    const named = span === null ? null : cutMachine(chars, span, max)
+  // Avec cutName, un nom de machine se coupe avant que l'état ne parte : les têtes qui coupent avant la fin de l'état sont écartées.
+  const span = cutName ? nameSpan(chars, seps) : null
+  const whole = span === null ? null : tryHeads(chars, seps, max, span.end)
+  if (whole !== null) return whole
+  if (span !== null) {
+    const named = cutMachine(chars, span, max)
     if (named !== null) return named
   }
+  const heads = tryHeads(chars, seps, max, 0)
+  if (heads !== null) return heads
   const kept: Piece[] = []
   let used = 0
   for (const c of chars) {

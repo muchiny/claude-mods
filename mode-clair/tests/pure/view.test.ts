@@ -2030,3 +2030,76 @@ describe('fit avec cutName : formes de ligne reconnues (D4)', () => {
     expect(cut(u, 14)).toBe(plain(u, 14))
   })
 })
+
+describe('fit avec cutName : noms de longueur moyenne, l’état reste entier tant qu’il tient (D4, R93)', () => {
+  const L = (t: string): Line => [{ text: t, tone: 'texte' }]
+  // Forme -> (nom) => [ligne, partie à garder entière, début avant le nom]
+  const shapes: Record<string, (n: string) => [string, string, string]> = {
+    'rangée de machine': (n) => [
+      `${n} · 1 appel · ✓ ssh_disk_usage · ✗ problème non vu`,
+      ' · 1 appel · ✓ ssh_disk_usage',
+      '',
+    ],
+    'ligne d’appel': (n) => [`✗ ${n} · injoignable · rien n’a tourné`, ' · injoignable', '✗ '],
+    pipeline: (n) => [`✗ ${n} injoignable · rien n’a tourné`, ' injoignable', '✗ '],
+    'pipeline avec accord': (n) => [`✓ accord · ✗ ${n} injoignable · rien n’a tourné`, ' injoignable', '✓ accord · ✗ '],
+  }
+
+  for (const [shape, make] of Object.entries(shapes)) {
+    test(`${shape} : noms de 10 à 70 caractères, 40 et 80 colonnes`, () => {
+      for (const columns of [40, 80]) {
+        for (let n = 10; n <= 70; n += 1) {
+          const name = `h${'x'.repeat(n - 1)}`
+          const [line, state, before] = make(name)
+          const out = text(fit(L(line), columns, true))
+          expect(cellWidth(out)).toBeLessThanOrEqual(columns)
+          // Il tient avec un nom d'une cellule suivie de « … » : alors l'état est entier.
+          const fits = cellWidth(before) + 1 + 1 + cellWidth(state) <= columns
+          if (fits) expect(out).toContain(state)
+        }
+      }
+    })
+  }
+
+  test('le résumé de la carte n’est pas une rangée de machine : coupé par la fin, comme avant', () => {
+    for (const t of ['2 machines · 5 appels · 3 problèmes non vus', '1 machine · 2 appels · aucun problème non vu']) {
+      for (const columns of [12, 20, 30]) expect(text(fit(L(t), columns, true))).toBe(text(fit(L(t), columns)))
+    }
+  })
+
+  test('seule la tête exacte « N machine(s) » est un résumé : une machine qui lui ressemble est coupée', () => {
+    const tail = ' · 2 appels · ✓ ssh_disk_usage'
+    for (const head of ['12 machines', '2 machine']) {
+      for (const columns of [20, 30, 38])
+        expect(text(fit(L(head + tail), columns, true))).toBe(text(fit(L(head + tail), columns)))
+    }
+    for (const head of [
+      'aaaaaaaaaaaaaaaaaaaaaaaa 2 machine',
+      'x2 machines-aaaaaaaaaaaaaa',
+      '2 machines-de-plus-aaaaaaaaaa',
+      '2 machinesaaaaaaaaaaaaaaaa',
+    ])
+      expect(text(fit(L(head + tail), 50, true))).toMatch(/… · 2 appels · ✓ ssh_disk_usage$/)
+  })
+
+  test('le mot d’état est cherché à chaque début de mot, pas à l’intérieur d’un nom', () => {
+    const c = call({ host: 'xinjoignable', state: 'fait' })
+    const line = pipeline(c, stateOf([c]))
+    expect(line.map((p) => [p.text, p.tone])).toStrictEqual([
+      ['✓', 'ok'],
+      [' ', 'texte'],
+      ['xinjoignable', M(0)],
+    ])
+  })
+
+  test('noms en caractères larges : largeur en cellules, état entier', () => {
+    for (const columns of [40, 80]) {
+      for (let n = 5; n <= 40; n += 1) {
+        const line = `✗ ${'工'.repeat(n)} · injoignable · rien n’a tourné`
+        const out = text(fit(L(line), columns, true))
+        expect(cellWidth(out)).toBeLessThanOrEqual(columns)
+        if (2 + 2 + 1 + cellWidth(' · injoignable') <= columns) expect(out).toContain(' · injoignable')
+      }
+    }
+  })
+})
