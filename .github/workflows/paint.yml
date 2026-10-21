@@ -2,7 +2,7 @@ name: Peinture
 
 # Peinture du vrai terminal (dev/paint/) : Claude Code réel dans un pty, octets rejoués dans
 # @xterm/headless + addon-unicode11, grille comparée à dev/paint/expected/. Hebdomadaire, à la demande,
-# et sur les PR qui touchent le banc. Un écart hebdomadaire ou à la demande ouvre une issue (job report) ;
+# et sur les PR qui touchent le banc ou le rendu (mode-clair/hooks : un changement de rendu est peint avant merge). Un écart hebdomadaire ou à la demande ouvre une issue (job report) ;
 # il ne bloque aucune PR qui ne touche pas le banc.
 #
 # Sans identifiant, la session s'ouvre (« Not logged in ») et les scénarios sans modèle tournent. Si un
@@ -16,6 +16,7 @@ on:
   pull_request:
     paths:
       - 'dev/paint/**'
+      - 'mode-clair/hooks/**'
       - '.github/workflows/paint.yml'
 
 permissions: {}
