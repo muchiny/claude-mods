@@ -23,6 +23,7 @@
     "mutate:pure": "stryker run stryker.pure.json",
     "mutate:gate": "node dev/mutation-gate.mjs",
     "replay:extract": "bun dev/replay/extract.ts",
+    "replay:reduce": "bun dev/replay/reduce-run.ts",
     "paint": "node --experimental-strip-types dev/paint/drive.ts"
   },
   "devDependencies": {
