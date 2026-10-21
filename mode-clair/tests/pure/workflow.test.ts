@@ -379,3 +379,62 @@ describe('workflow : fin, silence, liste active', () => {
     expect(MAX_JOURNAL_BYTES).toBe(4_194_304)
   })
 })
+
+describe('workflow : formes limites du meta, du journal et de la notification', () => {
+  test('meta : blancs absents ou multiples autour de export, const, meta et « = », accolade refermée sans blanc', () => {
+    expect(parseMeta("export  const  meta={name:'x'}")).toStrictEqual({ name: 'x', phases: [] })
+  })
+
+  test('meta : blancs avant les deux-points, titres antérieurs aux phases ignorés', () => {
+    const script = "export const meta = { title: 'décor', name : 'N', phases : [ { title : 'A' }, {title : \"B\"} ] }"
+    expect(parseMeta(script)).toStrictEqual({ name: 'N', phases: ['A', 'B'] })
+  })
+
+  test('meta : sans blanc après les deux-points', () => {
+    expect(parseMeta("export const meta = {name:'N',phases:[{title:'A'},{title:'B'}]}")).toStrictEqual({
+      name: 'N',
+      phases: ['A', 'B'],
+    })
+  })
+
+  test('journal : un agent sans agentId texte (absent, nombre) n’existe pas ; un label qui n’est pas du texte vaut l’identifiant', () => {
+    const text = lines(
+      '{"type":"started","label":"sans id"}',
+      '{"type":"started","agentId":7,"label":"nombre"}',
+      '{"type":"started","agentId":"a1","label":5,"phase":"P"}',
+    )
+    const w = foldJournal(understand(), text, 2_000)
+    expect(w.agents).toStrictEqual([{ id: 'a1', label: 'a1', phase: 'P', state: 'en-cours' }])
+  })
+
+  test('journal : une dernière ligne complète mais sans fin de ligne attend le tic suivant', () => {
+    const done = lines(UI)
+    const w = foldJournal(understand(), done + LOGIC, 2_000)
+    expect(w.agents.map((a) => a.id)).toStrictEqual(['af7d9e0fa88200f5e'])
+    expect(w.consumed).toBe(done.length)
+  })
+
+  test('doneNotice : les balises doivent suivre <task-notification>, celles d’avant ne comptent pas', () => {
+    expect(doneNotice('<status>completed</status><tool-use-id>toolu_x</tool-use-id>')).toBeNull()
+    const text =
+      '<status>failed</status><tool-use-id>toolu_ancien</tool-use-id>\n' +
+      '<task-notification><tool-use-id>toolu_nouveau</tool-use-id><status>completed</status>'
+    expect(doneNotice(text)).toStrictEqual({ key: 'toolu_nouveau', status: 'fini' })
+  })
+
+  test('currentPhase : un agent sans phase ne compte pas', () => {
+    const w: Workflow = {
+      ...understand(),
+      agents: [
+        { id: 'a', label: 'a', phase: 'Audit', state: 'fait' },
+        { id: 'b', label: 'b', phase: null, state: 'fait' },
+      ],
+    }
+    expect(currentPhase(w)).toBe('Audit')
+    const open: Workflow = {
+      ...w,
+      agents: [...w.agents.slice(0, 1), { id: 'c', label: 'c', phase: null, state: 'en-cours' }],
+    }
+    expect(currentPhase(open)).toBe('Audit')
+  })
+})

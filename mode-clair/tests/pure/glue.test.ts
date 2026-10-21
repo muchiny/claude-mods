@@ -267,3 +267,39 @@ describe('closeWaiting : « à toi » s’efface quand l’appel se termine', ()
     expect(closeWaiting(EMPTY, 'toolu_a')).toBe(EMPTY)
   })
 })
+
+describe('formes limites des lectures', () => {
+  test('parseConfirmation : bloc clôturé avec une langue, espaces autour des deux-points du host', () => {
+    expect(parseConfirmation('Confirm destructive operation: \n```text\nmon outil\n```\n')).toStrictEqual({
+      tool: 'mon outil',
+      host: null,
+    })
+    expect(parseConfirmation('Confirm destructive operation: `ssh_exec`\n{"host" : "raspberry"}')).toStrictEqual({
+      tool: 'ssh_exec',
+      host: 'raspberry',
+    })
+    expect(parseConfirmation('Confirm destructive operation: `ssh_exec`\n{"hostx": "raspberry"}')).toStrictEqual({
+      tool: 'ssh_exec',
+      host: null,
+    })
+  })
+
+  test('sessionFromCreate : l’identifiant sans la machine, ou la machine sans l’identifiant, ne suffit pas', () => {
+    expect(sessionFromCreate('{"id":"s-1","cwd":"/"}')).toBeNull()
+    expect(sessionFromCreate('{"host":"raspberry","cwd":"/"}')).toBeNull()
+    expect(sessionFromCreate('{"id":"s-1","host":"raspberry"}')).toStrictEqual({ id: 's-1', host: 'raspberry' })
+  })
+
+  test('un résultat nul, un nombre ou un tableau n’est pas une sortie Bash', () => {
+    for (const result of [null, 5, true]) {
+      expect(runResultOf({ result }, false, false)).toStrictEqual({
+        isError: false,
+        text: '',
+        interrupted: false,
+        refusedByClaude: false,
+      })
+      expect(hasBackgroundTask(result)).toBe(false)
+    }
+    expect(hasBackgroundTask({ backgroundTaskId: 7 })).toBe(false)
+  })
+})

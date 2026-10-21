@@ -32,6 +32,22 @@ describe('les outils de mesure de colors.ts', () => {
     expect(round2(hue('#ff6b80'))).toBe(351.49)
   })
 
+  test('hue : branche du bleu dominant, rouge et vert distincts', () => {
+    expect(round2(hue('#8040ff'))).toBe(260.1)
+    expect(round2(hue('#1020a0'))).toBe(233.33)
+  })
+
+  test('deltaE : les très sombres suivent la branche linéaire de CIELAB, les plus clairs la racine cubique', () => {
+    expect(round2(deltaE('#000000', '#010101'))).toBe(0.27)
+    expect(round2(deltaE('#000000', '#0a0a0a'))).toBe(2.74)
+    expect(round2(deltaE('#101010', '#202020'))).toBe(7.57)
+  })
+
+  test('deutéranopie : un gris très sombre reste lui-même (branche linéaire de sRGB)', () => {
+    expect(deuteranopia('#010101')).toBe('#010101')
+    expect(deuteranopia('#0a0a0a')).toBe('#0a0a0a')
+  })
+
   test('les teintes de référence sont celles des couleurs d’état du thème : succès, erreur, attention', () => {
     expect(THEME_STATE_HUES).toEqual(THEME.map(hue))
   })
@@ -61,6 +77,16 @@ describe('les outils de mesure de colors.ts', () => {
 })
 
 describe('la palette des machines (spec §4.7)', () => {
+  test('quantize256 : bornes des gris, primaires hors gris', () => {
+    expect(quantize256('#070707')).toBe('#000000')
+    expect(quantize256('#080808')).toBe('#080808')
+    expect(quantize256('#f8f8f8')).toBe('#eeeeee')
+    expect(quantize256('#f9f9f9')).toBe('#ffffff')
+    expect(quantize256('#ff0000')).toBe('#ff0000')
+    expect(quantize256('#00ff00')).toBe('#00ff00')
+    expect(quantize256('#0000ff')).toBe('#0000ff')
+  })
+
   test('8 couleurs hexadécimales distinctes', () => {
     expect(PALETTE).toHaveLength(8)
     for (const c of PALETTE) expect(c).toMatch(/^#[0-9a-f]{6}$/)

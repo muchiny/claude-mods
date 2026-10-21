@@ -469,3 +469,61 @@ describe('superpowers : les agents lancés sous le plan qui tournent encore', ()
     expect(onSkill(sp, 'superpowers:brainstorming', 9_000)?.runningAgents).toStrictEqual([])
   })
 })
+
+describe('superpowers : formes limites des titres, des fences et des chemins', () => {
+  test('un titre de tâche doit commencer la ligne, avec un ou plusieurs blancs, et un numéro entier', () => {
+    expect(parsePlan('  ### Task 1\ntexte ### Task 2').tasks).toBe(0)
+    expect(parsePlan('###  Task 1: deux espaces').tasks).toBe(1)
+    expect(parsePlan('### Task 1\n### Task 12').tasks).toBe(2)
+  })
+
+  test('une fence se reconnaît en début de ligne, indentée ou non, jamais au milieu', () => {
+    expect(parsePlan('avant ``` après\n### T1').tasks).toBe(1)
+    expect(parsePlan('  ```\n### T1\n  ```').tasks).toBe(0)
+    expect(parsePlan('\t~~~\n### T1\n~~~\n### T2').tasks).toBe(1)
+  })
+
+  test('le titre est le premier « # » en début de ligne ; le suffixe « Implementation Plan » ne part qu’en fin', () => {
+    expect(parsePlan('foo # pas un titre\n# Vrai titre').title).toBe('Vrai titre')
+    expect(parsePlan('#  Titre à deux espaces').title).toBe('Titre à deux espaces')
+    expect(parsePlan('# Premier\n# Second').title).toBe('Premier')
+    expect(parsePlan('# Foo Implementation Plan Bar').title).toBe('Foo Implementation Plan Bar')
+    expect(parsePlan('# Foo  Implementation Plan').title).toBe('Foo')
+    expect(parsePlan('# Foo — Implementation Plan').title).toBe('Foo')
+  })
+
+  test('onSkill : un nom qui commence par « : » n’est pas un skill d’étape', () => {
+    expect(onSkill(null, ':brainstorming', 1_000)).toBeNull()
+    const sp = state({ stage: 'plan' })
+    expect(onSkill(sp, ':writing-plans', 2_000)).toBe(sp)
+  })
+
+  test('onAgent : la tâche 1 est une tâche valide, la tâche 0 non', () => {
+    const plan = state({ stage: 'plan', planPath: PLAN_T_PATH, tasks: 3 })
+    expect(onAgent(plan, 'Implement Task 1: first', '', 2_000)?.current).toBe(1)
+    expect(onAgent(plan, 'Implement Task 0: zero', '', 2_000)).toBe(plan)
+  })
+
+  test('un chemin relatif sous docs/superpowers/ compte comme un chemin absolu', () => {
+    const spec = onDocWrite(state({}), 'docs/superpowers/specs/2026-10-18-x.md', '# spec', 2_000)
+    expect(spec?.stage).toBe('spec')
+    const plan = onDocWrite(state({ stage: 'plan' }), 'docs/superpowers/plans/2026-10-18-x.md', PLAN_T, 3_000)
+    expect(plan?.planPath).toBe('docs/superpowers/plans/2026-10-18-x.md')
+    expect(plan?.tasks).toBe(3)
+  })
+
+  test('une spec ou un plan doit finir en « .md » : une sauvegarde .bak ne compte que comme événement', () => {
+    const cadrage = state({})
+    expect(onDocWrite(cadrage, 'docs/superpowers/specs/x.md.bak', '# spec', 2_000)?.stage).toBe('cadrage')
+    expect(onDocWrite(cadrage, '/a/docs/superpowers/specs/x.md.bak', '# spec', 2_000)?.stage).toBe('cadrage')
+    const plan = state({ stage: 'plan' })
+    expect(onDocWrite(plan, 'docs/superpowers/plans/x.md.orig', PLAN_T, 3_000)?.planPath).toBeNull()
+    expect(onDocWrite(plan, '/a/docs/superpowers/plans/x.md.orig', PLAN_T, 3_000)?.planPath).toBeNull()
+  })
+
+  test('« docs/superpowers/ » doit être un dossier à part entière, pas la fin d’un autre nom', () => {
+    const sp = state({ stage: 'plan' })
+    expect(onDocWrite(sp, 'mydocs/superpowers/plans/x.md', PLAN_T, 3_000)).toBe(sp)
+    expect(onDocWrite(sp, 'mydocs/superpowers/specs/x.md', '# s', 3_000)).toBe(sp)
+  })
+})

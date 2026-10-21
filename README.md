@@ -58,7 +58,16 @@ npm run typecheck   # tsc --noEmit, types de l'API des mods dans dev/claude-code
 npm run validate    # claude plugin validate (marketplace et mod)
 npm test            # claude plugin test mode-clair
 npm run format      # applique le format Biome
+npm run coverage    # couverture des modules purs sous bun:test (seuil : 100 % des lignes et fonctions)
 ```
+
+### Couverture
+
+`bun test` rejoue les tests purs (`mode-clair/tests/pure`) avec `bun:test` à la place de
+`claude-code/testing` (`dev/bun-claude-code-testing.ts`) et mesure les lignes et les fonctions des
+modules de `mode-clair/hooks`. `register.tsx` n'est exercé que par les tests moteur, que seul
+`claude plugin test` sait lancer : il n'est pas compté. Bun ne mesure pas les branches ; le mutation
+testing ci-dessous les couvre, en plus exigeant.
 
 ### Mutation testing
 
@@ -83,6 +92,7 @@ et publie le rapport HTML en artefact.
 | Job | Contrôle |
 | --- | --- |
 | `static` | Biome (`--error-on-warnings`), `tsc`, `npm audit` (échec à partir de « high ») |
+| `coverage` | 100 % des lignes et des fonctions des modules purs (`bun test --coverage`) |
 | `mod` | `claude plugin validate` (marketplace et mod), `claude plugin test` |
 | `hygiene` | aucun chemin personnel ni secret dans ce dépôt public |
 

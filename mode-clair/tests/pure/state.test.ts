@@ -368,6 +368,13 @@ describe('finishCalls', () => {
     })
   })
 
+  test('une issue « en cours » date quand même la fin d’un appel encore ouvert', () => {
+    const s = S.startCalls(S.EMPTY, 'toolu_o', undefined, [mcp('ssh_disk_usage', 'raspberry')], 1)
+    const after = S.finishCalls(s, 'toolu_o', [{ state: 'en-cours', truncated: false }], 7)
+    expect(after).not.toBe(s)
+    expect(after.calls[0]?.endedAt).toBe(7)
+  })
+
   test('appel déjà terminé dont l’attente pointe encore dessus : seule l’attente change', () => {
     let s = S.startCalls(S.EMPTY, 'toolu_p', undefined, [mcp('ssh_exec', 'raspberry', 'peut-modifier')], 1)
     s = S.finishCalls(s, 'toolu_p', [FAIT], 2)
@@ -529,6 +536,89 @@ describe('running et le plafond de 200 appels', () => {
   })
 })
 
+describe('waitingFor et closeWaiting', () => {
+  const started = (...calls: ParsedCall[]): ClairState => S.startCalls(S.EMPTY, 'toolu_w', undefined, calls, 1)
+  const three = started(
+    mcp('ssh_exec', 'raspberry', 'peut-modifier'),
+    mcp('ssh_disk_usage', 'win2025'),
+    mcp('ssh_service_status', 'nas'),
+  )
+
+  test('waitingFor : le dernier appel ouvert qui correspond à l’outil et à la machine', () => {
+    const s = started(mcp('ssh_exec', 'raspberry', 'peut-modifier'), mcp('ssh_exec', 'win2025', 'peut-modifier'))
+    expect(S.waitingFor(s, { tool: 'ssh_exec', host: 'raspberry' }, 5)).toStrictEqual({
+      tool: 'ssh_exec',
+      host: 'raspberry',
+      callId: 'toolu_w#0',
+      since: 5,
+    })
+    expect(S.waitingFor(s, { tool: 'ssh_exec', host: null }, 5).callId).toBe('toolu_w#1')
+  })
+
+  test('waitingFor : sans outil, la machine seule désigne l’appel ; l’outil vient alors de l’appel', () => {
+    const s = started(mcp('ssh_exec', 'raspberry', 'peut-modifier'), mcp('ssh_exec', 'win2025', 'peut-modifier'))
+    expect(S.waitingFor(s, { tool: null, host: 'raspberry' }, 5)).toStrictEqual({
+      tool: 'ssh_exec',
+      host: 'raspberry',
+      callId: 'toolu_w#0',
+      since: 5,
+    })
+  })
+
+  test('waitingFor : aucun appel ne correspond, le dernier appel ouvert est retenu', () => {
+    expect(S.waitingFor(three, { tool: 'ssh_exec', host: 'nas' }, 5).callId).toBe('toolu_w#2')
+    expect(S.waitingFor(three, { tool: 'ssh_inconnu', host: null }, 5)).toStrictEqual({
+      tool: 'ssh_inconnu',
+      host: 'nas',
+      callId: 'toolu_w#2',
+      since: 5,
+    })
+  })
+
+  test('waitingFor : sans appel ouvert, le formulaire seul parle ; un appel terminé ne compte pas', () => {
+    expect(S.waitingFor(S.EMPTY, { tool: null, host: null }, 5)).toStrictEqual({
+      tool: '',
+      host: null,
+      callId: null,
+      since: 5,
+    })
+    expect(S.waitingFor(S.EMPTY, { tool: 'ssh_exec', host: 'raspberry' }, 6)).toStrictEqual({
+      tool: 'ssh_exec',
+      host: 'raspberry',
+      callId: null,
+      since: 6,
+    })
+    const done = S.finishCalls(three, 'toolu_w', [FAIT, FAIT, FAIT], 2)
+    expect(S.waitingFor(done, { tool: 'ssh_exec', host: null }, 7).callId).toBeNull()
+  })
+
+  test('closeWaiting : attente sans appel connu, tout appel MCP du tool_use_id la referme (même mêlé à du CLI)', () => {
+    const s = started(cli('ssh_exec', 'raspberry', false), mcp('ssh_disk_usage', 'win2025'))
+    const waiting = S.setWaiting(s, { tool: 'ssh_exec', host: null, callId: null, since: 2 })
+    expect(S.closeWaiting(waiting, 'toolu_w').waiting).toBeNull()
+    const onlyCli = S.setWaiting(started(cli('ssh_exec', 'raspberry', false)), {
+      tool: 'ssh_exec',
+      host: null,
+      callId: null,
+      since: 2,
+    })
+    expect(S.closeWaiting(onlyCli, 'toolu_w')).toBe(onlyCli)
+  })
+
+  test('closeWaiting : attente d’un appel connu, seul cet appel du tool_use_id la referme', () => {
+    const waiting = S.setWaiting(three, { tool: 'ssh_disk_usage', host: 'win2025', callId: 'toolu_w#1', since: 2 })
+    expect(S.closeWaiting(waiting, 'toolu_w').waiting).toBeNull()
+    const other = S.setWaiting(three, { tool: 'ssh_exec', host: null, callId: 'toolu_x#0', since: 2 })
+    expect(S.closeWaiting(other, 'toolu_w')).toBe(other)
+  })
+
+  test('closeWaiting : sans attente, ou pour un autre tool_use_id : même référence', () => {
+    expect(S.closeWaiting(three, 'toolu_w')).toBe(three)
+    const waiting = S.setWaiting(three, { tool: 'ssh_exec', host: null, callId: null, since: 2 })
+    expect(S.closeWaiting(waiting, 'toolu_autre')).toBe(waiting)
+  })
+})
+
 describe('recordAccord et markSeen', () => {
   test('formulaire-oui seulement quand l’accord est donné, formulaire-non sinon', () => {
     const s = S.startCalls(
@@ -553,6 +643,17 @@ describe('recordAccord et markSeen', () => {
     expect(S.recordAccord(s, null, true)).toBe(s)
     expect(S.recordAccord(s, 'toolu_z#0', false)).toBe(s)
     expect(S.recordAccord(s, 'toolu_e#0', true)).toBe(s)
+  })
+
+  test('recordAccord ne touche pas à l’attente « à toi » en cours', () => {
+    const waiting: Waiting = { tool: 'ssh_exec', host: 'raspberry', callId: 'toolu_e#0', since: 2 }
+    const s = S.setWaiting(
+      S.startCalls(S.EMPTY, 'toolu_e', undefined, [mcp('ssh_exec', 'raspberry', 'peut-modifier')], 1),
+      waiting,
+    )
+    const after = S.recordAccord(s, 'toolu_e#0', true)
+    expect(after.waiting).toStrictEqual(waiting)
+    expect(after.calls[0]?.accord).toBe('formulaire-oui')
   })
 
   test('markSeen pose seenAt ; même heure : même référence', () => {

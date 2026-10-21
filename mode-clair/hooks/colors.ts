@@ -37,7 +37,7 @@ export const PALETTE: readonly string[] = [
 const THEME_STATE_COLORS: readonly string[] = ['#87d787', '#ff87af', '#ffd700']
 
 export function colorOf(index: number): string {
-  const i = Number.isFinite(index) && index >= 0 ? Math.floor(index) % PALETTE.length : 0
+  const i = Number.isFinite(index) ? Math.floor(Math.max(index, 0)) % PALETTE.length : 0
   return PALETTE[i] as string
 }
 
@@ -77,10 +77,12 @@ export const THEME_STATE_HUES: readonly number[] = THEME_STATE_COLORS.map(hue)
 
 function toLinear(v: number): number {
   const c = v / 255
+  // Stryker disable next-line EqualityOperator: les deux branches se rejoignent en c = 0,04045 (fonction continue), et c vaut n/255, jamais cette valeur.
   return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
 }
 
 function fromLinear(c: number): number {
+  // Stryker disable next-line EqualityOperator: les deux branches se rejoignent en c = 0,0031308 (fonction continue), valeur que ni la matrice ni les octets n'atteignent.
   return 255 * (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055)
 }
 
@@ -89,11 +91,13 @@ function lab(hex: string): [number, number, number] {
   const x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047
   const y = 0.2126 * r + 0.7152 * g + 0.0722 * b
   const z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883
+  // Stryker disable next-line EqualityOperator: les deux branches se rejoignent en t = 216/24389 (fonction continue), valeur que n'atteint aucun octet.
   const f = (t: number) => (t > 216 / 24389 ? Math.cbrt(t) : ((24389 / 27) * t + 16) / 116)
   const fx = f(x)
   const fy = f(y)
   const fz = f(z)
-  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)]
+  // L* = 116·fy − 16 : le décalage de 16 est omis, deltaE ne compare que des différences de L*.
+  return [116 * fy, 500 * (fx - fy), 200 * (fy - fz)]
 }
 
 /** ΔE CIE76 : distance euclidienne dans CIELAB (D65). */

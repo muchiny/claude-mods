@@ -17,4 +17,4 @@ find "$work/mode-clair/hooks" -type f \( -name '*.ts' -o -name '*.tsx' \) -exec 
   -e "s/ns.activeMutant = g.process.env.__STRYKER_ACTIVE_MUTANT__;/ns.activeMutant = '$id';/" {} +
 
 # Un mutant qui boucle sans fin est tué ici (code 124), pas laissé en arrière-plan.
-timeout 60 claude plugin test "$work/mode-clair"
+timeout 180 claude plugin test "$work/mode-clair"
