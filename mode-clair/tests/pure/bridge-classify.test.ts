@@ -532,12 +532,16 @@ describe('MCP (règle 3, A7)', () => {
     })
   })
 
-  test('ssh_exec_multi : un hôte absent de results ne reprend pas le code d’un autre', () => {
+  // D11 (2026-10-21) : un hôte sans élément lisible dans results est incertain, jamais « fait » hérité du résultat global.
+  test('ssh_exec_multi : un hôte absent de results ne reprend pas le code d’un autre, il est incertain (D11)', () => {
     expect(classify(mcp('ssh_exec_multi', 'pi-absent'), ok(MULTI_JSON), TOOLS)).toEqual({
-      state: 'fait',
+      state: 'incertain',
       truncated: false,
     })
-    expect(classify(mcp('ssh_exec_multi', null), ok(MULTI_JSON), TOOLS)).toEqual({ state: 'fait', truncated: false })
+    expect(classify(mcp('ssh_exec_multi', null), ok(MULTI_JSON), TOOLS)).toEqual({
+      state: 'incertain',
+      truncated: false,
+    })
   })
 
   test('ssh_exec_multi : la forme courte "Rate limit exceeded" dans l’entrée d’un hôte → limité (§3.3, §6.1)', () => {
@@ -547,9 +551,34 @@ describe('MCP (règle 3, A7)', () => {
     expect(classify(cli('ssh_exec_multi'), ok(json), TOOLS)).toEqual({ state: 'limite', truncated: false })
   })
 
-  test('ssh_exec_multi : un JSON coupé ne fait pas planter le classement', () => {
+  test('ssh_exec_multi : un JSON coupé ne fait pas planter le classement, chaque hôte est incertain (D11)', () => {
     expect(classify(mcp('ssh_exec_multi'), ok('{"total_hosts":2,"succeeded":0,'), TOOLS)).toEqual({
-      state: 'fait',
+      state: 'incertain',
+      truncated: false,
+    })
+    expect(classify(mcp('ssh_exec_multi', 'raspberry'), ok('{"total_hosts":2,"succeeded":0,'), TOOLS)).toEqual({
+      state: 'incertain',
+      truncated: false,
+    })
+  })
+
+  test('ssh_exec_multi : sortie persistée (aucun élément lisible) → incertain et tronqué ; sortie 6 sans élément → incertain, pas « code ? » (D11)', () => {
+    const persisted = '<persisted-output>\nOutput too large (51.2KB). Full output saved to: /var/tmp/x.txt'
+    expect(classify(cli('ssh_exec_multi', { host: 'raspberry' }), ok(bash(0, persisted)), TOOLS)).toStrictEqual({
+      state: 'incertain',
+      truncated: true,
+    })
+    expect(
+      classify(cli('ssh_exec_multi', { host: 'raspberry' }), ko(bash(6, '{"total_hosts":2,')), TOOLS),
+    ).toStrictEqual({ state: 'incertain', truncated: false })
+  })
+
+  test('ssh_exec_multi : un échec global reste classé par sa table (D11 ne touche que les succès sans élément)', () => {
+    expect(
+      classify(mcp('ssh_exec_multi', 'raspberry'), ko('MCP invalid request: Unknown hosts: a, b'), TOOLS),
+    ).toStrictEqual({ state: 'machine-inconnue', truncated: false })
+    expect(classify(cli('ssh_exec_multi', { host: 'raspberry' }), ko(bash(2, 'error: nope')), TOOLS)).toStrictEqual({
+      state: 'erreur-usage',
       truncated: false,
     })
   })
@@ -697,7 +726,7 @@ describe('steps : pipeline réel (spec §5.1)', () => {
       'erreur-usage': [{ label: 'erreur d’usage', mark: 'ko' }, NOTHING],
       'erreur-config': [{ label: 'erreur de config', mark: 'ko' }, NOTHING],
       'refuse-claude': [{ label: 'refusé par Claude Code', mark: 'off' }, NOTHING],
-      decline: [{ label: 'accord', mark: 'ko' }, NOTHING],
+      decline: [{ label: 'accord refusé', mark: 'off' }, NOTHING],
       interrompu: [{ label: 'interrompu', mark: 'off' }],
       incertain: [{ label: 'incertain', mark: 'off' }],
     })
@@ -721,7 +750,10 @@ describe('steps : pipeline réel (spec §5.1)', () => {
 
   test('formulaire refusé : l’accord est la dernière étape, quel que soit l’état', () => {
     for (const state of ['decline', 'confirmation-impossible', 'en-cours'] as const) {
-      expect(steps(call({ state, accord: 'formulaire-non' }))).toEqual([{ label: 'accord', mark: 'ko' }, NOTHING])
+      expect(steps(call({ state, accord: 'formulaire-non' }))).toEqual([
+        { label: 'accord refusé', mark: 'off' },
+        NOTHING,
+      ])
     }
   })
 
@@ -739,8 +771,16 @@ describe('steps : pipeline réel (spec §5.1)', () => {
   test('code inconnu et machine inconnue', () => {
     expect(steps(call({ state: 'code' }))).toEqual([{ label: 'raspberry code ?', mark: 'ok' }])
     expect(steps(call({ state: 'echec-machine' }))).toEqual([{ label: 'raspberry échec', mark: 'ko' }])
+    // D10 : une machine non prouvée s'écrit « machine inconnue », comme sur la rangée.
     expect(steps(call({ host: null, state: 'injoignable' }))).toEqual([
-      { label: 'machine injoignable', mark: 'ko' },
+      { label: 'machine inconnue injoignable', mark: 'ko' },
+      NOTHING,
+    ])
+    expect(steps(call({ host: null, state: 'code', code: 2 }))).toEqual([
+      { label: 'machine inconnue code 2', mark: 'ok' },
+    ])
+    expect(steps(call({ host: null, state: 'machine-inconnue' }))).toEqual([
+      { label: 'machine inconnue', mark: 'ko' },
       NOTHING,
     ])
   })
@@ -969,9 +1009,9 @@ describe('JSON de la CLI : enveloppe content et results', () => {
     })
   })
 
-  test('seule la première ligne ouverte par { compte : si elle ne se lit pas, pas de JSON', () => {
+  test('seule la première ligne ouverte par { compte : si elle ne se lit pas, pas de JSON, hôte incertain (D11)', () => {
     expect(classify(cli('ssh_exec_multi'), ok(bash(0, '{oups', MULTI_JSON)), TOOLS)).toStrictEqual({
-      state: 'fait',
+      state: 'incertain',
       truncated: false,
     })
   })
@@ -979,7 +1019,7 @@ describe('JSON de la CLI : enveloppe content et results', () => {
   test('les lignes du JSON sont jointes par un retour à la ligne, jamais collées', () => {
     const split = ['{"results":[{"host":"raspberry","exit_code":1', '2}]}']
     expect(classify(cli('ssh_exec_multi'), ok(bash(0, ...split)), TOOLS)).toStrictEqual({
-      state: 'fait',
+      state: 'incertain',
       truncated: false,
     })
   })
@@ -1006,10 +1046,13 @@ describe('JSON de la CLI : enveloppe content et results', () => {
   test('une machine inconnue ne choisit aucune entrée, même une entrée sans machine', () => {
     const body = JSON.stringify({ results: [{ host: null, exit_code: 3 }, { exit_code: 4 }] })
     expect(classify(cli('ssh_exec_multi', { host: null }), ok(bash(0, body)), TOOLS)).toStrictEqual({
-      state: 'fait',
+      state: 'incertain',
       truncated: false,
     })
-    expect(classify(mcp('ssh_exec_multi', null), ok(body), TOOLS)).toStrictEqual({ state: 'fait', truncated: false })
+    expect(classify(mcp('ssh_exec_multi', null), ok(body), TOOLS)).toStrictEqual({
+      state: 'incertain',
+      truncated: false,
+    })
   })
 
   test('entrée de results : erreur, code non nul, code nul, code absent ou pas un nombre', () => {
@@ -1068,7 +1111,7 @@ describe('steps : accord devant un formulaire refusé', () => {
 
   test('decline et confirmation impossible sont décidés avant l’accord : aucune étape accord devant', () => {
     expect(steps(call({ state: 'decline', accord: 'option' }))).toEqual([
-      { label: 'accord', mark: 'ko' },
+      { label: 'accord refusé', mark: 'off' },
       { label: 'rien n’a tourné', mark: 'off' },
     ])
     expect(steps(call({ state: 'confirmation-impossible', accord: 'formulaire-oui' }))).toEqual([

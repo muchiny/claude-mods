@@ -782,6 +782,8 @@ function classifyCli(p: ParsedCall, lines: readonly string[], isError: boolean, 
   const truncated = hasTruncation(raw, true) || (content !== null && hasTruncation(content, true))
   const entry = info?.multi === true ? hostEntry(body, p.host) : null
   if (entry !== null) return fromHostEntry(entry, truncated)
+  // D11 : un outil multi qui a rendu un résultat (sortie 0 ou 6) sans élément pour cet hôte n'a rien prouvé pour lui.
+  if (info?.multi === true && (exit === 0 || exit === 6)) return { state: 'incertain', truncated }
   switch (exit) {
     case 0:
       return succeeded(body, info, truncated)
@@ -809,6 +811,8 @@ function classifyMcp(p: ParsedCall, lines: readonly string[], isError: boolean, 
   const truncated = hasTruncation(lines, false)
   const entry = info?.multi === true ? hostEntry(lines, p.host) : null
   if (entry !== null) return fromHostEntry(entry, truncated)
+  // D11 : succès global d'un outil multi sans élément pour cet hôte : incertain, jamais « fait » hérité.
+  if (!isError && info?.multi === true) return { state: 'incertain', truncated }
   if (!isError) return succeeded(lines, info, truncated)
   if (exitTag(lines) !== undefined) return ranAndFailed(lines, truncated)
   return failed(headOf(lines), truncated)
@@ -834,6 +838,9 @@ export function classify(p: ParsedCall, r: RunResult, tools: Readonly<Record<str
 
 const NOTHING_RAN: Step = { label: 'rien n’a tourné', mark: 'off' }
 
+/** Machine non prouvée : le même mot que la rangée (D10). */
+const UNKNOWN_HOST = 'machine inconnue'
+
 /** États décidés avant l'accord ou à sa place : aucune étape « accord » devant eux. */
 const BEFORE_ACCORD: readonly CallState[] = [
   'refuse-claude',
@@ -848,7 +855,10 @@ const DECISIVE: Readonly<Record<CallState, (host: string, code: number | undefin
   fait: (host) => [{ label: host, mark: 'ok' }],
   code: (host, code) => [{ label: `${host} code ${code ?? '?'}`, mark: 'ok' }],
   injoignable: (host) => [{ label: `${host} injoignable`, mark: 'ko' }, NOTHING_RAN],
-  'machine-inconnue': (host) => [{ label: `${host} inconnue`, mark: 'ko' }, NOTHING_RAN],
+  'machine-inconnue': (host) => [
+    { label: host === UNKNOWN_HOST ? UNKNOWN_HOST : `${host} inconnue`, mark: 'ko' },
+    NOTHING_RAN,
+  ],
   refuse: () => [{ label: 'refusé par le bridge', mark: 'ko' }, NOTHING_RAN],
   limite: () => [{ label: 'limité par le bridge', mark: 'ko' }, NOTHING_RAN],
   'confirmation-impossible': () => [{ label: 'confirmation impossible', mark: 'ko' }, NOTHING_RAN],
@@ -862,7 +872,7 @@ const DECISIVE: Readonly<Record<CallState, (host: string, code: number | undefin
   'erreur-usage': () => [{ label: 'erreur d’usage', mark: 'ko' }, NOTHING_RAN],
   'erreur-config': () => [{ label: 'erreur de config', mark: 'ko' }, NOTHING_RAN],
   'refuse-claude': () => [{ label: 'refusé par Claude Code', mark: 'off' }, NOTHING_RAN],
-  decline: () => [{ label: 'accord', mark: 'ko' }, NOTHING_RAN],
+  decline: () => [{ label: 'accord refusé', mark: 'off' }, NOTHING_RAN],
   interrompu: () => [{ label: 'interrompu', mark: 'off' }],
   incertain: () => [{ label: 'incertain', mark: 'off' }],
 }
@@ -875,10 +885,10 @@ function accordSteps(accord: BridgeCall['accord']): Step[] {
 /**
  * Pipeline réel d'un appel : seules les étapes qui ont eu lieu ou qui ont décidé du résultat, aucune
  * étape ✓/✗ après un ✗ (seule la conclusion `rien n’a tourné` peut suivre). Une machine inconnue
- * s'écrit `machine`.
+ * s'écrit `machine inconnue` (D10), comme sur la rangée.
  */
 export function steps(c: BridgeCall): Step[] {
-  const host = c.host ?? 'machine'
+  const host = c.host ?? UNKNOWN_HOST
   if (c.accord === 'formulaire-non') return DECISIVE.decline(host, c.code)
   const accord = BEFORE_ACCORD.includes(c.state) ? [] : accordSteps(c.accord)
   return accord.concat(DECISIVE[c.state](host, c.code))
