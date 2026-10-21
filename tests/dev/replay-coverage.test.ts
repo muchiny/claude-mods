@@ -36,49 +36,50 @@ const NOT_OBSERVABLE = new Set([
 type Suite = 'golden' | 'props' | 'peinture' | 'moteur' | 'unitaire'
 
 /**
- * Lignes vérifiées hors du rejeu : [ligne, suite, fichier, texte qui doit s'y trouver (nom du cas ou
- * du test)]. Le texte est cherché dans le fichier : un cas renommé ou supprimé fait échouer ce test.
+ * Lignes vérifiées hors du rejeu : [ligne, suite, fichier, nom du cas (golden, peinture) ou morceau du
+ * titre d'un test (props, moteur, unitaire)]. `cited` le cherche à sa place exacte : un cas renommé ou
+ * supprimé fait échouer ce test.
  * Le lien entre le cas et la ligne reste relevé à la main.
  */
 const CLAIMS: readonly [string, Suite, string, string][] = [
-  ['R13', 'golden', 'tests/golden/cases.ts', "'multi-hotes'"],
-  ['R15', 'golden', 'tests/golden/cases.ts', "'session-ssh'"],
-  ['R21', 'golden', 'tests/golden/cases.ts', "'appel-en-cours'"],
-  ['R22', 'golden', 'tests/golden/cases.ts', "'refuse-claude'"],
-  ['R23', 'golden', 'tests/golden/cases.ts', "'interrompu'"],
-  ['R25', 'golden', 'tests/golden/cases.ts', "'fait-lecture'"],
-  ['R30', 'golden', 'tests/golden/cases.ts', "'injoignable'"],
-  ['R31', 'golden', 'tests/golden/cases.ts', "'refuse'"],
-  ['R33', 'golden', 'tests/golden/cases.ts', "'code-2'"],
-  ['R40', 'golden', 'tests/golden/cases.ts', "'code-2'"],
-  ['R44', 'golden', 'tests/golden/cases.ts', "'decline'"],
-  ['R51', 'golden', 'tests/golden/cases.ts', "'tronque'"],
-  ['R52', 'golden', 'tests/golden/cases.ts', "'incertain'"],
-  ['R53', 'golden', 'tests/golden/cases.ts', "'carte-echec-raison'"],
-  ['R54', 'golden', 'tests/golden/cases.ts', "'attente-accord'"],
-  ['R57', 'golden', 'tests/golden/cases.ts', "'decline'"],
-  ['R60', 'golden', 'tests/golden/cases.ts', "'repos'"],
-  ['R67', 'golden', 'tests/golden/cases.ts', "'carte-vide'"],
-  ['R68', 'golden', 'tests/golden/cases.ts', "'carte-pleine'"],
-  ['R69', 'golden', 'tests/golden/cases.ts', "'incertain-machine-inconnue'"],
-  ['R70', 'golden', 'tests/golden/cases.ts', "'carte-probleme-masque'"],
-  ['R71', 'golden', 'tests/golden/cases.ts', "'carte-pleine-machine'"],
-  ['R74', 'golden', 'tests/golden/cases.ts', "'workflow-3-phases'"],
-  ['R86', 'golden', 'tests/golden/cases.ts', "'superpowers-taches'"],
-  ['R92', 'golden', 'tests/golden/cases.ts', "'superpowers-perime'"],
-  ['R93', 'golden', 'tests/golden/cases.ts', "'nom-60-caracteres'"],
+  ['R13', 'golden', 'tests/golden/cases.ts', 'multi-hotes'],
+  ['R15', 'golden', 'tests/golden/cases.ts', 'session-ssh'],
+  ['R21', 'golden', 'tests/golden/cases.ts', 'appel-en-cours'],
+  ['R22', 'golden', 'tests/golden/cases.ts', 'refuse-claude'],
+  ['R23', 'golden', 'tests/golden/cases.ts', 'interrompu'],
+  ['R25', 'golden', 'tests/golden/cases.ts', 'fait-lecture'],
+  ['R30', 'golden', 'tests/golden/cases.ts', 'injoignable'],
+  ['R31', 'golden', 'tests/golden/cases.ts', 'refuse'],
+  ['R33', 'golden', 'tests/golden/cases.ts', 'code-2'],
+  ['R40', 'golden', 'tests/golden/cases.ts', 'code-2'],
+  ['R44', 'golden', 'tests/golden/cases.ts', 'decline'],
+  ['R51', 'golden', 'tests/golden/cases.ts', 'tronque'],
+  ['R52', 'golden', 'tests/golden/cases.ts', 'incertain'],
+  ['R53', 'golden', 'tests/golden/cases.ts', 'carte-echec-raison'],
+  ['R54', 'golden', 'tests/golden/cases.ts', 'attente-accord'],
+  ['R57', 'golden', 'tests/golden/cases.ts', 'decline'],
+  ['R60', 'golden', 'tests/golden/cases.ts', 'repos'],
+  ['R67', 'golden', 'tests/golden/cases.ts', 'carte-vide'],
+  ['R68', 'golden', 'tests/golden/cases.ts', 'carte-pleine'],
+  ['R69', 'golden', 'tests/golden/cases.ts', 'incertain-machine-inconnue'],
+  ['R70', 'golden', 'tests/golden/cases.ts', 'carte-probleme-masque'],
+  ['R71', 'golden', 'tests/golden/cases.ts', 'carte-pleine-machine'],
+  ['R74', 'golden', 'tests/golden/cases.ts', 'workflow-3-phases'],
+  ['R86', 'golden', 'tests/golden/cases.ts', 'superpowers-taches'],
+  ['R92', 'golden', 'tests/golden/cases.ts', 'superpowers-perime'],
+  ['R93', 'golden', 'tests/golden/cases.ts', 'nom-60-caracteres'],
   ['R20', 'props', 'tests/props/lifecycle.test.ts', 'aucun appel n’est fait sans résultat'],
   ['R24', 'props', 'tests/props/lifecycle.test.ts', 'fin de tour'],
   ['R52', 'props', 'tests/props/lifecycle.test.ts', 'sortie illisible'],
   ['R60', 'props', 'tests/props/render.test.ts', 'repos vide'],
   ['R72', 'props', 'tests/props/render.test.ts', 'carte aller-retour'],
   ['R93', 'props', 'tests/props/render.test.ts', 'largeur'],
-  ['R26', 'peinture', 'dev/paint/scenarios.ts', "'exec-ok'"],
-  ['R27', 'peinture', 'dev/paint/scenarios.ts', "'exit-2'"],
-  ['R29', 'peinture', 'dev/paint/scenarios.ts', "'hote-inconnu'"],
-  ['R60', 'peinture', 'dev/paint/scenarios.ts', "'repos'"],
-  ['R64', 'peinture', 'dev/paint/scenarios.ts', "'exec-ok'"],
-  ['R67', 'peinture', 'dev/paint/scenarios.ts', "'clair-vide'"],
+  ['R26', 'peinture', 'dev/paint/scenarios.ts', 'exec-ok'],
+  ['R27', 'peinture', 'dev/paint/scenarios.ts', 'exit-2'],
+  ['R29', 'peinture', 'dev/paint/scenarios.ts', 'hote-inconnu'],
+  ['R60', 'peinture', 'dev/paint/scenarios.ts', 'repos'],
+  ['R64', 'peinture', 'dev/paint/scenarios.ts', 'exec-ok'],
+  ['R67', 'peinture', 'dev/paint/scenarios.ts', 'clair-vide'],
   ['R01', 'moteur', 'mode-clair/tests/engine/events.test.tsx', 'en cours dès le début du tool.call'],
   ['R02', 'moteur', 'mode-clair/tests/engine/events.test.tsx', 'contient seulement « bridge »'],
   ['R03', 'moteur', 'mode-clair/tests/engine/events.test.tsx', 'mode progressif'],
@@ -136,9 +137,35 @@ const CLAIMS: readonly [string, Suite, string, string][] = [
 
 const SUITES: readonly Suite[] = ['golden', 'props', 'peinture', 'moteur', 'unitaire']
 
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * Vrai si `needle` est cité à sa place dans `text` : pour golden et peinture, le nom entier d'un cas
+ * (`name: '<nom>'` ou `modelScenario('<nom>'`) ; sinon un morceau du titre d'un `test(…)` ou `describe(…)`.
+ */
+function cited(suite: Suite, text: string, needle: string): boolean {
+  const re =
+    suite === 'golden' || suite === 'peinture'
+      ? new RegExp(`(?:\\bname:\\s*|\\bmodelScenario\\(\\s*)'${escapeRegExp(needle)}'`)
+      : new RegExp(`\\b(?:test|describe)\\(\\s*(['"\`])(?:(?!\\1).)*${escapeRegExp(needle)}`)
+  return re.test(text)
+}
+
 test('chaque cas cité par le tableau existe dans sa suite', () => {
-  for (const [rule, , file, needle] of CLAIMS)
-    expect([rule, file, readRepo(file).includes(needle)]).toEqual([rule, file, true])
+  for (const [rule, suite, file, needle] of CLAIMS)
+    expect([rule, file, needle, cited(suite, readRepo(file), needle)]).toEqual([rule, file, needle, true])
+})
+
+test('un cas renommé, un nom plus long ou un texte hors d’un titre ne comptent pas', () => {
+  expect(cited('golden', "{ name: 'code-2', state }", 'code-2')).toBe(true)
+  expect(cited('golden', "{ name: 'code-2-bis', state }", 'code-2')).toBe(false)
+  expect(cited('golden', "{ name: 'tronque-x', state }", 'tronque')).toBe(false)
+  expect(cited('golden', "// voir 'tronque'", 'tronque')).toBe(false)
+  expect(cited('peinture', "modelScenario('exec-ok', 'x', 'y')", 'exec-ok')).toBe(true)
+  expect(cited('moteur', "test('un appel seul : sa ligne', async", 'un appel seul')).toBe(true)
+  expect(cited('moteur', "// un appel seul\ntest('autre chose', async", 'un appel seul')).toBe(false)
+  const golden: string = readRepo('tests/golden/cases.ts')
+  expect(cited('golden', golden.replace("name: 'code-2'", "name: 'code-deux'"), 'code-2')).toBe(false)
 })
 
 test('chaque ligne de REFERENCE.md est couverte ; tableau écrit dans reports/replay-coverage.md', () => {

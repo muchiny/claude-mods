@@ -7,8 +7,11 @@ import { isRepoFile, readRepo } from './replay-files.mjs'
 // imports locaux.
 const ORACLE = 'mode-clair/tests/replay/oracle.ts'
 
-/** Un import (statique, `export … from`, `import()` dynamique, `require()`) dont le chemin passe par hooks/. */
-const HOOKS_IMPORT = /(from|import\s*\(|require\s*\()\s*['"][^'"]*\/hooks(\/|['"])/
+/**
+ * Un import dont le chemin passe par hooks/ : statique, `export … from`, sans `from` (`import '…'`), `import()`
+ * dynamique (guillemets ou accent grave), `require()`.
+ */
+const HOOKS_IMPORT = /(?:\bfrom|\bimport\s*\(?|\brequire\s*\()\s*['"`][^'"`]*\/hooks(?:\/|['"`])/
 
 function hooksImported(text: string): boolean {
   return HOOKS_IMPORT.test(text)
@@ -16,7 +19,7 @@ function hooksImported(text: string): boolean {
 
 /** Chemins relatifs importés par un fichier (`./…`, `../…`), toutes graphies. */
 function relativeImports(text: string): string[] {
-  const re = /(?:from|import\s*\(|require\s*\()\s*['"](\.{1,2}\/[^'"]*)['"]/g
+  const re = /(?:\bfrom|\bimport\s*\(?|\brequire\s*\()\s*['"`](\.{1,2}\/[^'"`]*)['"`]/g
   return [...text.matchAll(re)].map((m) => m[1] as string)
 }
 
@@ -63,11 +66,21 @@ const PLANTED = [
   "import { x } from '../../../mode-clair/hooks/x'",
   "import { x } from '../../hooks'",
   "export { x } from '../../hooks/view'",
+  "import '../../hooks/register'",
+  'const m = await import(`../../hooks/bridge`)',
 ]
 
 describe('garde d’indépendance de l’oracle', () => {
   test('chaque graphie plantée est prise par la garde', () => {
     for (const line of PLANTED) expect([line, hooksImported(line)]).toEqual([line, true])
+  })
+
+  test('le parcours lit aussi les imports sans `from` et les import() à accent grave', () => {
+    expect(relativeImports("import './a'\nconst m = await import(`../b`)\nimport x from './c'")).toEqual([
+      './a',
+      '../b',
+      './c',
+    ])
   })
 
   test('aucune fausse alerte sur un import qui ne vise pas hooks/', () => {

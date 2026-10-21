@@ -573,6 +573,8 @@ function classify(p: Parsed, r: ToolCallResult, hit: Hit): Verdict {
     }
     if (p.multi) {
       // R13 : chaque hôte sur son propre élément de `results` ; sans élément, sortie 0 ou 6 : incertain (D11).
+      // Non spécifié (question ouverte, REFERENCE R13) : sous un code hors de 0 à 6, l'élément propre de l'hôte
+      // l'emporte sur la règle du code étranger (R52), comme le fait le mod.
       const v = classifyHost(p, usefulLines(body).join('\n'), hit)
       if (v !== null) return v
       if (code === 0 || code === 6) return tag(hit, 'R52', { outcome: 'inconnu' })
