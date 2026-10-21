@@ -21,7 +21,8 @@
     "test:golden": "bun test ./tests/golden",
     "golden:update": "GOLDEN_UPDATE=1 bun test ./tests/golden",
     "mutate:pure": "stryker run stryker.pure.json",
-    "mutate:gate": "node dev/mutation-gate.mjs"
+    "mutate:gate": "node dev/mutation-gate.mjs",
+    "replay:extract": "bun dev/replay/extract.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
