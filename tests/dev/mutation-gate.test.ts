@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 // @ts-expect-error module .mjs sans déclaration de types
-import { baseDiff, changedRanges, STRYKER } from '../../dev/mutation-gate.mjs'
+import { baseDiff, changedRanges, gateEnv, STRYKER } from '../../dev/mutation-gate.mjs'
 // @ts-expect-error module .mjs sans déclaration de types
 import { divergedRepo } from './git-fixture.mjs'
 // @ts-expect-error module .mjs sans déclaration de types
@@ -64,6 +64,11 @@ describe('baseDiff', () => {
 describe('aucun npx pouvant télécharger un paquet', () => {
   test('la porte lance le stryker installé, pas npx', () => {
     expect(STRYKER).toMatch(/node_modules\/\.bin\/stryker$/)
+  })
+
+  test('le PATH du runner commence par node_modules/.bin (bun y est installé)', () => {
+    expect(gateEnv({ PATH: '/usr/bin' }).PATH).toMatch(/node_modules\/\.bin:\/usr\/bin$/)
+    expect(gateEnv({}).PATH).toMatch(/node_modules\/\.bin:$/)
   })
 
   test('workflows, dev/, package.json, README : aucun `npx` sans --no-install', () => {
