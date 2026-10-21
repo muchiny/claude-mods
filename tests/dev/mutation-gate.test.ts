@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'claude-code/testing'
 // @ts-expect-error module .mjs sans déclaration de types
-import { baseDiff, changedRanges } from '../../dev/mutation-gate.mjs'
+import { baseDiff, changedRanges, STRYKER } from '../../dev/mutation-gate.mjs'
 // @ts-expect-error module .mjs sans déclaration de types
 import { divergedRepo } from './git-fixture.mjs'
+// @ts-expect-error module .mjs sans déclaration de types
+import { npxUses } from './npx-uses.mjs'
 
 const diff = [
   'diff --git a/mode-clair/hooks/bridge.ts b/mode-clair/hooks/bridge.ts',
@@ -56,5 +58,15 @@ describe('changedRanges', () => {
 describe('baseDiff', () => {
   test('ignore les lignes changées seulement sur la base après le point de départ', () => {
     expect(changedRanges(baseDiff('main', divergedRepo())).get('mode-clair/hooks/a.ts')).toEqual([[4, 4]])
+  })
+})
+
+describe('aucun npx pouvant télécharger un paquet', () => {
+  test('la porte lance le stryker installé, pas npx', () => {
+    expect(STRYKER).toMatch(/node_modules\/\.bin\/stryker$/)
+  })
+
+  test('workflows, dev/, package.json, README : aucun `npx` sans --no-install', () => {
+    expect(npxUses()).toEqual([])
   })
 })

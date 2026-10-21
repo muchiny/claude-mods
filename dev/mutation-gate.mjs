@@ -1,8 +1,10 @@
 // Porte de PR : mutation des seules lignes de mode-clair/hooks ajoutées ou modifiées depuis une base.
 // Usage : node dev/mutation-gate.mjs --base origin/main
 import { execFileSync, spawnSync } from 'node:child_process'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
+// Stryker installé par `npm ci` : jamais `npx`, qui téléchargerait et exécuterait un paquet homonyme.
+export const STRYKER = fileURLToPath(new URL('../node_modules/.bin/stryker', import.meta.url))
 const IGNORES = new Set(['mode-clair/hooks/tools.generated.ts', 'mode-clair/hooks/register.tsx'])
 const HUNK = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/
 
@@ -49,7 +51,7 @@ function main(argv) {
   }
   const targets = [...ranges].flatMap(([file, list]) => list.map(([a, b]) => `${file}:${a}-${b}`))
   console.log(`mutation-gate : ${targets.join(' ')}`)
-  const run = spawnSync('npx', ['stryker', 'run', 'stryker.pure.json', '--mutate', targets.join(',')], {
+  const run = spawnSync(STRYKER, ['run', 'stryker.pure.json', '--mutate', targets.join(',')], {
     stdio: 'inherit',
   })
   return run.status ?? 1

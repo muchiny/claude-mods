@@ -43,7 +43,7 @@ jobs:
         run: npm install -g @anthropic-ai/claude-code@latest
 
       - name: Stryker
-        run: npx stryker run --mutate "mode-clair/hooks/${{ matrix.file }}" --concurrency 3 --reporters clear-text,html,json
+        run: node_modules/.bin/stryker run --mutate "mode-clair/hooks/${{ matrix.file }}" --concurrency 3 --reporters clear-text,html,json
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
@@ -155,4 +155,4 @@ jobs:
       - run: npm ci
 
       - name: Propriétés
-        run: PROPS_RUNS=10000 npx bun test ./tests/props --timeout 3000000
+        run: PROPS_RUNS=10000 node_modules/.bin/bun test ./tests/props --timeout 3000000

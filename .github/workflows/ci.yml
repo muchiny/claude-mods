@@ -37,11 +37,11 @@ jobs:
 
       # Biome : lint, format et tri des imports, warnings comptés comme erreurs.
       - name: Biome
-        run: npx biome ci . --error-on-warnings
+        run: node_modules/.bin/biome ci . --error-on-warnings
 
       # Les types de l'API des mods sont dans dev/claude-code.d.ts (Claude Code 2.1.302).
       - name: TypeScript
-        run: npx tsc -p tsconfig.json
+        run: node_modules/.bin/tsc -p tsconfig.json
 
       - name: Audit des dépendances de développement
         run: npm audit --audit-level=high

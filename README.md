@@ -77,7 +77,7 @@ testing ci-dessous les couvre, en plus exigeant.
 [Stryker](https://stryker-mutator.io) mesure si les tests voient vraiment un changement de comportement :
 
 ```bash
-npx stryker run --mutate "mode-clair/hooks/colors.ts" --concurrency 4
+node_modules/.bin/stryker run --mutate "mode-clair/hooks/colors.ts" --concurrency 4
 ```
 
 `claude plugin test` n'expose pas l'environnement aux modules, donc Stryker ne peut pas activer ses
