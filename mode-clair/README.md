@@ -132,16 +132,15 @@ problèmes arrivés depuis ton dernier `/clair` ; elle disparaît après
 | `●` | accent | en cours |
 | `✓` | vert | fait |
 | `✓` | texte | `code N` : une commande libre (`ssh_exec`…) a rendu un code non nul ; ce n'est pas un échec du bridge |
-| `✗` | rouge | injoignable, machine inconnue, refusé (liste noire), confirmation impossible, échec sur la machine, échec |
-| `✗` | jaune | limité, confirmation manquante (`--yes`), erreur d'usage, erreur de config |
+| `✗` | rouge | injoignable, machine inconnue, refusé (liste noire), confirmation impossible, accès refusé, échec sur la machine, échec |
+| `✗` | jaune | limité, confirmation manquante (`--yes`), erreur d'usage, erreur de config, délai dépassé |
 | `○` | atténué | refusé par Claude Code, décliné (formulaire), interrompu |
 | `?` | atténué | incertain |
 | `⚠` | jaune | à toi : ta réponse est attendue |
 
-**En attente de la décision D5** (`tests/replay/REFERENCE.md`) : le plugin
-affiche aujourd'hui aussi `accès refusé` (authentification SSH, clé d'hôte) et
-`délai dépassé` (commande trop longue), que la spec 0.2 range sous `échec`. Ces
-deux états peuvent changer.
+Le plugin distingue aussi `accès refusé` (authentification SSH, clé d'hôte ;
+rien n'a tourné) et `délai dépassé` (commande trop longue ; la commande a pu
+tourner) de `échec` : le texte du bridge en est la preuve (`tests/replay/REFERENCE.md`, D5).
 
 `tronqué` s'ajoute en jaune à la fin d'une ligne quand la sortie a été coupée,
 par le bridge ou par Claude Code.
