@@ -110,12 +110,12 @@ describe('anonymize : machines', () => {
 })
 
 describe('anonymize : chemins et identifiants', () => {
-  test('/home/<nom>/x devient /home/user/x', () => {
+  test('/home/<nom>/x devient /home/user/<lorem> (composant court compris)', () => {
     const s = anonymize(
       scenario([call('Write', 'toolu_1', { file_path: '/home/quelquun/x', content: 'a' }, 'ok')]),
       newDict(),
     )
-    expect(inputOf(s, 0).file_path).toBe('/home/user/x')
+    expect(inputOf(s, 0).file_path).toBe('/home/user/l')
   })
 
   test('toolu_01ABC devient toolu_r0001, partout où il paraît', () => {
@@ -155,7 +155,7 @@ describe('anonymize : chemins et identifiants', () => {
     const [a, b] = calls(s)
     const pa = fields(a).file_path
     const pb = fields(b).file_path
-    expect(pa).toBe('/var/tmp/00000000-0000-4000-8000-000000000001/a.txt')
+    expect(pa).toBe('/var/tmp/00000000-0000-4000-8000-000000000001/l.txt')
     expect(pb).toBe('/var/tmp/00000000-0000-4000-8000-000000000001.jsonl')
     expect(json(s)).not.toContain(uuid)
   })
@@ -665,7 +665,7 @@ describe('passe C : nombres (L1)', () => {
     expect(textOf(calls(s)[0] as Call).split('\n')).toEqual([
       'Exit code 1073741819',
       'SSH command timeout after 99999s',
-      'Output too large (999999KB). Full output saved to: /tmp/x',
+      'Output too large (999999KB). Full output saved to: /tmp/l',
     ])
   })
 
@@ -717,5 +717,52 @@ describe('passe C : barrière, UUID, IPv6 compressée, MAC (L3)', () => {
     for (const ok of [SYNTH_UUID, 'loremi_psu::mdo: sit', 'a :: b', 'std::fs::read', '10:00:01', 'lo-re-mi-ps-um']) {
       expect(() => assertClean(`lorem ${ok} ipsum`, DENY)).not.toThrow()
     }
+  })
+})
+
+describe('passe C : dossiers de projet et composants courts par le dictionnaire (L2)', () => {
+  test('dossier de projet → -home-user-proj-a, -proj-b dans l’ordre d’apparition, stable dans le scénario', () => {
+    const p1 = '/home/quelquun/.claude/projects/-home-quelquun-projet-tres-secret/x.jsonl'
+    const p2 = '/tmp/claude-1000/-home-quelquun-autre-projet/tasks/y.output'
+    const s = anonymize(
+      scenario([
+        call('Read', 'toolu_1', { file_path: p1 }, 'ok'),
+        call('Read', 'toolu_2', { file_path: p2 }, 'ok'),
+        call('Read', 'toolu_3', { file_path: p1 }, 'ok'),
+      ]),
+      newDict(),
+    )
+    const [a, b, c] = [0, 1, 2].map((i) => inputOf(s, i).file_path ?? '')
+    expect(a.split('/')[5]).toBe('-home-user-proj-a')
+    expect(b.split('/')[3]).toBe('-home-user-proj-b')
+    expect(c).toBe(a)
+    expect(json(s)).not.toContain('secret')
+    expect(() => assertKnownForms(s)).not.toThrow()
+  })
+
+  test('dossier personnel seul (-home-<nom>) → -home-user', () => {
+    const s = anonymize(
+      scenario([
+        call('Read', 'toolu_1', { file_path: '/home/quelquun/.claude/projects/-home-quelquun/z.jsonl' }, 'ok'),
+      ]),
+      newDict(),
+    )
+    expect(inputOf(s, 0).file_path?.split('/')[5]).toBe('-home-user')
+  })
+
+  test('composant de 1-2 caractères ASCII : plus gardé tel quel (dictionnaire du scénario)', () => {
+    const s = anonymize(
+      scenario([
+        call('Read', 'toolu_1', { file_path: '/srv/Qz/x7.md' }, 'ok'),
+        call('Read', 'toolu_2', { file_path: '/srv/Qz/y.md' }, 'ok'),
+      ]),
+      newDict(),
+    )
+    const [a, b] = [0, 1].map((i) => (inputOf(s, i).file_path ?? '').split('/'))
+    expect(a?.[2]).not.toBe('Qz')
+    expect(a?.[2]).toBe(b?.[2])
+    expect(a?.[3]).not.toBe('x7.md')
+    expect(a?.[3]?.endsWith('.md')).toBe(true)
+    expect(json(s)).not.toContain('Qz')
   })
 })

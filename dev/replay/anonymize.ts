@@ -44,6 +44,7 @@ export type Dict = {
   uuids: Map<string, string>
   labels: Map<string, string>
   components: Map<string, string>
+  projects: Map<string, string>
   /** Plus ancien horodatage ISO du scénario (ms) : origine des horodatages synthétiques. */
   tsBase: number | null
 }
@@ -56,6 +57,7 @@ export function newDict(): Dict {
     uuids: new Map(),
     labels: new Map(),
     components: new Map(),
+    projects: new Map(),
     tsBase: null,
   }
 }
@@ -288,11 +290,21 @@ const EXT = new Set([
   'csv',
 ])
 
-/** Un ou deux caractères ASCII : gardés (aucune information). */
-const SHORT_ASCII = /^[!-~]{1,2}$/
+/**
+ * Dossier de projet de Claude Code (`-home-<nom>-<projet>`) → `-home-user-proj-a`, `-proj-b`… dans l'ordre
+ * d'apparition (ni la longueur ni les tirets du nom réel ne restent) ; `-home-<nom>` seul → `-home-user`.
+ */
+function projectOf(dict: Dict, rest: string): string {
+  if (rest === '') return '-home-user'
+  const known = dict.projects.get(rest)
+  if (known !== undefined) return known
+  const synthetic = `-home-user-proj-${letters(dict.projects.size)}`
+  dict.projects.set(rest, synthetic)
+  return synthetic
+}
 
 function componentOf(dict: Dict, c: string, prev: string | undefined): string {
-  if (c === '' || c === '.' || c === '..' || c === '~' || SHORT_ASCII.test(c)) return c
+  if (c === '' || c === '.' || c === '..' || c === '~') return c
   if (prev === 'home') return 'user'
   if (STRUCT.has(c)) return c
   if (UUID.test(c)) return uuidOf(dict, c)
@@ -300,7 +312,7 @@ function componentOf(dict: Dict, c: string, prev: string | undefined): string {
   const hasExt = dot > 0 && EXT.has(c.slice(dot + 1))
   const base = hasExt ? c.slice(0, dot) : c
   const ext = hasExt ? c.slice(dot) : ''
-  if (STRUCT.has(base) || SHORT_ASCII.test(base)) return base + ext
+  if (STRUCT.has(base)) return base + ext
   if (UUID.test(base)) return uuidOf(dict, base) + ext
   const host = dict.hosts.get(base)
   if (host !== undefined) return host + ext
@@ -308,7 +320,7 @@ function componentOf(dict: Dict, c: string, prev: string | undefined): string {
   if (id !== undefined) return id + ext
   // Dossier de projet de Claude Code : -home-<nom>-<projet>.
   const project = /^-home-[^-]+(.*)$/.exec(base)
-  if (project !== null) return `-home-user${lorem(String(project[1]))}${ext}`
+  if (project !== null) return projectOf(dict, String(project[1])) + ext
   const known = dict.components.get(base)
   if (known !== undefined) return known + ext
   const synthetic = lorem(base, dict.components.size * 5)
@@ -1498,7 +1510,7 @@ const VOCAB_SOURCES: readonly string[] = [
   ...SP_SKILLS,
   ...KEYS,
   ...CORE_TOOLS,
-  'host toolu id user home bridge-mcp superpowers mcp ssh bridge true false null',
+  'host toolu id user home proj bridge-mcp superpowers mcp ssh bridge true false null',
   'export const meta name phases title Implementation Plan Task Tâche final code review code-reviewer.md',
   'TRACE DEBUG INFO WARN ERROR agentId label phase',
 ]
