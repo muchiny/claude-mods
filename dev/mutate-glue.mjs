@@ -273,9 +273,88 @@ const MOD = join(ROOT, 'mode-clair')
 const GLUE = join(MOD, 'hooks', 'register.tsx')
 const WORK = '/var/tmp'
 // 8 Go par défaut (règle WSL) ; GLUE_MIN_AVAILABLE_MB l'ajuste pour un runner de CI.
-const MIN_AVAILABLE_MB = Number(process.env.GLUE_MIN_AVAILABLE_MB ?? 8192)
+const DEFAULT_MIN_AVAILABLE_MB = 8192
 const RSS_LIMIT_KB = 1.5 * 1024 * 1024
 const TIMEOUT_S = 180
+
+/**
+ * Valide les options et l'environnement : { error } (exit 2, message) ou les valeurs retenues.
+ * Jamais de repli silencieux : un seuil mémoire invalide ne désactive pas le pré-vol (règle WSL), une
+ * concurrence invalide ne donne pas zéro mutant (faux vert).
+ */
+export function parseOptions(argv, env = process.env) {
+  const positive = (raw) => (/^\d+(\.\d+)?$/.test(raw) && Number(raw) > 0 ? Number(raw) : null)
+  const integer = (raw) => (/^[1-9]\d*$/.test(raw) ? Number(raw) : null)
+  let minAvailableMb = DEFAULT_MIN_AVAILABLE_MB
+  if (env.GLUE_MIN_AVAILABLE_MB !== undefined) {
+    minAvailableMb = positive(env.GLUE_MIN_AVAILABLE_MB.trim())
+    if (minAvailableMb === null)
+      return { error: `GLUE_MIN_AVAILABLE_MB invalide (« ${env.GLUE_MIN_AVAILABLE_MB} ») : nombre de Mo > 0 attendu` }
+  }
+  // Une option présente sans valeur compte comme invalide (et non comme absente).
+  const given = (name) => (argv.includes(name) ? (option(argv, name) ?? '') : undefined)
+  const rawConcurrency = given('--concurrency')
+  const concurrency = rawConcurrency === undefined ? 1 : integer(rawConcurrency)
+  if (concurrency === null) return { error: `--concurrency invalide (« ${rawConcurrency} ») : entier >= 1 attendu` }
+  const rawSample = given('--sample')
+  const sample = rawSample === undefined ? undefined : integer(rawSample)
+  if (sample === null) return { error: `--sample invalide (« ${rawSample} ») : entier >= 1 attendu` }
+  const rawSeed = given('--seed')
+  const seed = rawSeed === undefined ? 1 : /^\d+$/.test(rawSeed) ? Number(rawSeed) : null
+  if (seed === null) return { error: `--seed invalide (« ${rawSeed} ») : entier >= 0 attendu` }
+  return { minAvailableMb, concurrency, sample, seed }
+}
+
+// Processus et copies en cours, pour tout arrêter proprement (signal, erreur d'un worker).
+const liveGroups = new Set()
+const liveDirs = new Set()
+
+/** Note un groupe de processus détaché (par PID) à tuer à l'arrêt. */
+export function trackGroup(pid) {
+  liveGroups.add(pid)
+}
+/** Note un dossier temporaire à supprimer à l'arrêt. */
+export function trackDir(dir) {
+  liveDirs.add(dir)
+}
+
+/** Tue chaque groupe détaché suivi (par PID, jamais pkill -f) et supprime les copies suivies. */
+export function stopAll() {
+  for (const pid of liveGroups) {
+    try {
+      process.kill(-pid, 'SIGKILL')
+    } catch {
+      // groupe déjà terminé
+    }
+  }
+  liveGroups.clear()
+  for (const dir of liveDirs) rmSync(dir, { recursive: true, force: true })
+  liveDirs.clear()
+}
+
+/**
+ * Exécute `task` sur chaque élément avec `concurrency` workers. À la première erreur : plus aucun élément
+ * n'est pris, `onFail` est appelé (arrêt des autres), tous les workers sont attendus (leurs `finally`
+ * s'exécutent), puis la première erreur est relancée.
+ */
+export async function runPool(items, concurrency, task, onFail = () => {}) {
+  const queue = [...items]
+  let failure
+  const worker = async () => {
+    for (let item = queue.shift(); item !== undefined && failure === undefined; item = queue.shift()) {
+      try {
+        await task(item)
+      } catch (err) {
+        if (failure === undefined) {
+          failure = { err }
+          onFail()
+        }
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: concurrency }, worker))
+  if (failure !== undefined) throw failure.err
+}
 
 /** La source de register.tsx du dépôt. */
 export function readGlue() {
@@ -377,6 +456,7 @@ export function runTests(dir) {
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
+    trackGroup(child.pid)
     let output = ''
     const keep = (chunk) => {
       output = (output + chunk).slice(-20000)
@@ -385,6 +465,7 @@ export function runTests(dir) {
     child.stderr.on('data', keep)
     let reason = null
     const kill = (why) => {
+      liveGroups.delete(child.pid)
       reason ??= why
       try {
         process.kill(-child.pid, 'SIGKILL')
@@ -416,6 +497,7 @@ export function runTests(dir) {
 
 async function runMutant(source, m) {
   const dir = mkdtempSync(join(WORK, 'glue-mutant-'))
+  trackDir(dir)
   try {
     cpSync(MOD, join(dir, 'mode-clair'), { recursive: true })
     const text = m === null ? source : apply(source, m)
@@ -423,6 +505,7 @@ async function runMutant(source, m) {
     return await runTests(join(dir, 'mode-clair'))
   } finally {
     rmSync(dir, { recursive: true, force: true })
+    liveDirs.delete(dir)
   }
 }
 
@@ -432,12 +515,15 @@ function option(argv, name) {
 }
 
 async function main(argv) {
+  const options = parseOptions(argv)
+  if (options.error !== undefined) {
+    console.error(`::error::${options.error}`)
+    return 2
+  }
+  const { minAvailableMb, concurrency, sample, seed } = options
   const source = readGlue()
   const every = mutants(source)
   const only = option(argv, '--only')?.split(',')
-  const sample = option(argv, '--sample')
-  const seed = Number(option(argv, '--seed') ?? 1)
-  const concurrency = Math.max(1, Number(option(argv, '--concurrency') ?? 1))
   const out = option(argv, '--out') ?? join(ROOT, 'reports', 'mutation-glue', 'result.json')
   const equivalents = readEquivalents()
   const stale = staleEquivalents(source, equivalents)
@@ -448,16 +534,24 @@ async function main(argv) {
   const candidates = every.filter((m) => !(m.id in equivalents))
   let chosen = candidates
   if (only) chosen = every.filter((m) => only.includes(m.id))
-  else if (sample !== undefined) chosen = draw(candidates, Number(sample), seed)
+  else if (sample !== undefined) chosen = draw(candidates, sample, seed)
   if (argv.includes('--list')) {
     for (const m of chosen) console.log(`${m.id}\t${JSON.stringify(m.from)} → ${JSON.stringify(m.to)}`)
     console.log(`${chosen.length} / ${every.length} mutants`)
     return 0
   }
 
+  const onSignal = (signal, code) => () => {
+    console.error(`::error::${signal} : arrêt, groupes de processus tués et copies supprimées`)
+    stopAll()
+    process.exit(code)
+  }
+  process.on('SIGINT', onSignal('SIGINT', 130))
+  process.on('SIGTERM', onSignal('SIGTERM', 143))
+
   const preflight = () => {
     const mb = availableMb()
-    if (mb < MIN_AVAILABLE_MB) throw new Error(`mémoire disponible ${Math.round(mb)} Mo < ${MIN_AVAILABLE_MB} Mo`)
+    if (mb < minAvailableMb) throw new Error(`mémoire disponible ${Math.round(mb)} Mo < ${minAvailableMb} Mo`)
   }
   preflight()
   // Témoin : la copie non mutée doit passer, tests réellement lancés, avant tout mutant.
@@ -474,23 +568,20 @@ async function main(argv) {
   const killed = []
   const survived = []
   const errors = []
-  const queue = [...chosen]
   let done = 0
-  const worker = async () => {
-    for (let m = queue.shift(); m !== undefined; m = queue.shift()) {
-      preflight()
-      const r = await runMutant(source, m)
-      done++
-      const base = { id: m.id, line: m.line, from: m.from, to: m.to, ms: r.ms }
-      const v = verdict(r)
-      if (v.kind === 'survived') survived.push({ ...base, diff: diffOf(source, m) })
-      else if (v.kind === 'killed') killed.push(base)
-      else errors.push({ ...base, cause: v.cause, peakKb: r.peakKb, output: r.output.slice(-2000) })
-      const label = v.kind === 'survived' ? 'SURVIT' : v.kind === 'killed' ? 'tué' : `ERREUR (${v.cause})`
-      console.log(`[${done}/${chosen.length}] ${m.id} ${label} ${r.ms} ms, ${Math.round(r.peakKb / 1024)} Mo`)
-    }
+  const task = async (m) => {
+    preflight()
+    const r = await runMutant(source, m)
+    done++
+    const base = { id: m.id, line: m.line, from: m.from, to: m.to, ms: r.ms }
+    const v = verdict(r)
+    if (v.kind === 'survived') survived.push({ ...base, diff: diffOf(source, m) })
+    else if (v.kind === 'killed') killed.push(base)
+    else errors.push({ ...base, cause: v.cause, peakKb: r.peakKb, output: r.output.slice(-2000) })
+    const label = v.kind === 'survived' ? 'SURVIT' : v.kind === 'killed' ? 'tué' : `ERREUR (${v.cause})`
+    console.log(`[${done}/${chosen.length}] ${m.id} ${label} ${r.ms} ms, ${Math.round(r.peakKb / 1024)} Mo`)
   }
-  await Promise.all(Array.from({ length: concurrency }, worker))
+  await runPool(chosen, concurrency, task, stopAll)
 
   const byId = (a, b) =>
     every.indexOf(every.find((m) => m.id === a.id)) - every.indexOf(every.find((m) => m.id === b.id))
