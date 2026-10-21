@@ -32,7 +32,7 @@ host-b⟨m1⟩ · ⟨attenue⟩1 appel⟨texte⟩ · ⟨attenue⟩✗⟨attentio
 host-c⟨m2⟩ · ⟨attenue⟩1 appel⟨texte⟩ · ⟨attenue⟩✗⟨attention⟩ ⟨texte⟩limité⟨attention⟩
 dernier appel sur ⟨attenue⟩host-b⟨m1⟩ :⟨attenue⟩
 ✗⟨attention⟩ ⟨texte⟩host-b⟨m1⟩ · ⟨attenue⟩délai dépassé⟨attention⟩ · peut modifier⟨attenue⟩
-✗⟨erreur⟩ host-b délai dépassé⟨texte⟩
+✗⟨attention⟩ ⟨texte⟩host-b⟨m1⟩ ⟨texte⟩délai dépassé⟨attention⟩
 # largeurs : 39 34 27 26 40 22
 ## ligne d’état et étiquette
 état : (aucune)
