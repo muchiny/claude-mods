@@ -1,0 +1,11 @@
+## bande (200 colonnes)
+# largeurs : 
+## appel toolu_1#0
+?⟨attenue⟩ ⟨texte⟩machine inconnue · incertain⟨attenue⟩
+# largeurs : 30
+## carte /clair
+0 machine⟨texte⟩ · ⟨attenue⟩0 appel⟨texte⟩ · aucun problème non vu⟨attenue⟩
+# largeurs : 43
+## ligne d’état et étiquette
+état : (aucune)
+pied : (aucune)

@@ -1,0 +1,14 @@
+## bande (80 colonnes)
+# largeurs : 
+## appel toolu_1#0
+✓⟨ok⟩ ⟨texte⟩host-a⟨m0⟩ · ⟨attenue⟩ssh_journal_query⟨texte⟩ · lecture · ⟨attenue⟩tronqué⟨attention⟩
+# largeurs : 48
+## carte /clair
+1 machine⟨texte⟩ · ⟨attenue⟩1 appel⟨texte⟩ · aucun problème non vu⟨attenue⟩
+host-a⟨m0⟩ · ⟨attenue⟩1 appel⟨texte⟩ · ⟨attenue⟩✓⟨ok⟩ ssh_journal_query⟨texte⟩
+à regarder :⟨attenue⟩
+✓⟨ok⟩ ⟨texte⟩host-a⟨m0⟩ · ⟨attenue⟩tronqué⟨attention⟩
+# largeurs : 43 38 12 18
+## ligne d’état et étiquette
+état : (aucune)
+pied : (aucune)

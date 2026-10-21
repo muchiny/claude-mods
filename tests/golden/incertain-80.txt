@@ -1,0 +1,12 @@
+## bande (80 colonnes)
+# largeurs : 
+## appel toolu_1#0
+?⟨attenue⟩ ⟨texte⟩host-a⟨m0⟩ · incertain⟨attenue⟩
+# largeurs : 20
+## carte /clair
+1 machine⟨texte⟩ · ⟨attenue⟩1 appel⟨texte⟩ · aucun problème non vu⟨attenue⟩
+host-a⟨m0⟩ · ⟨attenue⟩1 appel⟨texte⟩ · ?⟨attenue⟩ ⟨texte⟩incertain⟨attenue⟩
+# largeurs : 43 30
+## ligne d’état et étiquette
+état : (aucune)
+pied : (aucune)

@@ -1,0 +1,16 @@
+## bande (40 colonnes)
+●⟨accent⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩…⟨attenue⟩
+# largeurs : 40
+## appel toolu_1#0
+✓⟨ok⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩…⟨attenue⟩
+# largeurs : 40
+## appel toolu_2#0
+●⟨accent⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩…⟨attenue⟩
+# largeurs : 40
+## carte /clair
+1 machine⟨texte⟩ · ⟨attenue⟩2 appels⟨texte⟩ · aucun problème non vu⟨attenue⟩
+machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩2 appels⟨texte⟩ · ⟨attenue⟩●⟨accent⟩ ssh_disk_usage⟨texte⟩
+# largeurs : 44 90
+## ligne d’état et étiquette
+état : (aucune)
+pied : (aucune)

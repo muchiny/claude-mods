@@ -1,0 +1,21 @@
+## bande (80 colonnes)
+●⟨accent⟩ 3 appels⟨texte⟩ · ⟨attenue⟩host-a⟨m0⟩, ⟨texte⟩host-b⟨m1⟩, ⟨texte⟩host-c⟨m2⟩
+# largeurs : 35
+## appel toolu_1#0
+●⟨accent⟩ ⟨texte⟩host-a⟨m0⟩ · ⟨attenue⟩ssh_exec_multi⟨texte⟩
+# largeurs : 25
+## appel toolu_1#1
+●⟨accent⟩ ⟨texte⟩host-b⟨m1⟩ · ⟨attenue⟩ssh_exec_multi⟨texte⟩
+# largeurs : 25
+## appel toolu_1#2
+●⟨accent⟩ ⟨texte⟩host-c⟨m2⟩ · ⟨attenue⟩ssh_exec_multi⟨texte⟩
+# largeurs : 25
+## carte /clair
+3 machines⟨texte⟩ · ⟨attenue⟩3 appels⟨texte⟩ · aucun problème non vu⟨attenue⟩
+host-a⟨m0⟩ · ⟨attenue⟩1 appel⟨texte⟩ · ⟨attenue⟩●⟨accent⟩ ssh_exec_multi⟨texte⟩
+host-b⟨m1⟩ · ⟨attenue⟩1 appel⟨texte⟩ · ⟨attenue⟩●⟨accent⟩ ssh_exec_multi⟨texte⟩
+host-c⟨m2⟩ · ⟨attenue⟩1 appel⟨texte⟩ · ⟨attenue⟩●⟨accent⟩ ssh_exec_multi⟨texte⟩
+# largeurs : 45 35 35 35
+## ligne d’état et étiquette
+état : (aucune)
+pied : (aucune)

@@ -1,0 +1,15 @@
+## bande (40 colonnes)
+# largeurs : 
+## appel toolu_1#0
+✗⟨erreur⟩ ⟨texte⟩host-a⟨m0⟩ · ⟨attenue⟩échec⟨erreur⟩ · voir /clair⟨attenue⟩
+# largeurs : 30
+## carte /clair
+1 machine⟨texte⟩ · ⟨attenue⟩1 appel⟨texte⟩ · aucun problème non vu⟨attenue⟩
+host-a⟨m0⟩ · ⟨attenue⟩1 appel⟨texte⟩ · ⟨attenue⟩✗⟨erreur⟩ ⟨texte⟩échec⟨erreur⟩
+à regarder :⟨attenue⟩
+✗ échec · déjà vu⟨attenue⟩
+« Unexpected failure while reading the cache »⟨attenue⟩
+# largeurs : 43 26 12 17 46
+## ligne d’état et étiquette
+état : (aucune)
+pied : (aucune)

@@ -1,0 +1,17 @@
+## bande (40 colonnes)
+# largeurs : 
+## appel toolu_1#0
+✗⟨erreur⟩ ⟨texte⟩host-a⟨m0⟩ · ⟨attenue⟩injoignable⟨erreur⟩ · rien n’a tourné⟨attenue⟩
+# largeurs : 40
+## appel toolu_2#0
+✓⟨ok⟩ ⟨texte⟩host-a⟨m0⟩ · ⟨attenue⟩ssh_uptime⟨texte⟩ · lecture⟨attenue⟩
+# largeurs : 31
+## carte /clair
+1 machine⟨texte⟩ · ⟨attenue⟩1 appel⟨texte⟩ · ⟨attenue⟩1 problème non vu⟨erreur⟩
+host-a⟨m0⟩ · ⟨attenue⟩1 appel⟨texte⟩ · ⟨attenue⟩✓⟨ok⟩ ssh_uptime⟨texte⟩ · ⟨attenue⟩✗⟨erreur⟩ ⟨texte⟩problème non vu⟨erreur⟩
+à regarder :⟨attenue⟩
+✗⟨erreur⟩ host-a injoignable⟨texte⟩ · rien n’a tourné⟨attenue⟩
+# largeurs : 39 51 12 38
+## ligne d’état et étiquette
+état : (aucune)
+pied : clair ✗ 1

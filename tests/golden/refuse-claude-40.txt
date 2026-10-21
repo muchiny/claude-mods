@@ -1,0 +1,12 @@
+## bande (40 colonnes)
+# largeurs : 
+## appel toolu_1#0
+○⟨attenue⟩ ⟨texte⟩host-a⟨m0⟩ · refusé par Claude Code …⟨attenue⟩
+# largeurs : 35
+## carte /clair
+1 machine⟨texte⟩ · ⟨attenue⟩0 appel⟨texte⟩ · aucun problème non vu⟨attenue⟩
+host-a⟨m0⟩ · ⟨attenue⟩0 appel⟨texte⟩ · ○⟨attenue⟩ ⟨texte⟩refusé par Claude Code⟨attenue⟩
+# largeurs : 43 43
+## ligne d’état et étiquette
+état : (aucune)
+pied : (aucune)
