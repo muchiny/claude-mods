@@ -1081,3 +1081,51 @@ describe('steps : accord devant un formulaire refusé', () => {
     ])
   })
 })
+
+// Trouvé par tests/props/lifecycle.test.ts (« jamais ✓ sur un échec ») : contre-exemple réduit
+// { exec en CLI, isError, texte « Exit code: 0 » }. Le code distant 0 ne rend pas ✓ un Bash en échec.
+describe('classify : exec en échec local, jamais ✓', () => {
+  test('exec sorti en erreur, bloc « Exit code: 0 » → échec, pas fait', () => {
+    expect(classify(cli('exec'), ko('Exit code: 0'), TOOLS)).toStrictEqual({
+      state: 'echec',
+      truncated: false,
+      reason: 'Exit code: 0',
+    })
+  })
+
+  test('exec sorti en 1 avec un « "exit_code": 0 » → échec, pas fait', () => {
+    expect(classify(cli('exec'), ko(bash(1, '{"exit_code": 0}')), TOOLS)).toStrictEqual({
+      state: 'echec',
+      truncated: false,
+      reason: '{"exit_code": 0}',
+    })
+  })
+
+  test('exec sorti en 0 avec « Exit code: 0 » reste fait', () => {
+    expect(classify(cli('exec'), ok(bash(0, 'Exit code: 0')), TOOLS)).toStrictEqual({ state: 'fait', truncated: false })
+  })
+})
+
+// Trouvé par tests/props/lifecycle.test.ts (« jamais ✓ sur un échec ») : contre-exemple réduit
+// { CLI, isError, texte « Exit code 0 » }. Bash n'écrit « Exit code N » que pour N non nul ; si un tel
+// texte accompagne isError, l'échec est établi par isError et la ligne ne peut pas le démentir.
+describe('classify : isError l’emporte sur un « Exit code 0 » contradictoire', () => {
+  test('outil CLI, isError, « Exit code 0 » → échec, pas fait', () => {
+    expect(classify(cli('ssh_disk_usage'), ko('Exit code 0'), TOOLS)).toStrictEqual({
+      state: 'echec',
+      truncated: false,
+    })
+  })
+
+  test('exec, isError, « Exit code 0 » puis le bloc « Exit code: 0 » → échec, pas fait', () => {
+    expect(classify(cli('exec'), ko('Exit code 0\nExit code: 0'), TOOLS)).toStrictEqual({
+      state: 'echec',
+      truncated: false,
+      reason: 'Exit code: 0',
+    })
+  })
+
+  test('sans erreur, « Exit code 0 » reste fait', () => {
+    expect(classify(cli('ssh_disk_usage'), ok('Exit code 0'), TOOLS)).toStrictEqual({ state: 'fait', truncated: false })
+  })
+})

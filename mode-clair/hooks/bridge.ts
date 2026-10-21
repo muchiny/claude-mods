@@ -739,14 +739,19 @@ function execCode(lines: readonly string[]): number | undefined {
 function classifySubcommand(tool: string, exit: number, lines: readonly string[]): Outcome {
   const truncated = hasTruncation(lines, true)
   const code = tool === 'exec' ? execCode(lines) : undefined
-  if (code !== undefined) return code === 0 ? { state: 'fait', truncated } : { state: 'code', code, truncated }
+  // Un code distant 0 ne rend pas ✓ un Bash en échec : la sortie locale non nulle reste un échec.
+  if (code !== undefined && (code !== 0 || exit === 0)) {
+    return code === 0 ? { state: 'fait', truncated } : { state: 'code', code, truncated }
+  }
   return exit === 0 ? { state: 'fait', truncated } : failed(headOf(lines), truncated)
 }
 
 function classifyCli(p: ParsedCall, lines: readonly string[], isError: boolean, info: ToolInfo | undefined): Outcome {
   // Stryker disable next-line StringLiteral: '' et tout autre texte ne sont pas une ligne `Exit code N`
   const bash = BASH_EXIT_LINE.exec(lines[0] ?? '')
-  const exit = bash === null ? (isError ? 1 : 0) : Number(bash[1])
+  // Sortie locale : le code de l'en-tête Bash, ou 1 si isError le démontre (un « Exit code 0 » qui l'accompagne ne le démentit pas).
+  const header = bash === null ? 0 : Number(bash[1])
+  const exit = header !== 0 ? header : isError ? 1 : 0
   const raw = bash === null ? lines : lines.slice(1)
   if (PLAIN_SUBCOMMANDS.includes(p.tool)) return classifySubcommand(p.tool, exit, raw)
   const content = contentLines(raw)
