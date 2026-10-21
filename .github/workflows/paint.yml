@@ -8,7 +8,7 @@ name: Peinture
 # Sans identifiant, la session s'ouvre (« Not logged in ») et les scénarios sans modèle tournent. Si un
 # écran de connexion bloque quand même, drive.ts écrit « ::notice::peinture sautée : connexion requise »
 # et le job réussit. Les scénarios avec modèle (Haiku, faux bridge-mcp) ne tournent que si le secret
-# ANTHROPIC_API_KEY existe.
+# ANTHROPIC_API_KEY existe, et jamais sur une PR.
 on:
   schedule:
     - cron: '0 4 * * 1'
@@ -61,9 +61,10 @@ jobs:
       - run: claude --version
 
       # HOME jetable sous $RUNNER_TEMP, sorties dans $RUNNER_TEMP/paint-out (drive.ts).
+      # Jamais le secret sur une PR, même du dépôt : vide = absent pour drive.ts (scénarios avec modèle sautés).
       - name: Peinture
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ github.event_name != 'pull_request' && secrets.ANTHROPIC_API_KEY || '' }}
         run: npm run paint
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

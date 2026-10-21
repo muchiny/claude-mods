@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { check, parseExpected } from '../../dev/paint/check'
 import { gridOf, gridText } from '../../dev/paint/replay'
-import { SCENARIOS } from '../../dev/paint/scenarios'
+import { isLoginScreen, SCENARIOS } from '../../dev/paint/scenarios'
 
 const enc = new TextEncoder()
 const bytes = (s: string) => enc.encode(s)
@@ -172,9 +172,11 @@ describe('check : écarts entre la grille et l’attendu', () => {
 })
 
 describe('scénarios de la peinture', () => {
-  test('noms uniques, une capture chacun', () => {
+  test('noms de scénario et de capture uniques, une capture au moins par scénario', () => {
     expect(new Set(SCENARIOS.map((s) => s.name)).size).toBe(SCENARIOS.length)
-    for (const s of SCENARIOS) expect(s.steps.filter((st) => 'capture' in st).length).toBe(1)
+    const captures = SCENARIOS.flatMap((s) => s.steps.flatMap((st) => ('capture' in st ? [st.capture] : [])))
+    expect(new Set(captures).size).toBe(captures.length)
+    for (const s of SCENARIOS) expect(s.steps.some((st) => 'capture' in st)).toBe(true)
   })
   test('un motif attendu après une saisie n’est pas dans ce qui a été tapé (l’écho le montrerait)', () => {
     for (const s of SCENARIOS) {
@@ -187,5 +189,25 @@ describe('scénarios de la peinture', () => {
   })
   test('les scénarios sans modèle ne demandent ni modèle ni outil', () => {
     for (const s of SCENARIOS.filter((x) => !x.model)) expect(s.args).toEqual([])
+  })
+})
+
+describe('isLoginScreen : écran qui bloque la session', () => {
+  test('choix de la méthode de connexion, avec le curseur ❯ (texte réel, blancs retirés par Ink)', () => {
+    const t =
+      'Claude Code can be used with your Claude subscription Select login method: ❯1. Claude account with ' +
+      'subscription 2. AnthropicConsoleaccount·API usage billing'
+    expect(isLoginScreen(t)).toBe(true)
+    expect(isLoginScreen('Selectloginmethod:❯1.Claudeaccount')).toBe(true)
+  })
+  test('collage du code OAuth et navigateur non ouvert', () => {
+    expect(isLoginScreen("Browser didn't open? Use the url below Pastecodehereifprompted>")).toBe(true)
+  })
+  test('choix du thème (accueil), avec ❯', () => {
+    expect(isLoginScreen("Let'sgetstarted. Choosethetextstylethatlooksbestwithyourterminal ❯✔Darkmode")).toBe(true)
+  })
+  test('session ouverte sans identifiant : le pied « Not logged in · Run /login » ne bloque pas', () => {
+    expect(isLoginScreen('❯ ⏵⏵ auto mode on · ← for agents Not logged in · Run /login ◐ medium · /effort')).toBe(false)
+    expect(isLoginScreen('❯ /clair rien depuis le début de la session')).toBe(false)
   })
 })

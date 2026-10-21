@@ -3,9 +3,10 @@
 //
 // Pas : `send` tape des octets ; `waitFor` attend qu'un motif paraisse dans le texte reçu (séquences de
 // contrôle retirées) ; `settle` attend que l'écran se taise `ms` millisecondes (au plus 10 s) ;
-// `capture` fige les octets reçus jusque-là : c'est eux que replay.ts rejoue (avant /exit).
+// `capture` fige les octets reçus jusque-là sous un nom : replay.ts les rejoue (avant /exit) et check.ts
+// les compare à expected/<nom>.txt. Une capture au moins par scénario ; noms uniques sur tous les scénarios.
 
-export type Step = { send: string } | { waitFor: string; timeoutMs?: number } | { settle: number } | { capture: true }
+export type Step = { send: string } | { waitFor: string; timeoutMs?: number } | { settle: number } | { capture: string }
 
 export type Scenario = {
   name: string
@@ -47,22 +48,61 @@ function modelScenario(name: string, command: string, marker: string): Scenario 
       ...CLAIR,
       { waitFor: 'appel', timeoutMs: 15_000 },
       { settle: 2000 },
-      { capture: true },
+      { capture: name },
     ],
   }
 }
 
 export const SCENARIOS: readonly Scenario[] = [
-  // Au repos : ni étiquette SessionMode ni bande (rien quand il ne se passe rien).
-  { name: 'repos', model: false, args: [], steps: [...READY, { capture: true }] },
+  // Au repos : ni étiquette SessionMode ni bande (rien quand il ne se passe rien), capture « repos ». Puis,
+  // dans la même session, preuve positive que le mod est chargé (capture « repos-menu ») : « /clai » tapé,
+  // non validé, ouvre le menu des commandes où paraît la description de /clair ; Ctrl+U vide la saisie.
+  {
+    name: 'repos',
+    model: false,
+    args: [],
+    steps: [
+      ...READY,
+      { capture: 'repos' },
+      { send: '/clai' },
+      { waitFor: 'mode clair' },
+      { settle: 1500 },
+      { capture: 'repos-menu' },
+      { send: '\x15' },
+      { settle: 800 },
+    ],
+  },
   // /clair sans rien dans la session : la carte vide du golden card-vide.
   {
     name: 'clair-vide',
     model: false,
     args: [],
-    steps: [...READY, ...CLAIR, { waitFor: 'rien depuis le début de la session' }, { settle: 2000 }, { capture: true }],
+    steps: [
+      ...READY,
+      ...CLAIR,
+      { waitFor: 'rien depuis le début de la session' },
+      { settle: 2000 },
+      { capture: 'clair-vide' },
+    ],
   },
   modelScenario('exec-ok', 'bridge-mcp exec host-a uptime', 'up 3 days'),
   modelScenario('hote-inconnu', 'bridge-mcp exec host-z uptime', 'Unknown host'),
   modelScenario('exit-2', 'bridge-mcp tool ssh_exec host=host-a command="ls /absent"', 'exit:2'),
 ]
+
+/**
+ * Écran qui bloque la session sans identifiant : choix du thème (accueil), choix de la méthode de
+ * connexion, collage du code OAuth. Lu sur le texte reçu, séquences de contrôle retirées : les espaces
+ * peuvent y manquer (Ink avance le curseur au lieu d'écrire des blancs), d'où les \s*. Le pied
+ * « Not logged in · Run /login » ne bloque rien et n'en est pas un.
+ */
+const BLOCKING_SCREENS: readonly RegExp[] = [
+  /Select\s*login\s*method/,
+  /Paste\s*code\s*here/,
+  /Browser\s*didn['’]t\s*open/,
+  /Choose\s*the\s*text\s*style/,
+]
+
+export function isLoginScreen(text: string): boolean {
+  return BLOCKING_SCREENS.some((re) => re.test(text))
+}

@@ -1,4 +1,5 @@
-# Au repos (aucun appel, rien vu) : le mod ne montre rien. Repère : l'invite de saisie.
+# Au repos (aucun appel, rien vu) : le mod ne montre rien. Repère : l'invite de saisie. La preuve que le
+# mod est chargé dans cette même session est la capture suivante, repos-menu.
 repere: ❯
 # Étiquette SessionMode au repos : pas de « clair ✗ N » dans le pied.
 absent: clair ✗
@@ -6,3 +7,4 @@ absent: clair ✗
 absent: voir /clair
 absent: rien n’a tourné
 absent: rien depuis le début de la session
+absent: mode clair

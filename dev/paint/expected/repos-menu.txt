@@ -1,0 +1,5 @@
+# Même session que « repos » : « /clai » tapé (non validé). Preuve que le mod est chargé : le menu des
+# commandes montre /clair avec sa description (relevé sur Claude Code 2.1.296 et 2.1.306, 100 colonnes).
+repere: ❯ /clair
++0: Carte du mode clair : machines, problèmes, plan et workflows en
+absent: clair ✗
