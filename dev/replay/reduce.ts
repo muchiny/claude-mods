@@ -16,7 +16,7 @@ export const TYPES = [
   'notification',
 ] as const
 
-const TRUNCATION = /output_id="|\[truncated: |\[output stopped at the|<persisted-output>|Output too large/
+const TRUNCATION = /output_id=\\?"|\[truncated: |\[output stopped at the|<persisted-output>|Output too large/
 const CHAIN = /&&|\|\||;|\||\bfor\b|\bwhile\b/
 
 export function typeOf(s: Scenario): string {

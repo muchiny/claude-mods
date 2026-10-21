@@ -82,7 +82,11 @@ groupe ; les autres groupes ne sont pas touchés.
 ```
 
 Le résultat vient d'abord : `machine · état`, puis la nature ou la raison.
-À une largeur étroite, ce sont les détails qui partent les premiers.
+À une largeur étroite, ce sont les détails qui partent les premiers. Si le nom
+de la machine est lui-même plus long que la ligne, c'est le nom qui est coupé
+(`✗ machine-xxxxx… · injoignable`) : l'état reste entier tant qu'il tient. La
+carte `/clair` suit la même règle : rangée de machine, lignes d'appel et
+pipeline.
 
 ### La carte `/clair`
 
@@ -103,6 +107,9 @@ plan « Ajouter l'export CSV » · tâche 3 sur 7
 - une ligne par machine touchée, dans sa couleur : nombre d'appels qui ont
   tourné (ou tournent), dernier résultat, et `✗ problème non vu` si un
   problème récent existe sur elle même quand son dernier appel a réussi ;
+- un appel dont la machine n'a pas pu être établie n'est pas caché : il
+  apparaît sur une ligne `machine inconnue · 1 appel · ? incertain` (compte et
+  dernier résultat), après les machines, et compte dans le résumé ;
 - « à regarder » : les cinq problèmes les plus récents. Le premier montre ce
   qui s'est réellement passé (les seules étapes qui ont eu lieu, aucune après
   un `✗`) et, s'il n'est pas traduit, la phrase brute du bridge entre

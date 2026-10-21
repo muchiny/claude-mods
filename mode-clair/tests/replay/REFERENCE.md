@@ -147,7 +147,7 @@ jamais dans le corps (§5.1 Classement).
 | R71 | `/clair host-a` | le dernier appel de `host-a` avec son pipeline | §4.4 |
 | R72 | ancienne carte, relue plus tard ou après reprise de session | inchangée : relue depuis `e.props.text`, jamais depuis l'état vivant | §4.4 |
 | R73 | problème (colonne `clair ✗ n`) plus récent que le dernier `/clair` | étiquette atténuée `clair ✗ n` au pied de saisie ; disparaît après `/clair` | §4.6 |
-| R93 | toute ligne du mod, à 40 colonnes utiles | `machine · état` reste lisible en entier, la raison peut être coupée ; aucune ligne ne dépasse la largeur ; un nom de machine plus long que la ligne est coupé (`machine-xx… · fait`), l'état reste entier, largeur en cellules (tranché D4) | §4.1 ; §3 critère 13 |
+| R93 | toute ligne du mod, à 40 colonnes utiles | `machine · état` reste lisible en entier, la raison peut être coupée ; aucune ligne ne dépasse la largeur ; un nom de machine plus long que la ligne est coupé (`machine-xx… · injoignable`), l'état reste entier tant qu'il tient avec un nom d'au moins un caractère, largeur en cellules ; vaut pour la rangée, la ligne d'appel de la bande, et les lignes de la carte `/clair` : rangée de machine (`nom… · N appels · état`), appel de « à regarder » et de `/clair <machine>`, pipeline (`✗ nom… état`). Ne sont pas coupés ainsi : résumé, workflow, Superpowers, en-tête « dernier appel sur » (coupe par la fin) (tranché D4) | §4.1 ; §3 critère 13 |
 
 R93, ajoutée à l'étape 2, est rangée avec les surfaces ; les numéros ne sont pas réordonnés pour
 garder stables les renvois des désaccords.
