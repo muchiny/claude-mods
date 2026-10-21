@@ -30,6 +30,10 @@ doit rester désactivé, sinon GitHub refuse les résultats des deux.
 
 ## Release
 
+Ruleset de tags à créer (Settings, Rules, Rulesets, cible **Tag**, motif `v*`) : restreindre la
+création, la mise à jour et la suppression des tags `v*` aux mainteneurs. `release.yml` refuse en
+plus un tag dont le commit n'est pas sur `main`.
+
 Un tag `vX.Y.Z` déclenche `release.yml`. Il échoue si `mode-clair/.claude-plugin/plugin.json`
 n'a pas la version `X.Y.Z`. L'archive `mode-clair-X.Y.Z.tar.gz` est attestée (provenance SLSA) ;
 vérification : `gh attestation verify mode-clair-X.Y.Z.tar.gz --repo muchiny/claude-mods`.
