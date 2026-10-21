@@ -1,6 +1,7 @@
 // Aides Node de tests/dev/paint-home.test.ts (le programme TypeScript du dépôt n'a pas les types Node).
 import { spawn } from 'node:child_process'
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -9,10 +10,11 @@ import {
   rmSync,
   statSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { createHome, removeHome } from '../../dev/paint/home.mjs'
+import { createHome, homeBase, removeHome, STALE_MS, sweepHomes } from '../../dev/paint/home.mjs'
 
 const CHILD = resolve(import.meta.dirname, 'paint-home-child.mjs')
 const FAKE = '{"claudeAiOauth":{"accessToken":"factice","refreshToken":"factice"}}'
@@ -117,4 +119,72 @@ export function interrupted(base, credentials, signal) {
       }, 200)
     })
   })
+}
+
+/** Modes du HOME jetable et de son contenu (identifiants compris), puis effacement. */
+export function modes(base, credentials) {
+  const home = createHome({ base, repo: '/depot', fakeBridge: '/bin/true', credentials })
+  const m = (p) => statSync(join(home, p)).mode & 0o777
+  const r = {
+    home: m('.'),
+    claudeJson: m('.claude.json'),
+    claude: m('.claude'),
+    creds: m('.claude/.credentials.json'),
+    bin: m('bin'),
+  }
+  removeHome(home, base)
+  return r
+}
+
+/**
+ * Balayage des HOME périmés : un paint-home-* vieux (effacé), un récent, un dossier vieux d'un autre nom, un
+ * lien vieux nommé paint-home-* vers un dossier à garder (gardés). Rend le compte et ce qui reste.
+ */
+export function swept(base) {
+  const old = (Date.now() - STALE_MS - 60_000) / 1000
+  const mk = (name) => {
+    const p = join(base, name)
+    mkdirSync(p)
+    writeFileSync(join(p, 'f'), 'x')
+    return p
+  }
+  utimesSync(mk('paint-home-vieux'), old, old)
+  mk('paint-home-recent')
+  utimesSync(mk('autre-vieux'), old, old)
+  const target = mk('cible')
+  symlinkSync(target, join(base, 'paint-home-lien'))
+  const n = sweepHomes(base)
+  return {
+    n,
+    left: readdirSync(base)
+      .filter((x) => x !== 'faux-credentials.json')
+      .sort(),
+    target: existsSync(join(target, 'f')),
+  }
+}
+
+/** homeBase() sous l'environnement `env` (rétabli ensuite). */
+export function baseUnder(env) {
+  const keys = ['PAINT_USE_REAL_HOME', 'XDG_RUNTIME_DIR', 'RUNNER_TEMP']
+  const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]))
+  try {
+    for (const k of keys) {
+      if (env[k] === undefined) delete process.env[k]
+      else process.env[k] = env[k]
+    }
+    return homeBase()
+  } finally {
+    for (const k of keys) {
+      if (saved[k] === undefined) delete process.env[k]
+      else process.env[k] = saved[k]
+    }
+  }
+}
+
+/** Un dossier sous `base` au mode demandé (XDG_RUNTIME_DIR factice). */
+export function dirWithMode(base, name, mode) {
+  const p = join(base, name)
+  mkdirSync(p)
+  chmodSync(p, mode)
+  return p
 }

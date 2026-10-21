@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 // @ts-expect-error module .mjs sans déclaration de types
-import { copied, failing, foreign, interrupted, sandbox } from './paint-home.mjs'
+import { baseUnder, copied, dirWithMode, failing, foreign, interrupted, modes, sandbox, swept } from './paint-home.mjs'
 
 type Box = { base: string; credentials: string; homes: () => string[]; dispose: () => void }
 
@@ -53,4 +53,37 @@ describe('HOME jetable de la peinture : identifiants jamais laissés derrière',
         expect(b.homes()).toEqual([])
       }))
   }
+})
+
+describe('HOME jetable de la peinture : modes, balayage, base (L4)', () => {
+  test('HOME, .claude et bin en 700 ; .claude.json et identifiants en 600', () =>
+    inBox((b) => {
+      expect(modes(b.base, b.credentials)).toEqual({
+        home: 0o700,
+        claudeJson: 0o600,
+        claude: 0o700,
+        creds: 0o600,
+        bin: 0o700,
+      })
+    }))
+
+  test('sweepHomes : seuls les paint-home-* périmés (vrais dossiers) sont effacés', () =>
+    inBox((b) => {
+      expect(swept(b.base)).toEqual({
+        n: 1,
+        left: ['autre-vieux', 'cible', 'paint-home-lien', 'paint-home-recent'],
+        target: true,
+      })
+    }))
+
+  test('PAINT_USE_REAL_HOME=1 : $XDG_RUNTIME_DIR préféré s’il est un dossier à soi en 700', () =>
+    inBox((b) => {
+      const xdg = dirWithMode(b.base, 'run-user', 0o700)
+      const open = dirWithMode(b.base, 'run-ouvert', 0o755)
+      expect(baseUnder({ PAINT_USE_REAL_HOME: '1', XDG_RUNTIME_DIR: xdg, RUNNER_TEMP: b.base })).toBe(xdg)
+      expect(baseUnder({ PAINT_USE_REAL_HOME: '1', XDG_RUNTIME_DIR: open, RUNNER_TEMP: b.base })).toBe(b.base)
+      expect(baseUnder({ PAINT_USE_REAL_HOME: '1', RUNNER_TEMP: b.base })).toBe(b.base)
+      expect(baseUnder({ XDG_RUNTIME_DIR: xdg, RUNNER_TEMP: b.base })).toBe(b.base)
+      expect(baseUnder({ XDG_RUNTIME_DIR: xdg })).toBe('/var/tmp')
+    }))
 })

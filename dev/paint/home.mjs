@@ -11,13 +11,71 @@
 //
 // Nettoyage : le dossier est créé d'abord, tout le reste (copie comprise) dans un try qui l'efface en cas
 // d'erreur ; l'appelant l'efface dans un finally ; installCleanup() efface aussi le HOME courant et tue le
-// groupe du Claude courant sur SIGINT, SIGTERM, SIGHUP et exception non rattrapée.
-import { chmodSync, copyFileSync, lstatSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+// groupe du Claude courant sur SIGINT, SIGTERM, SIGHUP et exception non rattrapée. Un HOME laissé par une
+// exécution tuée sans nettoyage (SIGKILL, coupure) est balayé au démarrage suivant (sweepHomes).
+// Modes : HOME et ses dossiers en 700, fichiers en 600.
+import {
+  chmodSync,
+  copyFileSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 
-/** Dossier où naissent les HOME jetables : $RUNNER_TEMP en CI, /var/tmp en local (jamais /tmp). */
+/** Âge au-delà duquel un paint-home-* est périmé : une exécution entière dure bien moins. */
+export const STALE_MS = 30 * 60 * 1000
+
+/** Vrai pour un dossier réel (pas un lien) à soi, fermé au groupe et aux autres (700). */
+function privateDir(path) {
+  try {
+    const st = lstatSync(path)
+    return st.isDirectory() && st.uid === process.getuid() && (st.mode & 0o077) === 0
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Dossier où naissent les HOME jetables : $RUNNER_TEMP en CI, /var/tmp en local (jamais /tmp). Avec
+ * PAINT_USE_REAL_HOME=1 (copie des identifiants), $XDG_RUNTIME_DIR s'il est un dossier à soi en 700 :
+ * propre à l'utilisateur, effacé à la fin de sa session.
+ */
 export function homeBase() {
+  const xdg = process.env.XDG_RUNTIME_DIR
+  if (process.env.PAINT_USE_REAL_HOME === '1' && xdg && privateDir(xdg)) return xdg
   return process.env.RUNNER_TEMP || '/var/tmp'
+}
+
+/**
+ * Efface sous `base` les paint-home-* périmés (dossiers réels à soi, modifiés il y a plus de STALE_MS), par
+ * removeHome seulement. Rend le nombre de dossiers effacés.
+ */
+export function sweepHomes(base = homeBase(), now = Date.now()) {
+  let names
+  try {
+    names = readdirSync(base)
+  } catch {
+    return 0
+  }
+  let n = 0
+  for (const name of names) {
+    if (!name.startsWith('paint-home-')) continue
+    const path = join(base, name)
+    let st
+    try {
+      st = lstatSync(path)
+    } catch {
+      continue
+    }
+    if (!st.isDirectory() || st.uid !== process.getuid() || now - st.mtimeMs < STALE_MS) continue
+    if (removeHome(path, base)) n += 1
+  }
+  return n
 }
 
 /**
@@ -42,7 +100,7 @@ export function createHome({ base = homeBase(), repo, fakeBridge, key = '', cred
       chmodSync(dst, 0o600)
     }
     // Le faux bridge-mcp, en tête de PATH pour les scénarios avec modèle.
-    mkdirSync(join(home, 'bin'))
+    mkdirSync(join(home, 'bin'), { mode: 0o700 })
     symlinkSync(fakeBridge, join(home, 'bin', 'bridge-mcp'))
     return home
   } catch (e) {

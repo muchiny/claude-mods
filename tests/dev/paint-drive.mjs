@@ -3,7 +3,18 @@
 // - `login` : écran de choix de connexion AVEC le curseur ❯, puis attente (exec sleep, PID noté) ;
 // - `prompt` : une invite ❯ ordinaire ; « /clai » tapé fait paraître la ligne du menu de /clair ; /exit sort.
 import { spawn } from 'node:child_process'
-import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs'
 import { join, resolve } from 'node:path'
 
 const REPO = resolve(import.meta.dirname, '../..')
@@ -42,9 +53,17 @@ function alive(pid) {
   }
 }
 
-/** Lance `npm run paint -- --only repos` contre le faux claude `kind` ; rend sortie, code et restes. */
+/**
+ * Lance `npm run paint -- --only repos` contre le faux claude `kind` ; rend sortie, code et restes. Un HOME
+ * périmé (paint-home-perime, vieux de deux heures) est laissé d'avance : drive.ts doit le balayer. `outModes` :
+ * mode du dossier de sortie et modes distincts de ses fichiers.
+ */
 export function paintWith(kind) {
   const base = mkdtempSync(join('/var/tmp', 'paint-drive-test-'))
+  const stale = join(base, 'paint-home-perime')
+  mkdirSync(stale)
+  const old = (Date.now() - 2 * 3600_000) / 1000
+  utimesSync(stale, old, old)
   const fake = join(base, kind === 'login' ? 'claude.sh' : 'claude.cjs')
   writeFileSync(fake, kind === 'login' ? LOGIN : PROMPT)
   chmodSync(fake, 0o755)
@@ -72,9 +91,17 @@ export function paintWith(kind) {
       clearTimeout(timer)
       const pidFile = join(base, 'pid')
       const pid = existsSync(pidFile) ? Number(readFileSync(pidFile, 'utf8')) : 0
+      const out = join(base, 'paint-out')
+      const outModes = existsSync(out)
+        ? {
+            dir: statSync(out).mode & 0o777,
+            files: [...new Set(readdirSync(out).map((n) => statSync(join(out, n)).mode & 0o777))],
+          }
+        : null
       const r = {
         code,
         stdout,
+        outModes,
         homesLeft: readdirSync(base).filter((n) => n.startsWith('paint-home-')).length,
         fakeStarted: pid > 0,
         fakeAlive: pid > 0 && alive(pid),

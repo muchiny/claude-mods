@@ -15,21 +15,22 @@
 // du jeton dans le HOME jetable peut faire tourner le jeton de rafraîchissement et invalider la connexion
 // réelle de l'utilisateur (voir home.mjs). Opt-in seulement.
 //
-// Sorties dans --out (défaut $RUNNER_TEMP/paint-out ou /var/tmp/paint-out) : <scénario>.full.bin (tous les
-// octets) ; par capture, <capture>.bin (octets rejoués), <capture>.grid.txt (grille en texte),
-// <capture>.ecarts.txt. Code 1 si un écart.
+// Sorties dans --out (défaut $RUNNER_TEMP/paint-out ou /var/tmp/paint-out ; dossier en 700, fichiers en 600 :
+// les octets du terminal peuvent porter le compte ou l'organisation de la bannière) : <scénario>.full.bin
+// (tous les octets) ; par capture, <capture>.bin (octets rejoués), <capture>.grid.txt (grille en texte),
+// <capture>.ecarts.txt. Code 1 si un écart. Au démarrage, les HOME jetables périmés sont balayés.
 // Garde-fous WSL : refus sous 2 Gio de mémoire disponible ; 120 s au plus par scénario ; un seul Claude à la
 // fois ; arrêt du groupe de processus par son PID, jamais par motif.
 //
 // Exécuté par node --experimental-strip-types (node-pty perd des octets sous bun 1.4.3).
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import pty from 'node-pty'
 import { check, parseExpected } from './check.ts'
-import { createHome, installCleanup, killGroup, removeHome } from './home.mjs'
+import { createHome, installCleanup, killGroup, removeHome, sweepHomes } from './home.mjs'
 import { gridOf, gridText } from './replay.ts'
 import { isLoginScreen, SCENARIOS, type Scenario, type Step } from './scenarios.ts'
 
@@ -177,6 +178,12 @@ async function runScenario(s: Scenario, home: string): Promise<Run> {
   return run
 }
 
+/** Fichier de sortie lisible par soi seul (mode 600, même s'il existait déjà). */
+function writePrivate(path: string, data: string | Buffer): void {
+  writeFileSync(path, data, { mode: 0o600 })
+  chmodSync(path, 0o600)
+}
+
 /** PAINT_USE_REAL_HOME=1 : le seul fichier d'identifiants, jamais lu ici, seulement copié (home.mjs). */
 function realCredentials(): string {
   const f = join(homedir(), '.claude', '.credentials.json')
@@ -186,6 +193,7 @@ function realCredentials(): string {
 
 async function main(): Promise<number> {
   installCleanup(current)
+  sweepHomes()
   const { only, out } = args()
   if (!memoryOk()) {
     console.error('mémoire disponible < 2 Gio : peinture refusée')
@@ -193,7 +201,8 @@ async function main(): Promise<number> {
   }
   const realHome = process.env.PAINT_USE_REAL_HOME === '1'
   const hasKey = (process.env.ANTHROPIC_API_KEY ?? '') !== ''
-  mkdirSync(out, { recursive: true })
+  mkdirSync(out, { recursive: true, mode: 0o700 })
+  chmodSync(out, 0o700)
   const outcomes: Outcome[] = []
   for (const s of SCENARIOS) {
     if (only !== null && s.name !== only) continue
@@ -214,7 +223,7 @@ async function main(): Promise<number> {
       removeHome(current.home)
       current.home = null
     }
-    writeFileSync(join(out, `${s.name}.full.bin`), r.full)
+    writePrivate(join(out, `${s.name}.full.bin`), r.full)
     if (r.login) {
       console.log(CI ? '::notice::peinture sautée : connexion requise' : `${s.name} : sauté, connexion requise`)
       outcomes.push({ name: s.name, status: 'saute', ecarts: [] })
@@ -224,19 +233,19 @@ async function main(): Promise<number> {
     for (const name of names) {
       const cut = r.cuts.find((c) => c.name === name)
       const bytes = cut?.bytes ?? r.full
-      writeFileSync(join(out, `${name}.bin`), bytes)
+      writePrivate(join(out, `${name}.bin`), bytes)
       const grid = await gridOf(new Uint8Array(bytes), COLS, ROWS)
-      writeFileSync(join(out, `${name}.grid.txt`), `${gridText(grid)}\n`)
+      writePrivate(join(out, `${name}.grid.txt`), `${gridText(grid)}\n`)
       const ecarts = r.error === null ? [] : [`session : ${r.error}`]
       if (cut === undefined) ecarts.push('session : capture non faite (grille de tous les octets)')
       ecarts.push(...check(grid, parseExpected(readFileSync(join(HERE, 'expected', `${name}.txt`), 'utf8'))))
-      writeFileSync(join(out, `${name}.ecarts.txt`), ecarts.map((e) => `${e}\n`).join(''))
+      writePrivate(join(out, `${name}.ecarts.txt`), ecarts.map((e) => `${e}\n`).join(''))
       outcomes.push({ name, status: ecarts.length === 0 ? 'ok' : 'ecarts', ecarts })
       console.log(`${name} : ${ecarts.length === 0 ? '0 écart' : `${ecarts.length} écart(s)`}`)
       for (const e of ecarts) console.log(`  - ${e}`)
     }
   }
-  writeFileSync(join(out, 'resume.json'), `${JSON.stringify(outcomes, null, 2)}\n`)
+  writePrivate(join(out, 'resume.json'), `${JSON.stringify(outcomes, null, 2)}\n`)
   return outcomes.some((o) => o.status === 'ecarts') ? 1 : 0
 }
 
