@@ -68,6 +68,13 @@ describe('toneLine relit le texte rendu : les noms ne le faussent pas (M2)', () 
     expect(line.find((p) => p.text === 'injoignable')?.tone).toBe('erreur')
   })
 
+  test('un hôte dont la fin ressemble à « code N » (« xcode 5 ») n’est coupé qu’aux espaces', () => {
+    const c = call({ host: 'xcode 5', state: 'fait' })
+    const line = pipeline(c, stateOf([c]))
+    expect(text(line)).toBe('✓ xcode 5')
+    expect(line.find((p) => p.text === 'xcode 5')?.tone).toStrictEqual({ machine: 0 })
+  })
+
   test('un nom de machine légitime (points, tirets) garde sa couleur', () => {
     const c = call({ host: 'web-02.prod' })
     expect(callLine(c, stateOf([c]), 200).find((p) => p.text === 'web-02.prod')?.tone).toStrictEqual({ machine: 0 })

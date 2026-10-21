@@ -164,6 +164,7 @@ function signAt(seg: string): string | null {
 /** Début du mot d'état en fin de `rest` (« host-a injoignable » → 7), -1 s'il n'y en a pas. */
 function stateWordAt(rest: string, sign: string): number {
   // Une machine non prouvée seule après ✓ est la machine d'un appel fait, pas l'état « machine inconnue ».
+  // Stryker disable next-line ConditionalExpression: seule une étape ✓ est exactement « machine inconnue » (bridge.steps) ; derrière ✓ rowOf est exclu plus bas, le résultat est le même.
   if (rest === UNKNOWN_HOST && sign !== '✗') return -1
   // Débuts de mot : 0 et chaque position qui suit une espace.
   const starts = [0]
