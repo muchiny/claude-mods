@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import type { ParsedCall } from '../../hooks/bridge'
-import { isBridgeServer, parseCli, parseMcp, serverOf, splitShell } from '../../hooks/bridge'
+import { isBridgeServer, parseCli, parseMcp, serverOf, splitShell, usefulLines } from '../../hooks/bridge'
 import { TOOLS } from '../../hooks/tools.generated'
 
 /** Un appel CLI attendu : ssh_disk_usage sur raspberry, sauf ce que `patch` change. */
@@ -666,5 +666,58 @@ describe('serverOf et isBridgeServer : ancres', () => {
     expect(isBridgeServer('xplugin_x_ssh-bridge')).toBe(false)
     expect(isBridgeServer('plugin_x_ssh-bridge\n')).toBe(false)
     expect(isBridgeServer('plugin_x_ssh-bridge')).toBe(true)
+  })
+})
+
+describe('usefulLines : séquences de contrôle', () => {
+  test('OSC (lien hypertexte) retiré, terminé par BEL ou ST', () => {
+    expect(usefulLines('a\x1b]8;;http://x\x07lien\x1b]8;;\x07b')).toEqual(['alienb'])
+    expect(usefulLines('a\x1b]0;titre\x1b\\b')).toEqual(['ab'])
+  })
+
+  test('\r non suivi de \n : seul ce qui suit le dernier \r reste', () => {
+    expect(usefulLines('10%\r50%\r100%')).toEqual(['100%'])
+    expect(usefulLines('a\r\nb')).toEqual(['a', 'b'])
+  })
+
+  test('\\r+\\n est un saut de ligne ; un \\r final ne vide pas la ligne', () => {
+    expect(usefulLines('abc\r\r\ndef\r\n10%\r50%\r')).toEqual(['abc', 'def', '50%'])
+    expect(usefulLines('50%\r')).toEqual(['50%'])
+    expect(usefulLines('50%\r\r')).toEqual(['50%'])
+    expect(usefulLines('a\rb\r\rc')).toEqual(['c'])
+  })
+
+  // Sortie distante non fiable : aucune expression ne doit être quadratique (200 000 = 13 s avant le correctif, 160 000 CR).
+  test('entrées adverses de 200 000 caractères : linéaire et exact', () => {
+    const N = 200_000
+    const cases: [string, string[]][] = [
+      [`${'\r'.repeat(N)}x`, ['x']],
+      [`x${'\r'.repeat(N)}`, ['x']],
+      [`${'\r'.repeat(N)}\nx`, ['x']],
+      ['\x1b'.repeat(N), []],
+      ['\x1b]'.repeat(N), [']'.repeat(N)]],
+      [`\x1b]${'a'.repeat(N)}`, [`]${'a'.repeat(N)}`]],
+      [`\x1b[${'0'.repeat(N)}`, [`[${'0'.repeat(N)}`]],
+      ['\x1b['.repeat(N), ['['.repeat(N)]],
+      [`\x1b[${';'.repeat(N)}`, [`[${';'.repeat(N)}`]],
+      [`a${' '.repeat(N)}b`, [`a${' '.repeat(N)}b`]],
+    ]
+    for (const [input, want] of cases) {
+      const t0 = performance.now()
+      const got = usefulLines(input)
+      expect(performance.now() - t0).toBeLessThan(1000)
+      expect(got).toEqual(want)
+    }
+  })
+
+  test('CSI autre que SGR retiré', () => {
+    expect(usefulLines('x\x1b[2Ky')).toEqual(['xy'])
+    expect(usefulLines('\x1b[31mrouge\x1b[0m')).toEqual(['rouge'])
+  })
+
+  test('C0 (sauf \n et \t), DEL et C1 retirés', () => {
+    expect(usefulLines('\x07bip')).toEqual(['bip'])
+    expect(usefulLines('a\x00b\x7fc\x85d\x9fe')).toEqual(['abcde'])
+    expect(usefulLines('a\tb')).toEqual(['a\tb'])
   })
 })

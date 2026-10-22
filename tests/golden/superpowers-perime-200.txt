@@ -1,0 +1,8 @@
+## bande (200 colonnes)
+# largeurs : 
+## carte /clair
+plan « plan de démonstration »⟨texte⟩ · ⟨attenue⟩tâche 2 sur 5⟨texte⟩ · abandonné⟨attenue⟩
+# largeurs : 58
+## ligne d’état et étiquette
+état : (aucune)
+pied : (aucune)

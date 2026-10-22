@@ -516,14 +516,59 @@ export function parseMcp(tool: string, input: unknown, tools: Readonly<Record<st
   return callsOf({ via: 'mcp', accordByOption: false, ownsExit: true, inLoop: false }, name, args, lookup(tools, name))
 }
 
-// ─── Tâche 5 : classement d'un appel terminé (spec §5.1, amendements A3, A4, A7, A8) ───────────
+// ─── Classement d'un appel terminé (spec §5.1, amendements A3, A4, A7, A8) ───────────
 
 type Step = { label: string; mark: 'ok' | 'ko' | 'off' }
 type JsonObject = Record<string, unknown>
 
-/** Couleurs SGR du journal de bridge-mcp (bridge-facts §0.1.1). */
-// biome-ignore lint/suspicious/noControlCharactersInRegex: l'ESC (0x1b) ouvre les séquences SGR, c'est voulu
-const ANSI_SGR = /\x1b\[[0-9;]*m/g
+/** Séquence CSI (couleurs SGR du journal de bridge-mcp, bridge-facts §0.1.1, mais aussi effacement, curseur…). */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: l'ESC (0x1b) ouvre les séquences, c'est voulu
+const CSI = /\x1b\[[0-?]*[ -/]*[@-~]/g
+/** Séquence OSC (lien hypertexte, titre de fenêtre), terminée par BEL ou ST. */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: l'ESC (0x1b) et BEL (0x07) bornent la séquence, c'est voulu
+const OSC = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g
+/** Caractères de contrôle restants : C0 sauf \n et \t, DEL, C1. */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: c'est précisément ce qu'on retire
+const CONTROLS = /[\x00-\x08\x0b-\x1f\x7f-\x9f]/g
+/**
+ * Caractères d'usurpation d'affichage : tout Cf (bidi U+202A-202E et U+2066-2069, largeur nulle et marques
+ * U+200B-200F, U+061C, ZWJ…), séparateurs de ligne et de paragraphe U+2028/2029, tout ignorable par défaut
+ * (sélecteurs de variante U+FE00-FE0F et U+E0100-E01EF compris), demi-codets isolés, fillers Hangul
+ * (U+115F, U+1160, U+3164, U+FFA0), CGJ U+034F, voyelles khmères U+17B4/17B5 (listés même s'ils sont
+ * ignorables). Le ZWJ est retiré aussi : un emoji ZWJ s'affiche décomposé, sans débordement. Sans sélecteur,
+ * « ⚠️ » devient « ⚠ » : la largeur vient du caractère de base, jamais d'une suite (plus sûr que de garder
+ * U+FE0F seul). Les signes du mod (U+FE0E du signe d'attente) ne passent pas par ici.
+ */
+const SPOOFING =
+  /[\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\p{Cs}\u115f\u1160\u17b4\u17b5\u3164\uffa0]|\u034f/gu
+/** Au-delà de 2 marques combinantes de suite (« zalgo ») : le reste est retiré. */
+const MARK_RUN = /(\p{M}{2})\p{M}+/gu
+
+/** Ce qui suit le dernier \r de la ligne, \r finaux exclus. Linéaire : pas d'expression à ancre finale (quadratique sur une suite de \r). */
+function afterLastCr(line: string): string {
+  let end = line.length
+  while (line[end - 1] === '\r') end -= 1
+  return line.slice(line.lastIndexOf('\r', end - 1) + 1, end)
+}
+
+/**
+ * Texte tel qu'un terminal l'afficherait, sans ses commandes : séquences CSI et OSC retirées, puis tout
+ * caractère C0 (sauf \n et \t), DEL et C1. Un \r non suivi de \n ramène au début de la ligne : seul ce
+ * qui suit le dernier \r de la ligne reste (barres de progression). \r+\n est un saut de ligne, et un \r final
+ * sans rien après lui n'efface rien (un terminal garde le texte). Les caractères d'usurpation d'affichage (SPOOFING) sont retirés.
+ */
+export function stripControls(text: string): string {
+  return text
+    .replace(OSC, '')
+    .replace(CSI, '')
+    .split('\n')
+    .map(afterLastCr)
+    .join('\n')
+    .replace(CONTROLS, '')
+    .replace(SPOOFING, '')
+    .replace(MARK_RUN, '$1')
+}
+
 /** Ligne du journal tracing de bridge-mcp, couleur retirée (amendement A3, bridge-facts §0.1.1). */
 const TRACING_LINE = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z\s+(TRACE|DEBUG|INFO|WARN|ERROR)\s/
 /** Première ligne du texte d'un Bash sorti en erreur (bridge-facts §0). */
@@ -542,7 +587,7 @@ const PLAIN_SUBCOMMANDS: readonly string[] = ['exec', 'upload', 'download']
 const REGEX_SPECIALS = /[\\^$.*+?()[\]{}|]/g
 
 /**
- * Début stable de chaque texte de refus du moteur, recopié à l'étape 8 de la tâche 5 depuis le spec §10,
+ * Début stable de chaque texte de refus du moteur, recopié depuis le spec §10,
  * ligne « Texte exact d'un refus au dialogue de permission et d'un refus du classifieur » (amendement A2),
  * dans l'ordre de RECORDED_REFUSALS (tests/pure/engine-texts.ts). Lu au début de la première ligne utile.
  */
@@ -551,8 +596,7 @@ const ENGINE_REFUSAL_PREFIXES: readonly string[] = [
   'Permission for this action was denied by the Claude Code auto mode classifier.',
 ]
 /**
- * Début stable de la marque de sortie persistée de Claude Code, recopié à l'étape 8 de la tâche 5 depuis
- * le spec §10, ligne « Marque de sortie Bash persistée par Claude Code », dans l'ordre de
+ * Début stable de la marque de sortie persistée de Claude Code, recopié depuis le spec §10, ligne « Marque de sortie Bash persistée par Claude Code », dans l'ordre de
  * RECORDED_PERSISTED. Cherché sur toute ligne utile d'un appel CLI (spec §5.1, drapeau tronqué).
  */
 const ENGINE_PERSISTED_PREFIXES: readonly string[] = ['<persisted-output>']
@@ -614,10 +658,9 @@ export const BRIDGE_TEXTS: readonly { re: RegExp; state: CallState }[] = [
   { re: /^'sudo' (is not supported on Windows host|requires a POSIX shell)/, state: 'erreur-usage' },
 ]
 
-/** Lignes utiles : couleurs ANSI retirées, lignes de journal du bridge et lignes vides sautées, chaque ligne rognée. */
+/** Lignes utiles : séquences de contrôle retirées (stripControls), lignes de journal du bridge et lignes vides sautées, chaque ligne rognée. */
 export function usefulLines(text: string): string[] {
-  return text
-    .replace(ANSI_SGR, '')
+  return stripControls(text)
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line !== '' && !TRACING_LINE.test(line))
@@ -725,6 +768,12 @@ function fromHostEntry(entry: JsonObject, truncated: boolean): Outcome {
   return typeof code === 'number' && code !== 0 ? { state: 'code', code, truncated } : { state: 'fait', truncated }
 }
 
+/**
+ * Plus grand code de sortie que bridge-mcp écrit (bridge-mcp src/main.rs:59, :195, :204 ; src/cli/runner.rs:111-116).
+ * Au-delà (124 de `timeout`, 127, 130, 137…), le code vient d'un enrobage : incertain (arbitrage Q2, REFERENCE R52).
+ */
+const BRIDGE_EXIT_MAX = 6
+
 /** Code de la sous-commande exec : bloc `Exit code: N` (§3.10), sinon `"exit_code":N` de `exec --json` (§1.4). */
 function execCode(lines: readonly string[]): number | undefined {
   for (const line of lines) {
@@ -739,14 +788,21 @@ function execCode(lines: readonly string[]): number | undefined {
 function classifySubcommand(tool: string, exit: number, lines: readonly string[]): Outcome {
   const truncated = hasTruncation(lines, true)
   const code = tool === 'exec' ? execCode(lines) : undefined
-  if (code !== undefined) return code === 0 ? { state: 'fait', truncated } : { state: 'code', code, truncated }
+  // Un code distant 0 ne rend pas ✓ un Bash en échec : la sortie locale non nulle reste un échec.
+  // Stryker disable next-line ConditionalExpression: `exit === 0` → false est équivalent (code distant 0 : la suite rend `fait` pour exit 0)
+  if (code !== undefined && (code !== 0 || exit === 0)) {
+    return code === 0 ? { state: 'fait', truncated } : { state: 'code', code, truncated }
+  }
+  if (exit > BRIDGE_EXIT_MAX) return { state: 'incertain', truncated }
   return exit === 0 ? { state: 'fait', truncated } : failed(headOf(lines), truncated)
 }
 
 function classifyCli(p: ParsedCall, lines: readonly string[], isError: boolean, info: ToolInfo | undefined): Outcome {
   // Stryker disable next-line StringLiteral: '' et tout autre texte ne sont pas une ligne `Exit code N`
   const bash = BASH_EXIT_LINE.exec(lines[0] ?? '')
-  const exit = bash === null ? (isError ? 1 : 0) : Number(bash[1])
+  // Sortie locale : le code de l'en-tête Bash, ou 1 si isError le démontre (un « Exit code 0 » qui l'accompagne ne le démentit pas).
+  const header = bash === null ? 0 : Number(bash[1])
+  const exit = header !== 0 ? header : isError ? 1 : 0
   const raw = bash === null ? lines : lines.slice(1)
   if (PLAIN_SUBCOMMANDS.includes(p.tool)) return classifySubcommand(p.tool, exit, raw)
   const content = contentLines(raw)
@@ -754,6 +810,8 @@ function classifyCli(p: ParsedCall, lines: readonly string[], isError: boolean, 
   const truncated = hasTruncation(raw, true) || (content !== null && hasTruncation(content, true))
   const entry = info?.multi === true ? hostEntry(body, p.host) : null
   if (entry !== null) return fromHostEntry(entry, truncated)
+  // D11 : un outil multi qui a rendu un résultat (sortie 0 ou 6) sans élément pour cet hôte n'a rien prouvé pour lui.
+  if (info?.multi === true && (exit === 0 || exit === 6)) return { state: 'incertain', truncated }
   switch (exit) {
     case 0:
       return succeeded(body, info, truncated)
@@ -772,8 +830,11 @@ function classifyCli(p: ParsedCall, lines: readonly string[], isError: boolean, 
       return info?.codeWithoutError === true
         ? codeOutcome(remoteCode(body, info), truncated)
         : ranAndFailed(body, truncated)
-    default:
+    case 1:
       return failed(headOf(body), truncated)
+    default:
+      // Code au-delà de BRIDGE_EXIT_MAX, que la CLI n'écrit pas (arbitrage Q2) : rien n'est attribuable au bridge.
+      return { state: 'incertain', truncated }
   }
 }
 
@@ -781,6 +842,8 @@ function classifyMcp(p: ParsedCall, lines: readonly string[], isError: boolean, 
   const truncated = hasTruncation(lines, false)
   const entry = info?.multi === true ? hostEntry(lines, p.host) : null
   if (entry !== null) return fromHostEntry(entry, truncated)
+  // D11 : succès global d'un outil multi sans élément pour cet hôte : incertain, jamais « fait » hérité.
+  if (!isError && info?.multi === true) return { state: 'incertain', truncated }
   if (!isError) return succeeded(lines, info, truncated)
   if (exitTag(lines) !== undefined) return ranAndFailed(lines, truncated)
   return failed(headOf(lines), truncated)
@@ -806,6 +869,9 @@ export function classify(p: ParsedCall, r: RunResult, tools: Readonly<Record<str
 
 const NOTHING_RAN: Step = { label: 'rien n’a tourné', mark: 'off' }
 
+/** Machine non prouvée : le même mot que la rangée (D10). */
+const UNKNOWN_HOST = 'machine inconnue'
+
 /** États décidés avant l'accord ou à sa place : aucune étape « accord » devant eux. */
 const BEFORE_ACCORD: readonly CallState[] = [
   'refuse-claude',
@@ -820,7 +886,10 @@ const DECISIVE: Readonly<Record<CallState, (host: string, code: number | undefin
   fait: (host) => [{ label: host, mark: 'ok' }],
   code: (host, code) => [{ label: `${host} code ${code ?? '?'}`, mark: 'ok' }],
   injoignable: (host) => [{ label: `${host} injoignable`, mark: 'ko' }, NOTHING_RAN],
-  'machine-inconnue': (host) => [{ label: `${host} inconnue`, mark: 'ko' }, NOTHING_RAN],
+  'machine-inconnue': (host) => [
+    { label: host === UNKNOWN_HOST ? UNKNOWN_HOST : `${host} inconnue`, mark: 'ko' },
+    NOTHING_RAN,
+  ],
   refuse: () => [{ label: 'refusé par le bridge', mark: 'ko' }, NOTHING_RAN],
   limite: () => [{ label: 'limité par le bridge', mark: 'ko' }, NOTHING_RAN],
   'confirmation-impossible': () => [{ label: 'confirmation impossible', mark: 'ko' }, NOTHING_RAN],
@@ -834,7 +903,7 @@ const DECISIVE: Readonly<Record<CallState, (host: string, code: number | undefin
   'erreur-usage': () => [{ label: 'erreur d’usage', mark: 'ko' }, NOTHING_RAN],
   'erreur-config': () => [{ label: 'erreur de config', mark: 'ko' }, NOTHING_RAN],
   'refuse-claude': () => [{ label: 'refusé par Claude Code', mark: 'off' }, NOTHING_RAN],
-  decline: () => [{ label: 'accord', mark: 'ko' }, NOTHING_RAN],
+  decline: () => [{ label: 'accord refusé', mark: 'off' }, NOTHING_RAN],
   interrompu: () => [{ label: 'interrompu', mark: 'off' }],
   incertain: () => [{ label: 'incertain', mark: 'off' }],
 }
@@ -847,16 +916,16 @@ function accordSteps(accord: BridgeCall['accord']): Step[] {
 /**
  * Pipeline réel d'un appel : seules les étapes qui ont eu lieu ou qui ont décidé du résultat, aucune
  * étape ✓/✗ après un ✗ (seule la conclusion `rien n’a tourné` peut suivre). Une machine inconnue
- * s'écrit `machine`.
+ * s'écrit `machine inconnue` (D10), comme sur la rangée.
  */
 export function steps(c: BridgeCall): Step[] {
-  const host = c.host ?? 'machine'
+  const host = c.host ?? UNKNOWN_HOST
   if (c.accord === 'formulaire-non') return DECISIVE.decline(host, c.code)
   const accord = BEFORE_ACCORD.includes(c.state) ? [] : accordSteps(c.accord)
   return accord.concat(DECISIVE[c.state](host, c.code))
 }
 
-// --- Tâche 11 : lecture des résultats du moteur, sortie de register.tsx (spec §6) ---------------
+// --- Lecture des résultats du moteur, sortie de register.tsx (spec §6) ---------------
 // Tests : tests/pure/glue.test.ts.
 
 /** stdout puis stderr d'un résultat Bash ; une chaîne (texte d'erreur) telle quelle ; sinon rien. */

@@ -12,7 +12,9 @@
 //   ses `modes` joints par « & » ; pour PromptHint : `hint` puis `tail`), pour
 //   distinguer ce que le mod dessine de ce qu'il laisse au moteur ; pour les
 //   composants de `engineNodes`, le vrai nœud du moteur `{ type: 'engine', ref: 0 }`
-//   (D:10086-10091), que le moteur réel refuse sous certaines Box (tâche 14).
+//   (D:10086-10091), que le moteur réel refuse sous certaines Box (tâche 14) ;
+// - des compteurs (écritures de l'état et des rangées, lectures de l'état) et des fichiers
+//   illisibles (`unreadable`), pour les tests de tests/engine/colle.test.tsx.
 
 import type { On, ToolCallResult } from 'claude-code'
 import type { MockClock } from 'claude-code/testing'
@@ -49,6 +51,16 @@ export type World = {
   rows: Map<string, BridgeCall[]>
   /** Composants dont le dessin du moteur est le vrai nœud `{ type: 'engine', ref: 0 }` ; vide par défaut. */
   engineNodes: Set<string>
+  /** Chemins dont $.fs.read est refusé alors que $.fs.stat répond (fichier présent mais illisible). */
+  unreadable: Set<string>
+  /** Nombre d'écritures de `'mode-clair'.state`. */
+  stateWrites: number
+  /** Le membre de `'mode-clair'.rows` de chaque écriture, dans l'ordre. */
+  rowWrites: string[]
+  /** Nombre de lectures de l'état du mod (`$.state.get`). */
+  stateReads: number
+  /** Le tool_use_id de chaque appel d'outil arrivé au cœur, dans l'ordre. */
+  coreCalls: string[]
 }
 
 export function world(on: On): World {
@@ -65,13 +77,24 @@ export function world(on: On): World {
     state: undefined,
     rows: new Map(),
     engineNodes: new Set(),
+    unreadable: new Set(),
+    stateWrites: 0,
+    rowWrites: [],
+    stateReads: 0,
+    coreCalls: [],
   }
   on('state.set', { plugin: PLUGIN, key: 'rows' }, ($, e, next) => {
     w.rows.set(e.id, e.value)
+    w.rowWrites.push(e.id)
     return next(e)
   })
   on('state.set', { plugin: PLUGIN, key: 'state' }, ($, e, next) => {
     w.state = e.value
+    w.stateWrites += 1
+    return next(e)
+  })
+  on('state.get', { plugin: PLUGIN }, ($, e, next) => {
+    w.stateReads += 1
     return next(e)
   })
   on('ui.status', ($, e) => {
@@ -85,6 +108,7 @@ export function world(on: On): World {
   on('fs.read', ($, e) => {
     w.reads.push(e.path)
     const file = w.files.get(e.path)
+    if (w.unreadable.has(e.path)) return { deny: `EACCES: ${e.path}` }
     return file === undefined ? { deny: `ENOENT: ${e.path}` } : { value: file.text }
   })
   on('fs.stat', ($, e) => {
@@ -100,6 +124,7 @@ export function world(on: On): World {
   on('turn.complete', ($, e) => ({ text: e.answer }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('tool.call', async ($, e) => {
+    w.coreCalls.push(e.tool_use_id)
     const answer = w.answers.get(e.tool_use_id)
     if (answer === undefined) return { result: {}, text: '' }
     if (answer.afterMs !== undefined) await clock.sleep(answer.afterMs)

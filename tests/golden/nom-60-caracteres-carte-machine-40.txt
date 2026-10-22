@@ -1,0 +1,30 @@
+## bande (40 colonnes)
+●⟨accent⟩ ⟨texte⟩machine-xxxxxxxxxxxx⟨m0⟩… · ⟨attenue⟩ssh_disk_usage⟨texte⟩
+# largeurs : 40
+## appel toolu_1#0
+✗⟨erreur⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxx⟨m0⟩… · ⟨attenue⟩injoignable⟨erreur⟩
+# largeurs : 40
+## appel toolu_2#0
+✗⟨attention⟩ ⟨texte⟩machine-xxxxxxxxxxxxx⟨m0⟩… · ⟨attenue⟩délai dépassé⟨attention⟩
+# largeurs : 40
+## appel toolu_3#0
+✗⟨erreur⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxx⟨m0⟩… · ⟨attenue⟩injoignable⟨erreur⟩
+# largeurs : 40
+## appel toolu_4#0
+●⟨accent⟩ ⟨texte⟩machine-xxxxxxxxxxxx⟨m0⟩… · ⟨attenue⟩ssh_disk_usage⟨texte⟩
+# largeurs : 40
+## carte /clair
+machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩2 appels⟨texte⟩ · ⟨attenue⟩●⟨accent⟩ ssh_disk_usage⟨texte⟩ · ⟨attenue⟩✗⟨erreur⟩ ⟨texte⟩problème non vu⟨erreur⟩
+dernier appel sur ⟨attenue⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ :⟨attenue⟩
+●⟨accent⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ · ⟨attenue⟩ssh_disk_usage⟨texte⟩
+○⟨attenue⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟨m0⟩ ⟨texte⟩en cours⟨accent⟩
+# largeurs : 110 80 79 71
+## carte ajustée (40 colonnes)
+machine-x⟨m0⟩… · ⟨attenue⟩2 appels⟨texte⟩ · ⟨attenue⟩●⟨accent⟩ ssh_disk_usage⟨texte⟩
+dernier appel sur ⟨attenue⟩machine-xxxxxxxxxxxxx⟨m0⟩…⟨attenue⟩
+●⟨accent⟩ ⟨texte⟩machine-xxxxxxxxxxxx⟨m0⟩… · ⟨attenue⟩ssh_disk_usage⟨texte⟩
+○⟨attenue⟩ ⟨texte⟩machine-xxxxxxxxxxxxxxxxxxxx⟨m0⟩…⟨attenue⟩ ⟨texte⟩en cours⟨accent⟩
+# largeurs : 40 40 40 40
+## ligne d’état et étiquette
+état : (aucune)
+pied : clair ✗ 3

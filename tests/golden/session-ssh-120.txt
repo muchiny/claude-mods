@@ -1,0 +1,16 @@
+## bande (120 colonnes)
+●⟨accent⟩ ⟨texte⟩host-a⟨m0⟩ · ⟨attenue⟩ssh_session_exec⟨texte⟩
+# largeurs : 27
+## appel toolu_1#0
+✓⟨ok⟩ ⟨texte⟩host-a⟨m0⟩ · ⟨attenue⟩ssh_session_create⟨texte⟩ · inconnu⟨attenue⟩
+# largeurs : 39
+## appel toolu_2#0
+●⟨accent⟩ ⟨texte⟩host-a⟨m0⟩ · ⟨attenue⟩ssh_session_exec⟨texte⟩
+# largeurs : 27
+## carte /clair
+1 machine⟨texte⟩ · ⟨attenue⟩2 appels⟨texte⟩ · aucun problème non vu⟨attenue⟩
+host-a⟨m0⟩ · ⟨attenue⟩2 appels⟨texte⟩ · ⟨attenue⟩●⟨accent⟩ ssh_session_exec⟨texte⟩
+# largeurs : 44 38
+## ligne d’état et étiquette
+état : (aucune)
+pied : (aucune)

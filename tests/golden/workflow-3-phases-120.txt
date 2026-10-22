@@ -1,0 +1,9 @@
+## bande (120 colonnes)
+●⟨accent⟩ workflow audit-demo⟨texte⟩ · ⟨attenue⟩Audit⟨texte⟩ · ⟨attenue⟩1 agent⟨texte⟩
+# largeurs : 39
+## carte /clair
+●⟨accent⟩ workflow audit-demo⟨texte⟩ · ⟨attenue⟩Audit⟨texte⟩ · ⟨attenue⟩1 agent⟨texte⟩
+# largeurs : 39
+## ligne d’état et étiquette
+état : (aucune)
+pied : (aucune)

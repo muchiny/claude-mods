@@ -8,9 +8,10 @@
     "jsxFragmentFactory": "Fragment",
     "strict": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "lib": ["ES2023"],
     "types": []
   },
-  "include": ["dev/claude-code.d.ts", "mode-clair/hooks", "mode-clair/types", "mode-clair/tests"]
+  "include": ["dev/claude-code.d.ts", "mode-clair/hooks", "mode-clair/types", "mode-clair/tests", "tests"]
 }

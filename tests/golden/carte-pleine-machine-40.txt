@@ -1,0 +1,39 @@
+## bande (40 colonnes)
+●⟨accent⟩ workflow audit-demo⟨texte⟩ · ⟨attenue⟩Audit⟨texte⟩ · ⟨attenue⟩1 agent⟨texte⟩
+plan « plan de démonstration »⟨texte⟩ · ⟨attenue⟩tâche ⟨texte⟩…⟨attenue⟩
+# largeurs : 39 40
+## appel toolu_1#0
+✓⟨ok⟩ ⟨texte⟩host-a⟨m0⟩ · ⟨attenue⟩ssh_disk_usage⟨texte⟩ · lecture⟨attenue⟩
+# largeurs : 35
+## appel toolu_2#0
+✗⟨erreur⟩ ⟨texte⟩host-b⟨m1⟩ · ⟨attenue⟩injoignable⟨erreur⟩ · rien n’a tourné⟨attenue⟩
+# largeurs : 40
+## appel toolu_3#0
+✓ ⟨texte⟩host-a⟨m0⟩ · ⟨attenue⟩code 2⟨texte⟩ · peut modifier⟨attenue⟩
+# largeurs : 33
+## appel toolu_4#0
+✗⟨erreur⟩ ⟨texte⟩host-c⟨m2⟩ · ⟨attenue⟩échec⟨erreur⟩ · voir /clair⟨attenue⟩
+# largeurs : 30
+## appel toolu_5#0
+✓⟨ok⟩ ⟨texte⟩host-a⟨m0⟩ · ⟨attenue⟩ssh_journal_query⟨texte⟩ · lecture …⟨attenue⟩
+# largeurs : 40
+## appel toolu_6#0
+○⟨attenue⟩ ⟨texte⟩host-b⟨m1⟩ · refusé par Claude Code …⟨attenue⟩
+# largeurs : 35
+## appel toolu_7#0
+✗⟨attention⟩ ⟨texte⟩host-c⟨m2⟩ · ⟨attenue⟩limité⟨attention⟩ · rien n’a tourné⟨attenue⟩
+# largeurs : 35
+## appel toolu_8#0
+✗⟨attention⟩ ⟨texte⟩host-b⟨m1⟩ · ⟨attenue⟩délai dépassé⟨attention⟩ · peut modifier⟨attenue⟩
+# largeurs : 40
+## carte /clair
+host-a⟨m0⟩ · ⟨attenue⟩3 appels⟨texte⟩ · ⟨attenue⟩✓⟨ok⟩ ssh_journal_query⟨texte⟩
+host-b⟨m1⟩ · ⟨attenue⟩1 appel⟨texte⟩ · ⟨attenue⟩✗⟨attention⟩ ⟨texte⟩délai dépassé⟨attention⟩
+host-c⟨m2⟩ · ⟨attenue⟩1 appel⟨texte⟩ · ⟨attenue⟩✗⟨attention⟩ ⟨texte⟩limité⟨attention⟩
+dernier appel sur ⟨attenue⟩host-b⟨m1⟩ :⟨attenue⟩
+✗⟨attention⟩ ⟨texte⟩host-b⟨m1⟩ · ⟨attenue⟩délai dépassé⟨attention⟩ · peut modifier⟨attenue⟩
+✗⟨attention⟩ ⟨texte⟩host-b⟨m1⟩ ⟨texte⟩délai dépassé⟨attention⟩
+# largeurs : 39 34 27 26 40 22
+## ligne d’état et étiquette
+état : (aucune)
+pied : clair ✗ 3

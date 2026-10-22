@@ -1,0 +1,10 @@
+# bridge-mcp exec host-a uptime (faux bridge : bloc « Exit code: 0 », code 0) puis /clair.
+# Pas encore observé (scénario avec modèle) : plages de lignes, à resserrer au premier passage.
+repere: ❯ /clair
++1..+4: 1 machine
++1..+4: aucun problème non vu⟨attenue⟩
++1..+6: host-a
+signe: ✓
+signe: ✗
+signe: ?
+absent: clair ✗

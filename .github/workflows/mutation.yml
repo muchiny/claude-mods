@@ -2,29 +2,37 @@ name: Mutation testing
 
 # Long (≈ 3 900 mutants, une exécution de `claude plugin test` chacun) : hebdomadaire et à la demande,
 # jamais à chaque push. Un job par module pour répartir la charge.
-# register.tsx est exclu : le moteur lit les noms d'événements de `on()` dans la source, et
-# l'instrumentation de Stryker les enveloppe dans un ternaire (le module ne se charge plus).
+# register.tsx est exclu de Stryker : le moteur lit les noms d'événements de `on()` dans la source, et
+# l'instrumentation de Stryker les enveloppe dans un ternaire (le module ne se charge plus) ; il a son
+# propre job (glue) et son mutateur textuel.
 on:
   schedule:
     - cron: '0 3 * * 1'
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   mutate:
     name: mutate ${{ matrix.file }}
     runs-on: ubuntu-24.04
     timeout-minutes: 150
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
-        file: [bridge.ts, colors.ts, fr.ts, state.ts, superpowers.ts, view.ts, workflow.ts]
+        file: [bridge.ts, cells.ts, colors.ts, fr.ts, state.ts, superpowers.ts, view.ts, workflow.ts]
     steps:
-      - uses: actions/checkout@v7
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
 
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
@@ -35,11 +43,163 @@ jobs:
         run: npm install -g @anthropic-ai/claude-code@latest
 
       - name: Stryker
-        run: npx stryker run --mutate "mode-clair/hooks/${{ matrix.file }}" --concurrency 3 --reporters clear-text,html,json
+        env:
+          FILE: ${{ matrix.file }}
+        run: node_modules/.bin/stryker run --mutate "mode-clair/hooks/${FILE}" --concurrency 3 --reporters clear-text,html,json
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: mutation-${{ matrix.file }}
           path: reports/mutation
           if-no-files-found: ignore
+
+  # La colle register.tsx, hors de portée de Stryker : mutateur maison (dev/mutate-glue.mjs),
+  # une copie du mod par mutant dans /var/tmp, `claude plugin test` sous garde-fou temps et mémoire.
+  # Un survivant fait échouer le job ; le rapport (ligne et diff de chaque survivant) est publié.
+  glue:
+    name: mutation de la colle register.tsx
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code@latest
+
+      - name: Mutation de la colle
+        run: node dev/mutate-glue.mjs --concurrency 3
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: mutation-glue
+          path: reports/mutation-glue
+          if-no-files-found: ignore
+
+  # Planchers par module (dev/mutation-floors.json) : mutation sous Bun, un job par module (dev/mutate-module.mjs :
+  # seuls les tests qui atteignent le module, PROPS_RUNS réduit car l'instrumentation de Stryker ralentit
+  # ~15 fois les tests de propriétés), puis un job qui rassemble les rapports et vérifie les planchers.
+  # Durées mesurées en local (WSL, concurrence 2, table du README) : fr et superpowers 5 s, colors 15 s,
+  # workflow 1 min, view 7 min, state 9 min, cells 9 min, bridge 14 min ; une runner GitHub (4 coeurs) ne
+  # doit pas faire pire.
+  floors-module:
+    name: plancher ${{ matrix.file }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        file: [bridge.ts, cells.ts, colors.ts, fr.ts, state.ts, superpowers.ts, view.ts, workflow.ts]
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Stryker sort en 1 tant qu'un mutant survit (break = 100) : le vrai verdict est celui des
+      # planchers (job floors). Un plantage réel de Stryker (pas de rapport) fait quand même échouer le job.
+      - name: Stryker (${{ matrix.file }})
+        env:
+          FILE: ${{ matrix.file }}
+        run: |
+          node dev/mutate-module.mjs "${FILE}" --concurrency 2 || echo "::warning::Stryker a terminé en échec (mutants survivants) ; les planchers tranchent"
+          test -s "reports/mutation-pure/${FILE}.json"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: mutation-floor-${{ matrix.file }}
+          path: reports/mutation-pure/${{ matrix.file }}.json
+          if-no-files-found: error
+
+  floors:
+    name: planchers de mutation
+    needs: floors-module
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: mutation-floor-*
+          path: reports/floors
+          merge-multiple: true
+
+      # Un module sans rapport est « absent du rapport » : échec ; un module sans plancher aussi.
+      - name: Planchers
+        run: node dev/mutation-floors.mjs reports/floors/*.json
+
+  # Propriétés (fast-check) : même sujet que les tests de tests/props, 10 000 exécutions par propriété
+  # au lieu de 200 (NUM_RUNS dans tests/props/settings.ts). La graine est affichée en cas d'échec.
+  props:
+    name: propriétés (10 000 exécutions)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Propriétés
+        # Graine variable (entier < 2^30) à chaque exécution hebdomadaire (les PR gardent 42) ; affichée par settings.ts
+        # (« props : graine N ») pour rejouer un contre-exemple avec PROPS_SEED=N.
+        run: |
+          PROPS_SEED="$(( (RANDOM << 15) | RANDOM ))"
+          echo "graine de la passe hebdomadaire : $PROPS_SEED"
+          PROPS_SEED="$PROPS_SEED" PROPS_RUNS=10000 node_modules/.bin/bun test ./tests/props --timeout 3000000

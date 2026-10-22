@@ -1,0 +1,4 @@
+# /clair dans une session neuve : la carte vide du golden tests/golden/carte-vide-*.txt.
+repere: ❯ /clair
++1: rien depuis le début de la session⟨attenue⟩
+absent: clair ✗

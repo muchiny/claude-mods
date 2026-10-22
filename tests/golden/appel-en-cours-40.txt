@@ -1,0 +1,13 @@
+## bande (40 colonnes)
+●⟨accent⟩ ⟨texte⟩host-a⟨m0⟩ · ⟨attenue⟩ssh_disk_usage⟨texte⟩
+# largeurs : 25
+## appel toolu_1#0
+●⟨accent⟩ ⟨texte⟩host-a⟨m0⟩ · ⟨attenue⟩ssh_disk_usage⟨texte⟩
+# largeurs : 25
+## carte /clair
+1 machine⟨texte⟩ · ⟨attenue⟩1 appel⟨texte⟩ · aucun problème non vu⟨attenue⟩
+host-a⟨m0⟩ · ⟨attenue⟩1 appel⟨texte⟩ · ⟨attenue⟩●⟨accent⟩ ssh_disk_usage⟨texte⟩
+# largeurs : 43 35
+## ligne d’état et étiquette
+état : (aucune)
+pied : (aucune)

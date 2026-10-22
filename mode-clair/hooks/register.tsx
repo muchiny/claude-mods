@@ -246,7 +246,7 @@ export const register: Register = (on) => {
     if (lines.length === 0) return next(e)
     const { Box, Text } = $.ui.resolve(e)
     const own = await next(e)
-    // Le nœud du moteur ne va pas sous une Box à largeur (refusé par 2.1.300, capture de la tâche 14) :
+    // Le nœud du moteur ne va pas sous une Box à largeur (refusé par 2.1.300, capture d'écran) :
     // seules les lignes du mod sont tenues à bodyColumns, hors de la colonne du [-] (R:142).
     return (
       <Box flexDirection="column">
@@ -299,7 +299,7 @@ export const register: Register = (on) => {
     const { Box, Text } = $.ui.resolve(e)
     return (
       <Box flexDirection="column">
-        {lines.map((line, i) => draw(Text, fit(line, e.viewport?.columns ?? 80), `c${i}`))}
+        {lines.map((line, i) => draw(Text, fit(line, e.viewport?.columns ?? 80, true), `c${i}`))}
       </Box>
     )
   }).catch(($, e, next) => next(e))

@@ -1,0 +1,8 @@
+## bande (80 colonnes)
+# largeurs : 
+## carte /clair
+rien depuis le début de la session⟨attenue⟩
+# largeurs : 34
+## ligne d’état et étiquette
+état : (aucune)
+pied : (aucune)

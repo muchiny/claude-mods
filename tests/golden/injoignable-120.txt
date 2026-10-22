@@ -1,0 +1,14 @@
+## bande (120 colonnes)
+# largeurs : 
+## appel toolu_1#0
+✗⟨erreur⟩ ⟨texte⟩host-a⟨m0⟩ · ⟨attenue⟩injoignable⟨erreur⟩ · rien n’a tourné⟨attenue⟩
+# largeurs : 40
+## carte /clair
+1 machine⟨texte⟩ · ⟨attenue⟩0 appel⟨texte⟩ · ⟨attenue⟩1 problème non vu⟨erreur⟩
+host-a⟨m0⟩ · ⟨attenue⟩0 appel⟨texte⟩ · ⟨attenue⟩✗⟨erreur⟩ ⟨texte⟩injoignable⟨erreur⟩
+à regarder :⟨attenue⟩
+✗⟨erreur⟩ ⟨texte⟩host-a⟨m0⟩ ⟨texte⟩injoignable⟨erreur⟩ · rien n’a tourné⟨attenue⟩
+# largeurs : 39 32 12 38
+## ligne d’état et étiquette
+état : (aucune)
+pied : clair ✗ 1

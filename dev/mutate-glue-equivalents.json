@@ -1,0 +1,74 @@
+{
+  "L102C37-next": {
+    "fingerprint": "338674421f3e4223",
+    "reason": "tool.call Bash : rendre { ...e } n'est pas un ToolCallResult valide ; le moteur passe au .catch, dont next(e) lance les hooks du dessous une fois : même réponse, mêmes effets. Épinglé par tests/engine/catch.test.tsx."
+  },
+  "L116C9-if-false": {
+    "fingerprint": "efc0535654eff7e6",
+    "reason": "tool.call mcp__ hors bridge passé à track avec parsed vide : startCalls, finishCalls et closeWaiting rendent le même état, write n'écrit rien ; seul hasBackgroundTask pourrait écrire, et un résultat MCP ne porte jamais backgroundTaskId."
+  },
+  "L116C27-minus": {
+    "fingerprint": "61c89b16da967c87",
+    "reason": "Même effet que L116C9-if-false : parsed.length === -1 est toujours faux, l'appel hors bridge passe par track avec parsed vide, sans écriture."
+  },
+  "L116C37-next": {
+    "fingerprint": "338674421f3e4223",
+    "reason": "tool.call mcp__ : rendre { ...e } n'est pas un ToolCallResult valide ; le .catch rappelle next(e), même réponse. Épinglé par tests/engine/catch.test.tsx."
+  },
+  "L156C9-if-true": {
+    "fingerprint": "308c3743698b4564",
+    "reason": "turn.complete sans agentId : armStale réarme le minuteur à la même échéance (lastEventAt inchangé) ; aucun effet observable."
+  },
+  "L156C9-if-false": {
+    "fingerprint": "aab7bf9d9484cac7",
+    "reason": "Sans réarmement, l'ancien minuteur sonne à l'ancienne échéance, expire ne change rien (now - lastEventAt < STALE_MS) et expireNow réarme à la nouvelle : même instant d'abandon, mêmes écritures."
+  },
+  "L156C12-op": {
+    "fingerprint": "ea35120f22b71821",
+    "reason": "Combinaison de L156C9-if-true et L156C9-if-false : réarmer ou non n'avance ni ne retarde l'abandon, expire étant gardé par lastEventAt."
+  },
+  "L157C12-next": {
+    "fingerprint": "18bd51564f043d6f",
+    "reason": "turn.complete : { ...e } n'a pas la forme { text } ; le moteur passe au .catch, dont next(e) rend la réponse du cœur. Épinglé par tests/engine/catch.test.tsx."
+  },
+  "L227C9-if-false": {
+    "fingerprint": "9251472f7e805ec9",
+    "reason": "session.append sans notification de fin : done.key lève après next(e) ; le .catch rend la réponse déjà obtenue (next rejouable, rien ne repasse en dessous) ; aucune écriture. Épinglé par tests/engine/catch.test.tsx."
+  },
+  "L238C35-next": {
+    "fingerprint": "32b62cc5cfe541fa",
+    "reason": "ui.render AbovePrompt (sondage) : { ...e } n'est pas un arbre valide ; le .catch rappelle next(e), le moteur dessine le sien. Épinglé par tests/engine/catch.test.tsx."
+  },
+  "L246C36-next": {
+    "fingerprint": "32e6f24cd0a3c08a",
+    "reason": "ui.render AbovePrompt sans ligne : { ...e } n'est pas un arbre valide, le .catch rappelle next(e). Épinglé par tests/engine/catch.test.tsx."
+  },
+  "L265C35-next": {
+    "fingerprint": "c67dfc77e2358396",
+    "reason": "ui.render ToolUse sans rangée : { ...e } n'est pas un arbre valide, le .catch rappelle next(e). Épinglé par tests/engine/catch.test.tsx."
+  },
+  "L283C35-next": {
+    "fingerprint": "c67dfc77e2358396",
+    "reason": "ui.render ToolGroup sans rangée : { ...e } n'est pas un arbre valide, le .catch rappelle next(e). Épinglé par tests/engine/catch.test.tsx."
+  },
+  "L298C36-next": {
+    "fingerprint": "32e6f24cd0a3c08a",
+    "reason": "ui.render CommandOutput sans carte : { ...e } n'est pas un arbre valide, le .catch rappelle next(e). Épinglé par tests/engine/catch.test.tsx."
+  },
+  "L309C32-next": {
+    "fingerprint": "d366dd9f9f27f6f5",
+    "reason": "ui.render SessionMode sans étiquette : { ...e } n'est pas un arbre valide, le .catch rappelle next(e). Épinglé par tests/engine/catch.test.tsx."
+  },
+  "L389C32-plus": {
+    "fingerprint": "bb07163edc2e7e7d",
+    "reason": "Math.max(2, …) au lieu de 1 ne joue que si armStale est appelé après l'échéance sans que lastEventAt ait avancé (turn.complete d'un agent non suivi, traité avant que le minuteur dû ait sonné) : l'abandon arrive 1 ms plus tard, rien d'autre ne change. Sous l'horloge de test, un minuteur dû sonne avant l'événement suivant : inatteignable."
+  },
+  "L389C32-minus": {
+    "fingerprint": "00d7dfe4d8b53d28",
+    "reason": "Math.max(0, …) au lieu de 1 : même cas que L389C32-plus, l'abandon arrive 1 ms plus tôt ; inatteignable sous l'horloge de test."
+  },
+  "L418C9-if-false": {
+    "fingerprint": "ddf12a77d0b84676",
+    "reason": "Garde redondante : polled() ne rend que les workflows dont journalPath n'est pas null ; la garde ne sert qu'au typage."
+  }
+}

@@ -1,0 +1,111 @@
+name: Release
+
+# Jamais sur pull request : seulement sur un tag vX.Y.Z poussé par le mainteneur.
+on:
+  push:
+    tags: ['v*']
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Le commit tagué doit être sur main : un tag posé sur une branche quelconque ne publie rien.
+      - name: Commit tagué présent sur main
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      # Le tag doit être vX.Y.Z avec X.Y.Z = version de mode-clair/.claude-plugin/plugin.json.
+      - name: Version du plugin égale au tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: node dev/check-release-version.mjs "$TAG"
+
+      - run: npm ci
+
+      # Version exacte (2.1.296 = minimum annoncé par le mod, déjà testé par la matrice de ci.yml).
+      # Renovate ne suit pas ce paquet (désactivé dans renovate.json) : à relever à la main.
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code@2.1.296
+
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  publish:
+    name: publish
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Le tag distant pointe encore sur le commit vérifié par verify (GITHUB_SHA) : un tag déplacé ou
+      # supprimé entre verify et publish ne publie rien, ni archive ni attestation. Comparaison exacte du nom
+      # de ref (un leurre x/refs/tags/<tag> ne compte pas) : ligne pelée (^{}) d'un tag annoté, sinon le tag
+      # léger (tests/dev/workflows.test.ts exécute ce pas).
+      - name: Tag distant égal au commit vérifié
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          REMOTE="$(git ls-remote origin "refs/tags/${TAG}" "refs/tags/${TAG}^{}" |
+            awk -v t="refs/tags/${TAG}" '$2 == t || $2 == t "^{}" { s = $1 } END { print s }')"
+          if [ "$REMOTE" != "$GITHUB_SHA" ] || [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
+            echo "::error::tag ${TAG} distant (${REMOTE:-absent}) différent du commit vérifié ${GITHUB_SHA}"
+            exit 1
+          fi
+
+      # Archive des seuls fichiers suivis du plugin, à la racine mode-clair-<version>/.
+      - name: Archive
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG#v}"
+          git archive --format=tar.gz --prefix="mode-clair-${VERSION}/" \
+            -o "mode-clair-${VERSION}.tar.gz" HEAD mode-clair
+          echo "ARCHIVE=mode-clair-${VERSION}.tar.gz" >> "$GITHUB_ENV"
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ env.ARCHIVE }}
+
+      - name: Créer la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          FLAGS=()
+          case "$TAG" in *-*) FLAGS+=(--prerelease) ;; esac
+          gh release create "$TAG" "$ARCHIVE" --verify-tag --title "$TAG" --generate-notes "${FLAGS[@]}"

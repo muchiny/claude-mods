@@ -3,7 +3,7 @@
 // que colorOf ; hue, deltaE, deuteranopia et quantize256 servent aux tests
 // qui prouvent les quatre contraintes de la palette.
 
-// Recherchée par programme à la tâche 14b (revue des PNG : #afafd7 et #afd7d7
+// Recherchée par programme (revue des PNG : #afafd7 et #afd7d7
 // étaient pâles, trop près du texte du terminal #f3e9f5 et du gris atténué).
 // Le terminal de l'utilisateur affiche 256 couleurs (spec §10) : chaque valeur
 // est la plus proche que quantize256 ramène à l'entrée voulue de la palette
@@ -32,7 +32,7 @@ export const PALETTE: readonly string[] = [
 ]
 
 // Couleurs d'état du thème de Claude Code : succès, erreur, attention,
-// relevées par la sonde de la tâche 2 (rangée « Profondeur de couleur
+// relevées par la sonde du terminal (rangée « Profondeur de couleur
 // effective » du §10 du spec).
 const THEME_STATE_COLORS: readonly string[] = ['#87d787', '#ff87af', '#ffd700']
 

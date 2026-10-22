@@ -1,0 +1,16 @@
+## bande (40 colonnes)
+⚠︎ à toi⟨attention⟩ : réponds au formulaire (⟨texte⟩host-a⟨m0⟩)⟨texte⟩
+# largeurs : 40
+## appel toolu_1#0
+✓⟨ok⟩ ⟨texte⟩host-a⟨m0⟩ · ⟨attenue⟩ssh_disk_usage⟨texte⟩ · lecture⟨attenue⟩
+# largeurs : 35
+## appel toolu_2#0
+⚠︎⟨attention⟩ ⟨texte⟩host-a⟨m0⟩ · ⟨attenue⟩ssh_file⟨texte⟩… · ⟨attenue⟩attend ton accord⟨attention⟩
+# largeurs : 40
+## carte /clair
+1 machine⟨texte⟩ · ⟨attenue⟩2 appels⟨texte⟩ · aucun problème non vu⟨attenue⟩
+host-a⟨m0⟩ · ⟨attenue⟩2 appels⟨texte⟩ · ⟨attenue⟩●⟨accent⟩ ssh_file_write⟨texte⟩
+# largeurs : 44 36
+## ligne d’état et étiquette
+état : host-a attend ton accord
+pied : (aucune)
