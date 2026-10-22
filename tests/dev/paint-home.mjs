@@ -188,3 +188,32 @@ export function dirWithMode(base, name, mode) {
   chmodSync(p, mode)
   return p
 }
+
+/**
+ * sweepHomes() sans argument, sous XDG_RUNTIME_DIR et RUNNER_TEMP factices (deux dossiers 700 de `base`) : un
+ * paint-home-* périmé dans chacun. Rend le compte et ce qui reste dans chaque base (environnement rétabli).
+ */
+export function sweptBoth(base) {
+  const xdg = dirWithMode(base, 'run-user', 0o700)
+  const tmp = dirWithMode(base, 'var-tmp', 0o700)
+  const old = (Date.now() - STALE_MS - 60_000) / 1000
+  for (const d of [xdg, tmp]) {
+    const p = join(d, 'paint-home-vieux')
+    mkdirSync(p)
+    utimesSync(p, old, old)
+  }
+  const keys = ['PAINT_USE_REAL_HOME', 'XDG_RUNTIME_DIR', 'RUNNER_TEMP']
+  const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]))
+  try {
+    delete process.env.PAINT_USE_REAL_HOME
+    process.env.XDG_RUNTIME_DIR = xdg
+    process.env.RUNNER_TEMP = tmp
+    const n = sweepHomes()
+    return { n, xdg: readdirSync(xdg), tmp: readdirSync(tmp) }
+  } finally {
+    for (const k of keys) {
+      if (saved[k] === undefined) delete process.env[k]
+      else process.env[k] = saved[k]
+    }
+  }
+}

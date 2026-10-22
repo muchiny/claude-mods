@@ -1,6 +1,17 @@
 import { describe, expect, test } from 'claude-code/testing'
 // @ts-expect-error module .mjs sans déclaration de types
-import { baseUnder, copied, dirWithMode, failing, foreign, interrupted, modes, sandbox, swept } from './paint-home.mjs'
+import {
+  baseUnder,
+  copied,
+  dirWithMode,
+  failing,
+  foreign,
+  interrupted,
+  modes,
+  sandbox,
+  swept,
+  sweptBoth,
+} from './paint-home.mjs'
 
 type Box = { base: string; credentials: string; homes: () => string[]; dispose: () => void }
 
@@ -74,6 +85,11 @@ describe('HOME jetable de la peinture : modes, balayage, base (L4)', () => {
         left: ['autre-vieux', 'cible', 'paint-home-lien', 'paint-home-recent'],
         target: true,
       })
+    }))
+
+  test('sweepHomes() balaie les deux bases : $XDG_RUNTIME_DIR (copie des identifiants) et RUNNER_TEMP ou /var/tmp', () =>
+    inBox((b) => {
+      expect(sweptBoth(b.base)).toEqual({ n: 2, xdg: [], tmp: [] })
     }))
 
   test('PAINT_USE_REAL_HOME=1 : $XDG_RUNTIME_DIR préféré s’il est un dossier à soi en 700', () =>

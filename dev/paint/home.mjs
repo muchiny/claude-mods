@@ -52,28 +52,41 @@ export function homeBase() {
 }
 
 /**
- * Efface sous `base` les paint-home-* périmés (dossiers réels à soi, modifiés il y a plus de STALE_MS), par
- * removeHome seulement. Rend le nombre de dossiers effacés.
+ * Bases où un HOME jetable a pu naître : $XDG_RUNTIME_DIR (s'il est un dossier à soi en 700 : HOME avec copie
+ * des identifiants) et $RUNNER_TEMP ou /var/tmp, sans doublon.
  */
-export function sweepHomes(base = homeBase(), now = Date.now()) {
-  let names
-  try {
-    names = readdirSync(base)
-  } catch {
-    return 0
-  }
+export function sweepBases() {
+  const xdg = process.env.XDG_RUNTIME_DIR
+  const bases = xdg && privateDir(xdg) ? [resolve(xdg)] : []
+  const tmp = resolve(process.env.RUNNER_TEMP || '/var/tmp')
+  return bases.includes(tmp) ? bases : [...bases, tmp]
+}
+
+/**
+ * Efface sous `bases` (une base ou plusieurs ; défaut : sweepBases()) les paint-home-* périmés (dossiers réels
+ * à soi, modifiés il y a plus de STALE_MS), par removeHome seulement. Rend le nombre de dossiers effacés.
+ */
+export function sweepHomes(bases = sweepBases(), now = Date.now()) {
   let n = 0
-  for (const name of names) {
-    if (!name.startsWith('paint-home-')) continue
-    const path = join(base, name)
-    let st
+  for (const base of typeof bases === 'string' ? [bases] : bases) {
+    let names
     try {
-      st = lstatSync(path)
+      names = readdirSync(base)
     } catch {
       continue
     }
-    if (!st.isDirectory() || st.uid !== process.getuid() || now - st.mtimeMs < STALE_MS) continue
-    if (removeHome(path, base)) n += 1
+    for (const name of names) {
+      if (!name.startsWith('paint-home-')) continue
+      const path = join(base, name)
+      let st
+      try {
+        st = lstatSync(path)
+      } catch {
+        continue
+      }
+      if (!st.isDirectory() || st.uid !== process.getuid() || now - st.mtimeMs < STALE_MS) continue
+      if (removeHome(path, base)) n += 1
+    }
   }
   return n
 }
