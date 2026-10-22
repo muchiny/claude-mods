@@ -8,7 +8,7 @@
  * - 2 : East Asian Wide et Fullwidth, emoji à présentation emoji par défaut (les indicateurs régionaux
  *   valent 1 chacun, un drapeau 2) ;
  * - 2 : un pictogramme à présentation texte (U+2600-27BF, etc.) suivi de U+FE0F, et une keycap (chiffre,
- *   # ou * + U+FE0F + U+20E3) ; sans U+FE0F, 1 ;
+ *   # ou * + U+20E3, avec ou sans U+FE0F entre les deux) ; un pictogramme sans U+FE0F, 1 ;
  * - 1 : tout le reste.
  *
  * Référence : la table des plages larges suit string-width 8.3.0 (Unicode récent, celui des goldens),
@@ -126,6 +126,10 @@ export function cellWidth(text: string): number {
     if (KEYCAP_BASE.test(ch) && next === VS16 && chars[i + 2]?.codePointAt(0) === KEYCAP) {
       n += 2
       i += 2
+    } else if (KEYCAP_BASE.test(ch) && next === KEYCAP) {
+      // Keycap sans U+FE0F (emoji non qualifié) : 2 cellules pour string-width aussi.
+      n += 2
+      i += 1
     } else if (WIDE_FOR_TERMINALS.has(ch.codePointAt(0) as number)) {
       n += 2
     } else if (ZERO.test(ch)) {

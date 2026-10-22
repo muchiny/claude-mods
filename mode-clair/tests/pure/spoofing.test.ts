@@ -69,3 +69,34 @@ describe('noms affichés : séquences d’usurpation retirées (L9)', () => {
     expect(cellWidth(t)).toBeLessThanOrEqual(200)
   })
 })
+
+// Revue finale (L-6) : ignorables par défaut, demi-codets isolés, fillers Hangul, CGJ, voyelles khmères
+// inhérentes ; et les suites de marques combinantes (« zalgo ») plafonnées à 2 par caractère de base.
+// Décision : les sélecteurs de variante (U+FE00-FE0F, U+E0100-E01EF) sont retirés partout d'un texte venu
+// d'ailleurs ; la largeur vient du caractère de base (« ⚠️ » devient « ⚠ », 1 cellule), jamais d'une suite.
+const IGNORABLES: readonly [string, string][] = [
+  ['sélecteurs de variante', '\ufe0f\ufe0e\ufe00\u{e0100}'],
+  ['demi-codets isolés', '\udfff\ud800'],
+  ['fillers Hangul', '\u115f\u1160\u3164\uffa0'],
+  ['CGJ', '\u034f'],
+  ['voyelles khmères inhérentes', '\u17b4\u17b5'],
+  ['autres ignorables (Mongolian FVS, U+2065)', '\u180b\u2065'],
+]
+
+describe('stripControls : ignorables et marques combinantes (L-6)', () => {
+  for (const [name, chars] of IGNORABLES) {
+    test(`${name} sont retirés`, () => {
+      expect(stripControls(`a${chars}b`)).toBe('ab')
+    })
+  }
+  test('marques combinantes : 2 au plus par caractère de base', () => {
+    expect(stripControls(`e${'\u0301'.repeat(30)}x\u0300y`)).toBe('e\u0301\u0301x\u0300y')
+    expect(stripControls('\u0301\u0301\u0301')).toBe('\u0301\u0301')
+  })
+  test('« ⚠️ » × 10 dans un nom : dessiné sans sélecteur, largeur de base', () => {
+    const c = call({ host: '\u26a0\ufe0f'.repeat(10) })
+    const t = text(callLine(c, stateOf([c]), 200))
+    expect(t).toContain('\u26a0'.repeat(10))
+    expect(t).not.toContain('\ufe0f')
+  })
+})

@@ -532,10 +532,17 @@ const OSC = /\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g
 const CONTROLS = /[\x00-\x08\x0b-\x1f\x7f-\x9f]/g
 /**
  * Caractères d'usurpation d'affichage : tout Cf (bidi U+202A-202E et U+2066-2069, largeur nulle et marques
- * U+200B-200F, U+061C, ZWJ…), séparateurs de ligne et de paragraphe U+2028/2029. Le ZWJ est retiré aussi :
- * un emoji ZWJ s'affiche décomposé, mais la largeur reste comptée en cellules, sans débordement.
+ * U+200B-200F, U+061C, ZWJ…), séparateurs de ligne et de paragraphe U+2028/2029, tout ignorable par défaut
+ * (sélecteurs de variante U+FE00-FE0F et U+E0100-E01EF compris), demi-codets isolés, fillers Hangul
+ * (U+115F, U+1160, U+3164, U+FFA0), CGJ U+034F, voyelles khmères U+17B4/17B5 (listés même s'ils sont
+ * ignorables). Le ZWJ est retiré aussi : un emoji ZWJ s'affiche décomposé, sans débordement. Sans sélecteur,
+ * « ⚠️ » devient « ⚠ » : la largeur vient du caractère de base, jamais d'une suite (plus sûr que de garder
+ * U+FE0F seul). Les signes du mod (U+FE0E du signe d'attente) ne passent pas par ici.
  */
-const SPOOFING = /[\p{Cf}\p{Zl}\p{Zp}]/gu
+const SPOOFING =
+  /[\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\p{Cs}\u115f\u1160\u17b4\u17b5\u3164\uffa0]|\u034f/gu
+/** Au-delà de 2 marques combinantes de suite (« zalgo ») : le reste est retiré. */
+const MARK_RUN = /(\p{M}{2})\p{M}+/gu
 
 /** Ce qui suit le dernier \r de la ligne, \r finaux exclus. Linéaire : pas d'expression à ancre finale (quadratique sur une suite de \r). */
 function afterLastCr(line: string): string {
@@ -559,6 +566,7 @@ export function stripControls(text: string): string {
     .join('\n')
     .replace(CONTROLS, '')
     .replace(SPOOFING, '')
+    .replace(MARK_RUN, '$1')
 }
 
 /** Ligne du journal tracing de bridge-mcp, couleur retirée (amendement A3, bridge-facts §0.1.1). */

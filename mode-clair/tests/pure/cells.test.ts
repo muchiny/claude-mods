@@ -77,3 +77,14 @@ describe('cellWidth', () => {
     expect(cellWidth('\u3163')).toBe(2)
   })
 })
+
+describe('cellWidth : keycap sans U+FE0F (L-6 retire les sélecteurs des noms)', () => {
+  // « #️⃣ » d'un nom devient « #⃣ » une fois U+FE0F retiré ; string-width le compte 2 (emoji non qualifié).
+  test('chiffre, # ou * suivi de U+20E3 : 2 cellules, comme string-width', () => {
+    for (const base of ['#', '*', '0', '7']) {
+      expect(cellWidth(`${base}⃣`)).toBe(2)
+      expect(cellWidth(`${base}⃣a`)).toBe(3)
+    }
+    expect(cellWidth('a⃣')).toBe(1)
+  })
+})

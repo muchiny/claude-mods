@@ -81,8 +81,11 @@ describe('propriétés : rendu', () => {
   // L9 de la revue finale : bidi, largeur nulle et séparateurs de ligne d'une sortie distante ou d'un nom produit
   // par le modèle ne doivent jamais atteindre l'écran. Aucun point de code Cf, Zl ou Zp n'est admis (liste vide) :
   // le mod ne dessine lui-même aucun de ces caractères (le sélecteur U+FE0E du signe d'attente est un Mn).
-  test('pas d’usurpation : aucun texte dessiné ne contient de point de code Cf, Zl ou Zp', () => {
-    const SPOOF = /[\p{Cf}\p{Zl}\p{Zp}]/u
+  // L-6 : ni ignorable par défaut (sauf ce U+FE0E du mod), ni demi-codet isolé, ni filler Hangul, ni CGJ, ni
+  // voyelle khmère U+17B4/17B5, ni plus de 2 marques combinantes de suite.
+  test('pas d’usurpation : aucun texte dessiné ne contient de point de code Cf, Zl, Zp, ignorable ou zalgo', () => {
+    const SPOOF =
+      /[\p{Cf}\p{Zl}\p{Zp}\p{Cs}\u115f\u1160\u17b4\u17b5\u3164\uffa0]|\u034f|(?!\ufe0e)\p{Default_Ignorable_Code_Point}|\p{M}{3}/u
     check(
       fc.property(arbState({ controls: true }), arbColumns, fc.boolean(), (s, columns, isWorking) => {
         for (const line of drawn(s, columns, isWorking)) expect(textOf(line)).not.toMatch(SPOOF)

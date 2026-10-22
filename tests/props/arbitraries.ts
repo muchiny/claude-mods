@@ -55,6 +55,19 @@ export const SPOOFING = [
   '\u2029',
   '\ufeff',
   '\u00ad',
+  // L-6 : ignorables (sélecteurs de variante compris), demi-codets isolés, fillers Hangul, CGJ, khmer, zalgo.
+  '\ufe0f',
+  '\u{e0100}',
+  '\ud800',
+  '\udfff',
+  '\u115f',
+  '\u1160',
+  '\u3164',
+  '\uffa0',
+  '\u034f',
+  '\u17b4',
+  '\u17b5',
+  'e\u0301\u0302\u0303\u0304',
 ]
 
 /**
