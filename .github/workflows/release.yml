@@ -72,6 +72,21 @@ jobs:
         with:
           persist-credentials: false
 
+      # Le tag distant pointe encore sur le commit vérifié par verify (GITHUB_SHA) : un tag déplacé ou
+      # supprimé entre verify et publish ne publie rien, ni archive ni attestation. Comparaison exacte du nom
+      # de ref (un leurre x/refs/tags/<tag> ne compte pas) : ligne pelée (^{}) d'un tag annoté, sinon le tag
+      # léger (tests/dev/workflows.test.ts exécute ce pas).
+      - name: Tag distant égal au commit vérifié
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          REMOTE="$(git ls-remote origin "refs/tags/${TAG}" "refs/tags/${TAG}^{}" |
+            awk -v t="refs/tags/${TAG}" '$2 == t || $2 == t "^{}" { s = $1 } END { print s }')"
+          if [ "$REMOTE" != "$GITHUB_SHA" ] || [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
+            echo "::error::tag ${TAG} distant (${REMOTE:-absent}) différent du commit vérifié ${GITHUB_SHA}"
+            exit 1
+          fi
+
       # Archive des seuls fichiers suivis du plugin, à la racine mode-clair-<version>/.
       - name: Archive
         env:
@@ -85,19 +100,6 @@ jobs:
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: ${{ env.ARCHIVE }}
-
-      # Le tag distant pointe encore sur le commit vérifié par verify (GITHUB_SHA) : un tag déplacé ou
-      # supprimé entre verify et publish ne publie rien. Ligne pelée (^{}) d'un tag annoté, sinon le tag
-      # léger (tests/dev/workflows.test.ts exécute ce pas).
-      - name: Tag distant égal au commit vérifié
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          REMOTE="$(git ls-remote origin "refs/tags/${TAG}" "refs/tags/${TAG}^{}" | awk 'END { print $1 }')"
-          if [ "$REMOTE" != "$GITHUB_SHA" ] || [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
-            echo "::error::tag ${TAG} distant (${REMOTE:-absent}) différent du commit vérifié ${GITHUB_SHA}"
-            exit 1
-          fi
 
       - name: Créer la release
         env:

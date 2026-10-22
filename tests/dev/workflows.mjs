@@ -25,6 +25,26 @@ export function grepFinds(pattern, text) {
   return r.status === 0
 }
 
+/** Git sans la config de l'utilisateur : ni hooks, ni signature, identité factice. */
+const ISOLATED = [
+  '-c',
+  'core.hooksPath=/dev/null',
+  '-c',
+  'commit.gpgsign=false',
+  '-c',
+  'tag.gpgsign=false',
+  '-c',
+  'user.name=t',
+  '-c',
+  'user.email=t@t',
+]
+const GIT_ENV = (home) => ({
+  PATH: process.env.PATH,
+  HOME: home,
+  GIT_CONFIG_NOSYSTEM: '1',
+  GIT_CONFIG_GLOBAL: '/dev/null',
+})
+
 /** Corps `run: |` du pas `name: <step>` de `wf` (indentation retirée), ou null. */
 export function runOf(wf, step) {
   const lines = wf.split('\n')
@@ -43,23 +63,28 @@ export function runOf(wf, step) {
 /**
  * Exécute le pas « Tag distant égal au commit vérifié » de release.yml dans un clone jetable (/var/tmp) d'un
  * dépôt nu `origin` : tag annoté ou léger `v1.0.0` sur le commit vérifié (GITHUB_SHA), puis, si `moved`,
- * déplacé sur un commit suivant. Rend le code de sortie du pas.
+ * déplacé sur un commit suivant ; si `decoy`, un leurre `x/refs/tags/v1.0.0` (tag léger) reste sur le commit
+ * vérifié. Config git isolée (pas de hooks ni de signature). Rend le code de sortie du pas.
  */
-export function tagCheck({ annotated, moved }) {
+export function tagCheck({ annotated, moved, decoy = false }) {
   const dir = mkdtempSync(join('/var/tmp', 'tag-check-'))
   try {
     const git = (cwd, ...a) =>
-      execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...a], { cwd, encoding: 'utf8' }).trim()
+      execFileSync('git', [...ISOLATED, ...a], { cwd, encoding: 'utf8', env: GIT_ENV(dir) }).trim()
     const origin = join(dir, 'origin.git')
     const work = join(dir, 'work')
-    execFileSync('git', ['init', '-q', '--bare', '-b', 'main', origin])
-    execFileSync('git', ['clone', '-q', origin, work], { stdio: 'ignore' })
+    execFileSync('git', [...ISOLATED, 'init', '-q', '--bare', '-b', 'main', origin], { env: GIT_ENV(dir) })
+    execFileSync('git', [...ISOLATED, 'clone', '-q', origin, work], { stdio: 'ignore', env: GIT_ENV(dir) })
     writeFileSync(join(work, 'a'), '1')
     git(work, 'add', 'a')
     git(work, 'commit', '-qm', 'un')
     const sha = git(work, 'rev-parse', 'HEAD')
     git(work, 'tag', ...(annotated ? ['-a', '-m', 'v1.0.0'] : []), 'v1.0.0')
     git(work, 'push', '-q', 'origin', 'main', 'v1.0.0')
+    if (decoy) {
+      git(work, 'tag', 'x/refs/tags/v1.0.0', sha)
+      git(work, 'push', '-q', 'origin', 'x/refs/tags/v1.0.0')
+    }
     if (moved) {
       writeFileSync(join(work, 'a'), '2')
       git(work, 'commit', '-qam', 'deux')
@@ -71,7 +96,7 @@ export function tagCheck({ annotated, moved }) {
     if (script === null) return 'pas absent'
     const r = spawnSync('bash', ['-e', '-c', script], {
       cwd: work,
-      env: { PATH: process.env.PATH, HOME: dir, TAG: 'v1.0.0', GITHUB_SHA: sha },
+      env: { ...GIT_ENV(dir), TAG: 'v1.0.0', GITHUB_SHA: sha },
       encoding: 'utf8',
     })
     return r.status

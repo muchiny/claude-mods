@@ -48,12 +48,18 @@ describe('paint.yml : rien du terminal brut n’est publié (L5)', () => {
 })
 
 describe('release.yml : le tag distant est encore le commit vérifié avant gh release create (L6)', () => {
-  test('le pas précède gh release create dans le job publish', () => {
+  test('le pas précède l’attestation et gh release create dans le job publish', () => {
     const wf = workflow('release.yml') as string
     const check = wf.indexOf('- name: Tag distant égal au commit vérifié')
     expect(check).toBeGreaterThan(wf.indexOf('  publish:'))
+    expect(check).toBeLessThan(wf.indexOf('actions/attest-build-provenance@'))
     expect(check).toBeLessThan(wf.indexOf('gh release create'))
   })
+  for (const annotated of [true, false])
+    test(`tag ${annotated ? 'annoté' : 'léger'} déplacé, leurre x/refs/tags/v1.0.0 sur le commit vérifié : échec`, () => {
+      expect(tagCheck({ annotated, moved: true, decoy: true })).toBe(1)
+      expect(tagCheck({ annotated, moved: false, decoy: true })).toBe(0)
+    })
   for (const annotated of [true, false])
     test(`tag ${annotated ? 'annoté' : 'léger'} : inchangé, le pas passe ; déplacé, il échoue`, () => {
       expect(tagCheck({ annotated, moved: false })).toBe(0)
