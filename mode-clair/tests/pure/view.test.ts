@@ -2103,3 +2103,22 @@ describe('fit avec cutName : noms de longueur moyenne, l’état reste entier ta
     }
   })
 })
+
+describe('fit : séquences dont la largeur dépend du point suivant (VS16, keycap)', () => {
+  // Revue finale (I-A) : fit sommait cellWidth point de code par point de code ; « ⚠️ » (2 cellules) y valait
+  // 1 + 0, « 1️⃣ » 1 + 0 + 0 : fit([⚠️×10], 5) rendait 9 cellules.
+  for (const seq of ['⚠️', '✔️', '❤️', '1️⃣']) {
+    test(`${seq} répété : la ligne coupée tient dans columns cellules`, () => {
+      const line: Line = [{ text: seq.repeat(10), tone: 'texte' }]
+      for (let columns = 1; columns <= 21; columns++)
+        expect(cellWidth(text(fit(line, columns)))).toBeLessThanOrEqual(columns)
+    })
+  }
+
+  test('callLine : machine « ⚠️ » × 20, chaque largeur de 1 à 60 tient', () => {
+    const c = call({ host: '⚠️'.repeat(20), state: 'injoignable' })
+    const s = stateOf([c])
+    for (let columns = 1; columns <= 60; columns++)
+      expect(cellWidth(text(callLine(c, s, columns)))).toBeLessThanOrEqual(columns)
+  })
+})

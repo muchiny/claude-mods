@@ -353,14 +353,16 @@ function nameSpan(chars: readonly Piece[], seps: readonly number[]): NameSpan | 
  */
 function cutMachine(chars: readonly Piece[], span: NameSpan, max: number): Line | null {
   const { from, to, end } = span
-  const fixed = cellWidth(textOf(chars.slice(0, from))) + 1 + cellWidth(textOf(chars.slice(to, end)))
+  const before = textOf(chars.slice(0, from))
+  const after = `…${textOf(chars.slice(to, end))}`
+  // Largeur de la ligne entière à chaque pas : un point qui change la largeur du précédent (U+FE0F, keycap)
+  // est compté avec lui, jamais à part.
   const kept: Piece[] = []
-  let used = 0
+  let name = ''
   for (const c of chars.slice(from, to)) {
-    const w = cellWidth(c.text)
-    if (fixed + used + w > max) break
+    if (cellWidth(before + name + c.text + after) > max) break
     kept.push(c)
-    used += w
+    name += c.text
   }
   if (kept.length === 0) return null
   return norm([...chars.slice(0, from), ...kept, { text: '…', tone: 'attenue' }, ...chars.slice(to, end)])
@@ -415,13 +417,13 @@ export function fit(line: Line, columns: number, cutName = false): Line {
   }
   const heads = tryHeads(chars, seps, max, 0)
   if (heads !== null) return heads
+  // Préfixe mesuré en entier à chaque pas (U+FE0F, keycap : la largeur dépend du point suivant).
   const kept: Piece[] = []
-  let used = 0
+  let prefix = ''
   for (const c of chars) {
-    const w = cellWidth(c.text)
-    if (used + w > max - 1) break
+    if (cellWidth(prefix + c.text) > max - 1) break
     kept.push(c)
-    used += w
+    prefix += c.text
   }
   return norm([...kept, { text: '…', tone: 'attenue' }])
 }

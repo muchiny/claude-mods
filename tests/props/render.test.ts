@@ -6,7 +6,7 @@ import { cellWidth } from '../../mode-clair/hooks/cells'
 import { bandLines, callLine, cardLines, cardText, fit, parseCard } from '../../mode-clair/hooks/view'
 import { active } from '../../mode-clair/hooks/workflow'
 import type { ClairState, Line } from '../../mode-clair/types'
-import { arbState } from './arbitraries'
+import { arbState, arbWidthText } from './arbitraries'
 import { check } from './settings'
 
 const COLUMNS = [0, 1, 2, 3, 10, ...Array.from({ length: 15 }, (_, i) => 20 * (i + 1)), Number.NaN, 10_000, 79.5]
@@ -23,43 +23,6 @@ function drawn(s: ClairState, columns: number, isWorking: boolean): Line[] {
     ...cardLines(s, '', 0).map((l) => fit(l, columns)),
   ]
 }
-
-/**
- * Alphabet dont la largeur ne dépend pas de la segmentation en graphèmes : ASCII, CJK, demi- et pleine chasse,
- * pictogrammes à présentation texte avec ou sans U+FE0F, emoji, marques combinantes, largeur nulle, contrôles.
- */
-const arbWidthText = fc
-  .array(
-    fc.constantFrom(
-      'a',
-      ' ',
-      '~',
-      '\t',
-      '\u0001',
-      '\u007f',
-      '\u0085',
-      '\u00e9',
-      'e\u0301',
-      '\u673a',
-      '\u30db',
-      '\uac00',
-      '\uff71',
-      '\uff21',
-      '\u2713',
-      '\u26a0',
-      '\u26a0\ufe0f',
-      '\u26a0\ufe0e',
-      '\u2602\ufe0f',
-      '\u{1f680}',
-      '\u{1f600}',
-      '\u{1f1eb}\u{1f1f7}',
-      '\u200b',
-      '\u{20000}',
-      '1\ufe0f\u20e3',
-    ),
-    { maxLength: 12 },
-  )
-  .map((a) => a.join(''))
 
 describe('propriétés : rendu', () => {
   // Écarts assumés de cellWidth (cells.ts) : par graphème (ZWJ, teinte, voyelle jointe) string-width compte une

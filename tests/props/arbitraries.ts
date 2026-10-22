@@ -57,6 +57,63 @@ export const SPOOFING = [
   '\u00ad',
 ]
 
+/**
+ * Alphabet dont la largeur ne dépend pas de la segmentation en graphèmes : ASCII, CJK, demi- et pleine chasse,
+ * pictogrammes à présentation texte avec ou sans U+FE0F, emoji, marques combinantes, largeur nulle, contrôles.
+ */
+export const WIDTH_PIECES = [
+  'a',
+  ' ',
+  '~',
+  '\t',
+  '\u0001',
+  '\u007f',
+  '\u0085',
+  '\u00e9',
+  'e\u0301',
+  '\u673a',
+  '\u30db',
+  '\uac00',
+  '\uff71',
+  '\uff21',
+  '\u2713',
+  '\u26a0',
+  '\u26a0\ufe0f',
+  '\u26a0\ufe0e',
+  '\u2602\ufe0f',
+  '\u{1f680}',
+  '\u{1f600}',
+  '\u{1f1eb}\u{1f1f7}',
+  '\u200b',
+  '\u{20000}',
+  '1\ufe0f\u20e3',
+]
+export const arbWidthText = fc.array(fc.constantFrom(...WIDTH_PIECES), { maxLength: 12 }).map((a) => a.join(''))
+
+/**
+ * Machine ou raison faite de séquences dont la largeur dépend du point suivant (VS16, keycap), d'emoji dont le
+ * ZWJ est retiré à l'affichage, de fillers Hangul et de CJK large : ce qui faisait déborder fit (revue finale I-A).
+ */
+const arbWidthName = fc
+  .array(
+    fc.constantFrom(
+      ...WIDTH_PIECES,
+      '\u2714\ufe0f',
+      '\u2764\ufe0f',
+      '#\ufe0f\u20e3',
+      '\u{1f468}\u200d\u{1f469}\u200d\u{1f467}',
+      '\u3164',
+      '\u115f',
+      '\u1160',
+      '\uffa0',
+      '\u{1f93b}',
+      '\u{1f946}',
+      '\u4e2d\u6587',
+    ),
+    { minLength: 1, maxLength: 40 },
+  )
+  .map((a) => a.join(''))
+
 const FIXED_HOSTS = [
   'host-a',
   'host-b',
@@ -80,11 +137,12 @@ export const arbHost = (): fc.Arbitrary<string> =>
     { weight: 6, arbitrary: fc.constantFrom(...FIXED_HOSTS) },
     { weight: 2, arbitrary: fc.string({ unit: 'grapheme', maxLength: 90 }) },
     { weight: 1, arbitrary: fc.string({ unit: 'grapheme-ascii', minLength: 80, maxLength: 80 }) },
+    { weight: 2, arbitrary: arbWidthName },
   )
 
 /** Texte libre : une raison d'échec, éventuellement longue ; avec `controls`, des contrôles y sont mêlés. */
 export const arbText = (controls = false): fc.Arbitrary<string> => {
-  const plain = fc.string({ unit: 'grapheme', maxLength: 100 })
+  const plain = fc.oneof(fc.string({ unit: 'grapheme', maxLength: 100 }), arbWidthName)
   if (!controls) return plain
   return fc
     .tuple(plain, fc.constantFrom(...CONTROLS, ...SPOOFING), plain)
