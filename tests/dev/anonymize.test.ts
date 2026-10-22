@@ -636,7 +636,7 @@ describe('passe C : nombres (L1)', () => {
     const c = calls(s)[0] as Call
     expect(c.input).toMatchObject({ timeout: 600000 })
     const values = Object.values(c.result.result as Record<string, number>)
-    expect(values).toEqual([1073741819, 999999999, 42, -7, 9999.5, 600000])
+    expect(values).toEqual([9999999999, 999999999, 42, -7, 9999.5, 600000])
     expect(json(s)).not.toContain('612345678')
   })
 
@@ -663,7 +663,7 @@ describe('passe C : nombres (L1)', () => {
     ]
     const s = anonymize(scenario([call('Bash', 'toolu_1', { command: 'true' }, lines.join('\n'))]), newDict())
     expect(textOf(calls(s)[0] as Call).split('\n')).toEqual([
-      'Exit code 1073741819',
+      'Exit code 9999999999',
       'SSH command timeout after 99999s',
       'Output too large (999999KB). Full output saved to: /tmp/l',
     ])
@@ -678,8 +678,8 @@ describe('passe C : nombres (L1)', () => {
       assertKnownForms(
         anonCall(
           { command: 'bridge-mcp --timeout 600000 tool ssh_exec timeout=600000', timeout: 600000 },
-          'Exit code 1073741819\n[exit:2] lorem 999999 12345\n00000000-0000-4000-8000-000000000001',
-          { exit_code: 1073741819, lorem: 999999, timeout: 600000, ipsum: 12 },
+          'Exit code 137\n[exit:2] lorem 999999 123\n00000000-0000-4000-8000-000000000001',
+          { exit_code: 137, lorem: 999999, timeout: 600000, ipsum: 12 },
         ),
       ),
     ).not.toThrow()
@@ -785,5 +785,52 @@ describe('passe C : refus relevés à la régénération', () => {
       assertKnownForms(anonCall({}, 'ok', { resolvedModel: 'claude-sonnet-4-20250514', model: 'opus' })),
     ).not.toThrow()
     expect(() => assertKnownForms(anonCall({}, 'lorem 20250514'))).toThrow(/forme inconnue/)
+  })
+})
+
+describe('passe E : barrière des nombres resserrée (L-1)', () => {
+  test('mots numériques : 3 chiffres au plus, ou un masque de 9', () => {
+    for (const bad of ['lorem 1234', 'lorem 12345', 'T1234', '1234KB', '1234th'])
+      expect(() => assertKnownForms(anonCall({}, bad))).toThrow(/forme inconnue/)
+    for (const ok of ['lorem 123', 'lorem 9999', '999999KB', 'T12'])
+      expect(() => assertKnownForms(anonCall({}, ok))).not.toThrow()
+  })
+
+  test('heure, date réelle et suites de groupes de chiffres refusées ; masques et époque synthétique acceptés', () => {
+    for (const bad of ['vu à 10:00:01', 'le 2026-10-21', 'le 1999-12-31', '06 12 34', 'v 1.2.3', '1-2-3'])
+      expect(() => assertKnownForms(anonCall({}, bad))).toThrow(/forme inconnue/)
+    for (const ok of ['2000-01-01T00:00:01.500Z  INFO lorem', '99 99 99 99', '12 34', '1.5KB'])
+      expect(() => assertKnownForms(anonCall({}, ok))).not.toThrow()
+  })
+
+  test('Bash : 3 mots numériques voisins ou plus sont masqués (téléphone découpé)', () => {
+    const s = anonymize(
+      scenario([call('Bash', 'toolu_1', { command: 'echo 06 12 34 56 78 && sleep 1 2' }, 'ok')]),
+      newDict(),
+    )
+    expect(inputOf(s, 0).command).toBe('lore 99 99 99 99 99 && lorem 1 2')
+    expect(() => assertKnownForms(s)).not.toThrow()
+  })
+
+  test('délais et codes de sortie gardés : 6 chiffres au plus, masqués au-delà ; la barrière refuse au-delà', () => {
+    const command = 'bridge-mcp --timeout 1234567 -t 7654321 tool ssh_exec timeout=12345678 timeout=600000'
+    const result = { exit_code: 1073741819, timeout: 12345678 }
+    const s = anonymize(
+      scenario([
+        call('Bash', 'toolu_1', { command, timeout: 12345678 }, 'Exit code 1073741819\n[exit:1234567]', { result }),
+      ]),
+      newDict(),
+    )
+    const c = calls(s)[0] as Call
+    expect(inputOf(s, 0).command).toBe(
+      'bridge-mcp --timeout 9999999 -t 9999999 tool ssh_exec timeout=99999999 timeout=600000',
+    )
+    expect(c.input).toMatchObject({ timeout: 99999999 })
+    expect(c.result.result).toStrictEqual({ exit_code: 9999999999, timeout: 99999999 })
+    expect(textOf(c)).toBe('Exit code 9999999999\n[exit:9999999]')
+    expect(() => assertKnownForms(s)).not.toThrow()
+    for (const bad of ['timeout=1234567', '--timeout 1234567', 'Exit code 1073741819', '[exit:1234567]'])
+      expect(() => assertKnownForms(anonCall({}, bad))).toThrow(/forme inconnue/)
+    expect(() => assertKnownForms(anonCall({}, 'ok', { exit_code: 1073741819 }))).toThrow(/forme inconnue/)
   })
 })

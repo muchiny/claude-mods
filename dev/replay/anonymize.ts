@@ -141,13 +141,27 @@ function digitsOf(text: string): string {
   return text.replace(/\d{4,}/g, (d) => '9'.repeat(d.length))
 }
 
-/** Clés dont le nombre est gardé tel quel : code de sortie et délai (ce que le mod interprète). */
+/** Nombre gardé (délai, code de sortie) : tel quel jusqu'à 6 chiffres, au-delà ses chiffres en 9. */
+function capKept(text: string): string {
+  return text.replace(/\d{7,}/g, (d) => '9'.repeat(d.length))
+}
+
+/** Clés dont le nombre est gardé (6 chiffres au plus) : code de sortie et délai (ce que le mod interprète). */
 const NUMBER_KEYS = new Set(['exit_code', 'timeout'])
 
-/** Nombre JSON : clé blanchie ou entier d'au plus 3 chiffres gardé ; sinon ses chiffres en 9. */
+/** Nombre JSON : clé blanchie (capKept) ou entier d'au plus 3 chiffres gardé ; sinon ses chiffres en 9. */
 function numberOf(key: string, value: number): number {
-  if (NUMBER_KEYS.has(key) || (Number.isInteger(value) && Math.abs(value) <= 999)) return value
+  if (NUMBER_KEYS.has(key)) return Number(capKept(String(value)))
+  if (Number.isInteger(value) && Math.abs(value) <= 999) return value
   return Number(digitsOf(String(value)))
+}
+
+/**
+ * Trois nombres ou plus séparés par des blancs (`echo 06 12 34 56 78` : un téléphone découpé) : chacun en 9,
+ * même s'il a au plus 3 chiffres.
+ */
+function maskDigitRuns(code: string): string {
+  return code.replace(/(?<![\w.:-])\d+(?:[ \t]+\d+){2,}(?![\w.:-])/g, (run) => run.replace(/\d/g, '9'))
 }
 
 // --- Dictionnaire ------------------------------------------------------------------------------
@@ -472,7 +486,7 @@ const EXIT_TEMPLATES = new Set(['exit-code', 'exec-exit', 'exit-tag', 'exit-tag-
 function slotValue(dict: Dict, slot: Slot, value: string, template: string): string {
   switch (slot) {
     case 'n':
-      return EXIT_TEMPLATES.has(template) ? value : digitsOf(value)
+      return EXIT_TEMPLATES.has(template) ? capKept(value) : digitsOf(value)
     case 'size':
       return digitsOf(value)
     case 'host':
@@ -752,7 +766,7 @@ function argValue(dict: Dict, kind: Seg['expect'], word: string): string {
     case 'path':
       return requote(q, pathOf(dict, inner))
     case 'timeout':
-      return /^\d+$/.test(inner) ? word : lorem(word)
+      return /^\d+$/.test(inner) ? requote(q, capKept(inner)) : lorem(word)
     case 'number':
       return /^\d+$/.test(inner) ? requote(q, digitsOf(inner)) : lorem(word)
     case 'json': {
@@ -786,7 +800,7 @@ function toolArg(dict: Dict, word: string): string {
     )}`
   if (ID_ARG_KEYS.has(key)) return `${outKey}=${requote(q, idOf(dict, inner))}`
   if (PATH_ARG_KEYS.has(key) && isPathLike(inner)) return `${outKey}=${requote(q, pathOf(dict, inner))}`
-  if (/^\d+$/.test(inner)) return `${outKey}=${key === 'timeout' ? value : requote(q, digitsOf(inner))}`
+  if (/^\d+$/.test(inner)) return `${outKey}=${requote(q, key === 'timeout' ? capKept(inner) : digitsOf(inner))}`
   if (inner === 'true' || inner === 'false') return `${outKey}=${value}`
   return `${outKey}=${lorem(value)}`
 }
@@ -933,7 +947,7 @@ export function anonymizeCommand(dict: Dict, command: string): string {
   let code: string[] = []
   let heredoc: string | null = null
   const flush = () => {
-    if (code.length > 0) out.push(anonymizeCode(dict, code.join('\n')))
+    if (code.length > 0) out.push(maskDigitRuns(anonymizeCode(dict, code.join('\n'))))
     code = []
   }
   for (const line of lines) {
@@ -1529,12 +1543,19 @@ const SYNTHETIC_TS = /\b2000-01-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\
 /** Formes entières acceptées avant le découpage en mots. */
 /** Nombres gardés tels quels par l'anonymiseur (clés blanchies) : délai et code de sortie. */
 const KEPT_NUMBERS =
-  /(?:\btimeout=|(?:--timeout|(?<![\w-])-t)[= ]|"(?:timeout|exit_code)":\s*|\bExit code:? |\[exit:)-?\d+/g
+  /(?:\btimeout=|(?:--timeout|(?<![\w-])-t)[= ]|"(?:timeout|exit_code)":\s*|\bExit code:? |\[exit:)-?\d{1,6}(?!\d)/g
 /** Identifiant de modèle daté (`claude-sonnet-4-20250514`) : la date est publique, pas un nombre privé. */
 const MODEL_ID = /\b(?:claude-)?(?:opus|sonnet|haiku|fable)(?:-[a-z0-9]{1,2})*-20\d{6}\b/g
 const WHOLE_FORMS: readonly RegExp[] = [CSI_ALL, SYNTHETIC_TS, SYNTHETIC_UUID, KEPT_NUMBERS, MODEL_ID]
 /** Formes refusées même si chacun de leurs mots est connu : horodatage ISO hors de la plage synthétique. */
-const REFUSED_FORMS: readonly RegExp[] = [/\d{4}-\d{2}-\d{2}T\d/]
+const REFUSED_FORMS: readonly RegExp[] = [
+  /\d{4}-\d{2}-\d{2}T\d/,
+  // Heure, date réelle (l'époque synthétique 2000-… est retirée avant, par WHOLE_FORMS).
+  /\b\d{1,2}:\d{2}:\d{2}\b/,
+  /\b(?!2000-)\d{4}-\d{2}-\d{2}\b/,
+  // Trois groupes de chiffres ou plus séparés par une espace, un point ou un tiret, sauf un masque de 9.
+  /(?<!\d)(?!(?:9+[ .-]){2,}9+(?!\d))\d+(?:[ .-]\d+){2,}/,
+]
 /** `mcp__ssh-bridge__<outil>` et `<outil>` seulement pour un outil de la liste du bridge. */
 function withoutBridgeTools(text: string): string {
   return text
@@ -1544,8 +1565,8 @@ function withoutBridgeTools(text: string): string {
     .replace(/\b[a-z][a-z0-9_]*\b/g, (m) => (BRIDGE_TOOLS.has(m) ? ' ' : m))
 }
 
-/** Nombre d'un mot : au plus 5 chiffres, ou un masque de 9 (digitsOf) ; jamais 6 chiffres réels ou plus. */
-const NUM = '(?:\\d{1,5}|9+)'
+/** Nombre d'un mot : au plus 3 chiffres, ou un masque de 9 (digitsOf) ; plus long, seulement sous une clé blanchie. */
+const NUM = '(?:\\d{1,3}|9+)'
 
 function knownWord(w: string): boolean {
   const lower = w.toLowerCase()
