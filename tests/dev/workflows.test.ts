@@ -66,3 +66,11 @@ describe('release.yml : le tag distant est encore le commit vérifié avant gh r
       expect(tagCheck({ annotated, moved: true })).toBe(1)
     })
 })
+
+describe('release.yml : la publication passe par l’environnement release', () => {
+  test('le job publish déclare environment: release (relecteur requis côté GitHub)', () => {
+    const wf = workflow('release.yml') as string
+    const publish = wf.slice(wf.indexOf('\n  publish:'))
+    expect(publish).toMatch(/\n {4}environment: release\n/)
+  })
+})
