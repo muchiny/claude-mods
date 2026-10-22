@@ -516,7 +516,7 @@ export function parseMcp(tool: string, input: unknown, tools: Readonly<Record<st
   return callsOf({ via: 'mcp', accordByOption: false, ownsExit: true, inLoop: false }, name, args, lookup(tools, name))
 }
 
-// ─── Tâche 5 : classement d'un appel terminé (spec §5.1, amendements A3, A4, A7, A8) ───────────
+// ─── Classement d'un appel terminé (spec §5.1, amendements A3, A4, A7, A8) ───────────
 
 type Step = { label: string; mark: 'ok' | 'ko' | 'off' }
 type JsonObject = Record<string, unknown>
@@ -587,7 +587,7 @@ const PLAIN_SUBCOMMANDS: readonly string[] = ['exec', 'upload', 'download']
 const REGEX_SPECIALS = /[\\^$.*+?()[\]{}|]/g
 
 /**
- * Début stable de chaque texte de refus du moteur, recopié à l'étape 8 de la tâche 5 depuis le spec §10,
+ * Début stable de chaque texte de refus du moteur, recopié depuis le spec §10,
  * ligne « Texte exact d'un refus au dialogue de permission et d'un refus du classifieur » (amendement A2),
  * dans l'ordre de RECORDED_REFUSALS (tests/pure/engine-texts.ts). Lu au début de la première ligne utile.
  */
@@ -596,8 +596,7 @@ const ENGINE_REFUSAL_PREFIXES: readonly string[] = [
   'Permission for this action was denied by the Claude Code auto mode classifier.',
 ]
 /**
- * Début stable de la marque de sortie persistée de Claude Code, recopié à l'étape 8 de la tâche 5 depuis
- * le spec §10, ligne « Marque de sortie Bash persistée par Claude Code », dans l'ordre de
+ * Début stable de la marque de sortie persistée de Claude Code, recopié depuis le spec §10, ligne « Marque de sortie Bash persistée par Claude Code », dans l'ordre de
  * RECORDED_PERSISTED. Cherché sur toute ligne utile d'un appel CLI (spec §5.1, drapeau tronqué).
  */
 const ENGINE_PERSISTED_PREFIXES: readonly string[] = ['<persisted-output>']
@@ -926,7 +925,7 @@ export function steps(c: BridgeCall): Step[] {
   return accord.concat(DECISIVE[c.state](host, c.code))
 }
 
-// --- Tâche 11 : lecture des résultats du moteur, sortie de register.tsx (spec §6) ---------------
+// --- Lecture des résultats du moteur, sortie de register.tsx (spec §6) ---------------
 // Tests : tests/pure/glue.test.ts.
 
 /** stdout puis stderr d'un résultat Bash ; une chaîne (texte d'erreur) telle quelle ; sinon rien. */

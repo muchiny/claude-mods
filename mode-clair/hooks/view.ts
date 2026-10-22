@@ -27,7 +27,7 @@ import { active, currentPhase } from './workflow'
 
 export type Ctx = { now: number; columns: number; isWorking: boolean; viewAgentId?: string }
 
-/** Signe d'attente (spec §4.1) : ⚠ suivi du sélecteur texte U+FE0E, ou ▲, selon la sonde de la tâche 2 (spec §10). */
+/** Signe d'attente (spec §4.1) : ⚠ suivi du sélecteur texte U+FE0E, ou ▲, selon la sonde du terminal (spec §10). */
 export const WAIT_SIGN: string = '\u26A0\uFE0E'
 
 const SEP = ' · '
@@ -596,7 +596,7 @@ export function bandLines(s: ClairState, ctx: Ctx): Line[] {
   if (ctx.viewAgentId === undefined) {
     const wf = latest(active(s.workflows))
     if (wf !== undefined) lines.push(toneLine(workflowText(wf), NO_HOSTS))
-    // Pendant que Claude travaille, ou qu'un agent lancé sous le plan tourne encore (tâche 14b).
+    // Pendant que Claude travaille, ou qu'un agent lancé sous le plan tourne encore.
     const agentRuns = s.superpowers !== null && s.superpowers.runningAgents.length > 0
     const sp = ctx.isWorking || agentRuns ? spText(s.superpowers, true) : null
     if (sp !== null) lines.push(toneLine(sp, NO_HOSTS))
@@ -750,7 +750,7 @@ export function cardText(lines: Line[]): string {
 }
 
 // Spec §10 : CommandOutput reçoit le texte de la commande précédé du nom du plugin et de « : »
-// (relevé par la sonde de la tâche 2) ; ce préfixe n'est pas une ligne de la carte.
+// (relevé par la sonde du terminal) ; ce préfixe n'est pas une ligne de la carte.
 const ENGINE_PREFIX = 'mode-clair: '
 
 /** Relit une carte depuis son seul texte (CommandOutput, session reprise) : parseCard(cardText(L)) == L. */

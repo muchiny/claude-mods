@@ -369,7 +369,7 @@ export function unknownMachine(s: ClairState): Omit<Machine, 'host' | 'index'> |
   }
 }
 
-// --- Tâche 11 : sorties de register.tsx (spec §6). Tests : tests/pure/glue.test.ts ---------------
+// --- Sorties de register.tsx (spec §6). Tests : tests/pure/glue.test.ts ---------------
 
 /**
  * Appel Bash parti en arrière-plan en cours de route (`backgroundTaskId`) : ses appels sont retirés,
