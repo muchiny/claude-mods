@@ -122,6 +122,8 @@ describe('check : écarts entre la grille et l’attendu', () => {
     expect(maskBanner(' ▐▛███▜▌   Claude Code v2.1.306')).toBe('[ligne de bannière masquée]')
     expect(maskBanner('Claude Pro')).toBe('[ligne de bannière masquée]')
     expect(maskBanner('API Usage Billing')).toBe('[ligne de bannière masquée]')
+    expect(maskBanner('          Welcome back Quelquun!')).toBe('[ligne de bannière masquée]')
+    expect(maskBanner('welcome back')).toBe('[ligne de bannière masquée]')
     expect(maskBanner('rien depuis le début de la session')).toBe('rien depuis le début de la session')
   })
 

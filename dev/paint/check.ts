@@ -32,7 +32,7 @@ export const DIM_COLORS: readonly string[] = ['#999999']
  * Ligne de la bannière de Claude Code (logo, abonnement, compte ou organisation) : jamais recopiée dans un écart
  * ni une grille publiés (artefact, issue). Large exprès : une ligne du mod qui y ressemble est masquée aussi.
  */
-const BANNER = /@|organi[sz]ation|claude (?:pro|max|team|enterprise)|api usage billing|[▐▛▜▝▘]/i
+const BANNER = /@|welcome back|organi[sz]ation|claude (?:pro|max|team|enterprise)|api usage billing|[▐▛▜▝▘]/i
 export const BANNER_MASK = '[ligne de bannière masquée]'
 
 /** La ligne, ou BANNER_MASK si elle ressemble à une ligne de bannière. */

@@ -43,7 +43,9 @@ jobs:
         run: npm install -g @anthropic-ai/claude-code@latest
 
       - name: Stryker
-        run: node_modules/.bin/stryker run --mutate "mode-clair/hooks/${{ matrix.file }}" --concurrency 3 --reporters clear-text,html,json
+        env:
+          FILE: ${{ matrix.file }}
+        run: node_modules/.bin/stryker run --mutate "mode-clair/hooks/${FILE}" --concurrency 3 --reporters clear-text,html,json
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
@@ -93,8 +95,9 @@ jobs:
   # Planchers par module (dev/mutation-floors.json) : mutation sous Bun, un job par module (dev/mutate-module.mjs :
   # seuls les tests qui atteignent le module, PROPS_RUNS réduit car l'instrumentation de Stryker ralentit
   # ~15 fois les tests de propriétés), puis un job qui rassemble les rapports et vérifie les planchers.
-  # Durées mesurées en local (concurrence 2) : cells ~7 min, colors, fr, superpowers, workflow < 1 min,
-  # state ~9 min, view et bridge voir README ; une runner GitHub (4 coeurs) ne doit pas faire pire.
+  # Durées mesurées en local (WSL, concurrence 2, table du README) : fr et superpowers 5 s, colors 15 s,
+  # workflow 1 min, view 7 min, state 9 min, cells 9 min, bridge 14 min ; une runner GitHub (4 coeurs) ne
+  # doit pas faire pire.
   floors-module:
     name: plancher ${{ matrix.file }}
     runs-on: ubuntu-24.04
@@ -124,9 +127,11 @@ jobs:
       # Stryker sort en 1 tant qu'un mutant survit (break = 100) : le vrai verdict est celui des
       # planchers (job floors). Un plantage réel de Stryker (pas de rapport) fait quand même échouer le job.
       - name: Stryker (${{ matrix.file }})
+        env:
+          FILE: ${{ matrix.file }}
         run: |
-          node dev/mutate-module.mjs "${{ matrix.file }}" --concurrency 2 || echo "::warning::Stryker a terminé en échec (mutants survivants) ; les planchers tranchent"
-          test -s "reports/mutation-pure/${{ matrix.file }}.json"
+          node dev/mutate-module.mjs "${FILE}" --concurrency 2 || echo "::warning::Stryker a terminé en échec (mutants survivants) ; les planchers tranchent"
+          test -s "reports/mutation-pure/${FILE}.json"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
@@ -151,6 +156,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:

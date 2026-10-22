@@ -113,7 +113,7 @@ jobs:
               echo "### $(basename "$(dirname "$f")") / $(basename "$f" .ecarts.txt)"
               echo
               echo '```'
-              sed -E '/@|[Oo]rgani[sz]ation|[Cc]laude ([Pp]ro|[Mm]ax|[Tt]eam|[Ee]nterprise)|API Usage Billing|[▐▛▜▝▘]/c [ligne de bannière masquée]' "$f"
+              sed -E '/@|[Oo]rgani[sz]ation|[Cc]laude ([Pp]ro|[Mm]ax|[Tt]eam|[Ee]nterprise)|API Usage Billing|[Ww]elcome [Bb]ack|[▐▛▜▝▘]/c [ligne de bannière masquée]' "$f"
               echo '```'
             done
           } > "$RUNNER_TEMP/body.md"
