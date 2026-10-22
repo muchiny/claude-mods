@@ -7,7 +7,7 @@
   "coverageAnalysis": "off",
   "mutate": ["mode-clair/hooks/**/*.ts", "!mode-clair/hooks/tools.generated.ts"],
   "concurrency": 2,
-  "timeoutMS": 90000,
+  "timeoutMS": 240000,
   "reporters": ["clear-text", "progress", "html", "json"],
   "htmlReporter": {
     "fileName": "reports/mutation/index.html"

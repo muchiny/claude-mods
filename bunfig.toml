@@ -1,0 +1,7 @@
+[test]
+preload = ["./dev/bun-claude-code-testing.ts"]
+coverageReporter = ["text", "lcov"]
+coverageDir = "./reports/coverage"
+coverageSkipTestFiles = true
+coveragePathIgnorePatterns = ["dev/**", "mode-clair/tests/**"]
+coverageThreshold = { lines = 1.0, functions = 1.0 }

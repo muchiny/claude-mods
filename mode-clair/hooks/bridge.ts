@@ -49,12 +49,13 @@ function skipBlanks(s: string, i: number): number {
 /** Index du `'` fermant (ou la fin) d'une chaîne ouverte en `i`. */
 function singleEnd(s: string, i: number): number {
   const end = s.indexOf("'", i + 1)
-  return end < 0 ? s.length : end
+  return end === -1 ? s.length : end
 }
 
 /** Index juste après l'accent grave fermant d'une substitution ouverte en `i`. */
 function afterBacktick(s: string, i: number): number {
   let j = i + 1
+  // Stryker disable next-line EqualityOperator: en j == s.length, charAt rend '' : même chemin que la fin de boucle, même résultat
   while (j < s.length) {
     const c = s.charAt(j)
     if (c === '\\') j += 2
@@ -66,17 +67,19 @@ function afterBacktick(s: string, i: number): number {
 
 /** Index juste après la `}` d'un `${ }` dont la `{` est en `i`. */
 function afterBrace(s: string, i: number): number {
-  const end = s.indexOf('}', i + 1)
-  return end < 0 ? s.length : end + 1
+  const end = s.indexOf('}', i)
+  return end === -1 ? s.length : end + 1
 }
 
 /** Contenu d'une chaîne entre guillemets doubles ouverte en `i`, échappements résolus. */
 function readDouble(s: string, i: number): Token {
   let text = ''
   let j = i + 1
-  while (j < s.length && s.charAt(j) !== '"') {
+  // Stryker disable next-line EqualityOperator: en j == s.length, charAt rend '' : le tour de plus ne change que next, que personne ne lit au-delà de la fin
+  while (j < s.length) {
     const c = s.charAt(j)
     const d = s.charAt(j + 1)
+    if (c === '"') break
     if (c === '\\' && d === '\n') {
       j += 2
     } else if (c === '\\' && d !== '' && '$`"\\'.includes(d)) {
@@ -98,6 +101,11 @@ function readDouble(s: string, i: number): Token {
   return { text, next: j + 1 }
 }
 
+/** Vrai si un heredoc (`<<`, `<<-`) s'ouvre en `i` ; `<<<` est une here-string, pas un heredoc. */
+function isHeredocAt(s: string, i: number): boolean {
+  return s.startsWith('<<', i) && s.charAt(i + 2) !== '<'
+}
+
 /** Opérateur `<<` ou `<<-` en `i` : le délimiteur, sans guillemets, et l'index qui suit. */
 function readHeredoc(s: string, i: number): { doc: Heredoc; next: number } {
   let j = i + 2
@@ -111,9 +119,10 @@ function readHeredoc(s: string, i: number): { doc: Heredoc; next: number } {
 function skipBodies(s: string, i: number, docs: readonly Heredoc[]): number {
   let j = i
   for (const doc of docs) {
+    // Stryker disable next-line EqualityOperator: en j == s.length, la ligne lue est vide ; seul l'index rendu passe de s.length à s.length + 1, et tous les appelants s'arrêtent dès j >= s.length
     while (j < s.length) {
       const eol = s.indexOf('\n', j)
-      const end = eol < 0 ? s.length : eol
+      const end = eol === -1 ? s.length : eol
       const line = doc.strip ? s.slice(j, end).replace(/^\t+/, '') : s.slice(j, end)
       j = end + 1
       if (line === doc.delim) break
@@ -127,6 +136,7 @@ function afterSubst(s: string, i: number): number {
   let depth = 1
   let docs: Heredoc[] = []
   let j = i + 1
+  // Stryker disable next-line EqualityOperator: en j == s.length, charAt rend '' : le tour de plus n'avance que j et le repli rend s.length comme la fin de boucle
   while (j < s.length) {
     const c = s.charAt(j)
     if (c === '\\') {
@@ -137,11 +147,12 @@ function afterSubst(s: string, i: number): number {
       j = readDouble(s, j).next
     } else if (c === '`') {
       j = afterBacktick(s, j)
-    } else if (c === '<' && s.charAt(j + 1) === '<' && s.charAt(j + 2) !== '<') {
+    } else if (isHeredocAt(s, j)) {
       const h = readHeredoc(s, j)
       docs.push(h.doc)
       j = h.next
-    } else if (c === '\n' && docs.length > 0) {
+    } else if (c === '\n') {
+      // Sans heredoc en attente, skipBodies rend `j + 1` : même effet que d'avancer d'un caractère.
       j = skipBodies(s, j + 1, docs)
       docs = []
     } else {
@@ -158,7 +169,8 @@ function afterSubst(s: string, i: number): number {
 function readToken(s: string, i: number): Token {
   let text = ''
   let j = i
-  while (j < s.length && !BREAKS.includes(s.charAt(j))) {
+  // Hors de la chaîne, charAt rend '' et BREAKS.includes('') est vrai : la boucle s'arrête à la fin.
+  while (!BREAKS.includes(s.charAt(j))) {
     const c = s.charAt(j)
     const d = s.charAt(j + 1)
     if (c === "'") {
@@ -186,9 +198,9 @@ function readToken(s: string, i: number): Token {
 
 /** Redirection en `i` (`>`, `2>&1`, `&>`, `<`, `<<<`, `<<EOF`) : sa cible est retirée des mots. */
 function readRedirect(s: string, i: number): { doc: Heredoc | null; next: number } {
-  let j = s.charAt(i) === '&' ? i + 1 : i
-  if (s.charAt(j) === '<' && s.charAt(j + 1) === '<' && s.charAt(j + 2) !== '<') return readHeredoc(s, j)
-  j++
+  if (isHeredocAt(s, i)) return readHeredoc(s, i)
+  let j = i + 1
+  // Stryker disable next-line EqualityOperator: en j == s.length, '<>&|'.includes('') est vrai et j passe à s.length + 1, que tous les appelants traitent comme la fin
   while (j < s.length && '<>&|'.includes(s.charAt(j))) j++
   return { doc: null, next: readToken(s, skipBlanks(s, j)).next }
 }
@@ -234,7 +246,7 @@ export function splitShell(command: string): Segment[] {
       i += 2
     } else if (c === '|') {
       end('|')
-      i += d === '&' ? 2 : 1
+      i++ // `|&` : le `&` qui suit ne termine aucune commande, la boucle le saute
     } else if (c === '<' || c === '>' || (c === '&' && d === '>')) {
       const r = readRedirect(s, i)
       if (r.doc !== null) docs.push(r.doc)
@@ -292,14 +304,16 @@ type Base = Pick<ParsedCall, 'via' | 'accordByOption' | 'ownsExit' | 'inLoop'>
 /** Les mots de la commande elle-même : affectations, préfixes et mots-clés `do`/`then` sautés. */
 function commandWords(words: readonly string[]): string[] {
   let i = 0
+  // Stryker disable next-line EqualityOperator: en i == words.length, le mot de repli '' n'est ni mot-clé ni affectation ni préfixe : la boucle s'arrête comme à la fin
   while (i < words.length) {
+    // Stryker disable next-line StringLiteral: la boucle garantit i < words.length, le repli n'est jamais lu
     const w = words[i] ?? ''
     const valued = PREFIXES.get(w)
     if (KEYWORDS.includes(w) || ASSIGNMENT.test(w)) {
       i++
     } else if (valued !== undefined) {
       i++
-      while ((words[i] ?? '').startsWith('-')) i += valued.includes(words[i] ?? '') ? 2 : 1
+      for (let opt = words[i]; opt?.startsWith('-'); opt = words[i]) i += valued.includes(opt) ? 2 : 1
       if (w === 'timeout') i++
     } else {
       break
@@ -308,24 +322,25 @@ function commandWords(words: readonly string[]): string[] {
   return words.slice(i)
 }
 
-function isProgram(word: string | undefined): boolean {
-  return word !== undefined && word.slice(word.lastIndexOf('/') + 1) === 'bridge-mcp'
+function isProgram(word: string): boolean {
+  return word.slice(word.lastIndexOf('/') + 1) === 'bridge-mcp'
 }
 
-/** Lit l'option en `i` ; rend l'index qui suit, valeur comprise. */
-function readOption(words: readonly string[], i: number, valued: readonly string[], f: Flags): number {
-  const w = words[i] ?? ''
+/** Lit l'option `w`, le mot en `i` ; rend l'index qui suit, valeur comprise. */
+function readOption(words: readonly string[], i: number, w: string, valued: readonly string[], f: Flags): number {
   const eq = w.indexOf('=')
-  const name = eq > 0 ? w.slice(0, eq) : w
+  const name = eq === -1 ? w : w.slice(0, eq)
   if (name === '--yes') f.yes = true
   if (name === '--dry-run') f.dryRun = true
   if (HELP.includes(name)) f.help = true
-  if (name === '--json-args') f.jsonArgs = eq > 0 ? w.slice(eq + 1) : (words[i + 1] ?? '')
-  return valued.includes(name) && eq < 0 ? i + 2 : i + 1
+  // Stryker disable next-line StringLiteral: option finale sans valeur ; '' et tout autre texte sont un JSON illisible
+  const next = words[i + 1] ?? ''
+  if (name === '--json-args') f.jsonArgs = eq === -1 ? next : w.slice(eq + 1)
+  return valued.includes(name) && eq === -1 ? i + 2 : i + 1
 }
 
-function isOption(w: string): boolean {
-  return w.startsWith('-') && w.length > 1
+function isOption(w: string | undefined): w is string {
+  return w?.startsWith('-') === true && w.length > 1
 }
 
 /** Valeur littérale utilisable, ou null (absente, vide, variable ou substitution du shell). */
@@ -340,6 +355,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 function parseJson(text: string): unknown {
   try {
     return JSON.parse(text) as unknown
+    // Stryker disable next-line BlockStatement: un catch vide rend undefined comme `return undefined`
   } catch {
     return undefined
   }
@@ -375,7 +391,7 @@ function toolArgs(words: readonly string[], jsonArgs: string | null): Record<str
   const args: Record<string, unknown> = {}
   for (const w of words) {
     const eq = w.indexOf('=')
-    if (eq < 0) continue
+    if (eq === -1) continue
     const key = w.slice(0, eq)
     const value = w.slice(eq + 1)
     // Le bridge lit un argument de type tableau comme du JSON (§1.2) ; seul hosts en est un ici.
@@ -393,18 +409,21 @@ function cliCalls(
 ): ParsedCall[] {
   const f: Flags = { yes: false, dryRun: false, help: false, jsonArgs: null }
   let i = 0
-  while (i < rest.length && isOption(rest[i] ?? '')) i = readOption(rest, i, GLOBAL_VALUED, f)
+  for (let w = rest[i]; isOption(w); w = rest[i]) i = readOption(rest, i, w, GLOBAL_VALUED, f)
+  // Stryker disable next-line StringLiteral: sans sous-commande, '' et tout autre texte tombent dans la même sortie vide
   const sub = rest[i] ?? ''
-  const valued = [...GLOBAL_VALUED, ...(SUB_VALUED.get(sub) ?? [])]
+  const extra = SUB_VALUED.get(sub)
+  const valued = extra === undefined ? GLOBAL_VALUED : [...GLOBAL_VALUED, ...extra]
   const positionals: string[] = []
   let isOptionZone = true
   for (i++; i < rest.length; ) {
+    // Stryker disable next-line StringLiteral: la boucle garantit i < rest.length, le repli n'est jamais lu
     const w = rest[i] ?? ''
     if (isOptionZone && w === '--') {
       isOptionZone = false
       i++
     } else if (isOptionZone && isOption(w)) {
-      i = readOption(rest, i, valued, f)
+      i = readOption(rest, i, w, valued, f)
     } else {
       positionals.push(w)
       i++
@@ -439,6 +458,7 @@ export function parseCli(command: string, tools: Readonly<Record<string, ToolInf
   let depth = 0
   segments.forEach((seg, index) => {
     const words = commandWords(seg.words)
+    // Stryker disable next-line StringLiteral: une commande vide ('' ou autre texte) n'est ni boucle, ni done, ni bridge-mcp
     const first = words[0] ?? ''
     if (LOOPS.includes(first)) depth++
     if (isProgram(first)) {
@@ -461,6 +481,7 @@ const PLUGIN_SEGMENT = /^plugin_([^_]+)_(.+)$/
 export function serverOf(tool: string): string | null {
   const m = MCP_NAME.exec(tool)
   if (m === null) return null
+  // Stryker disable next-line StringLiteral: le motif garantit le groupe 1, le repli n'est jamais lu
   const segment = m[1] ?? ''
   return PLUGIN_SEGMENT.exec(segment)?.[2] ?? segment
 }
@@ -469,6 +490,7 @@ export function serverOf(tool: string): string | null {
 export function isBridgeServer(server: string): boolean {
   if (KNOWN_SERVERS.includes(server)) return true
   const p = PLUGIN_SEGMENT.exec(server)
+  // Stryker disable next-line StringLiteral: le motif garantit les groupes 1 et 2, les replis ne sont jamais lus
   return p !== null && (KNOWN_SERVERS.includes(p[1] ?? '') || KNOWN_SERVERS.includes(p[2] ?? ''))
 }
 
@@ -479,7 +501,9 @@ export function isBridgeServer(server: string): boolean {
  */
 export function parseMcp(tool: string, input: unknown, tools: Readonly<Record<string, ToolInfo>>): ParsedCall[] {
   const m = MCP_NAME.exec(tool)
+  // Stryker disable next-line StringLiteral: le motif garantit les groupes 1 et 2, les replis ne sont jamais lus
   if (m === null || !isBridgeServer(m[1] ?? '')) return []
+  // Stryker disable next-line StringLiteral: idem
   let name = m[2] ?? ''
   let args: Record<string, unknown> = isRecord(input) ? input : {}
   if (name === 'mcp_call_tool') {
@@ -608,19 +632,27 @@ function tableState(head: string): CallState | undefined {
   return BRIDGE_TEXTS.find((row) => row.re.test(head))?.state
 }
 
-function objectOf(value: unknown): JsonObject | null {
-  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as JsonObject) : null
+/** Code de la première ligne `[exit:N]` (bridge-facts §3.9), ou undefined si elle n'y est pas. */
+function exitTag(lines: readonly string[]): number | undefined {
+  // Stryker disable next-line StringLiteral: '' et tout autre texte ne sont pas une ligne [exit:N]
+  const m = EXIT_TAG.exec(lines[0] ?? '')
+  return m === null ? undefined : Number(m[1])
 }
 
-/** Le JSON qui commence à la première ligne ouverte par `{` et va jusqu'à la fin, s'il se lit. */
+/**
+ * Le JSON qui commence à la première ligne ouverte par `{` et va jusqu'à la fin, s'il se lit.
+ * Un texte qui s'ouvre par `{` et se lit est un objet : aucun autre type n'est à écarter.
+ */
 function jsonIn(lines: readonly string[]): JsonObject | null {
-  const at = lines.findIndex((line) => line.startsWith('{'))
-  if (at < 0) return null
-  try {
-    return objectOf(JSON.parse(lines.slice(at).join('\n')))
-  } catch {
-    return null
+  for (const [at, line] of lines.entries()) {
+    if (!line.startsWith('{')) continue
+    try {
+      return JSON.parse(lines.slice(at).join('\n')) as JsonObject
+    } catch {
+      return null
+    }
   }
+  return null
 }
 
 /** `--json` : lignes utiles de `content[].text` (bridge-facts §1.4), ou null sans enveloppe. */
@@ -629,8 +661,7 @@ function contentLines(lines: readonly string[]): string[] | null {
   if (doc === null || !Array.isArray(doc.content)) return null
   const texts: string[] = []
   for (const item of doc.content) {
-    const block = objectOf(item)
-    if (block !== null && typeof block.text === 'string') texts.push(block.text)
+    if (isRecord(item) && typeof item.text === 'string') texts.push(item.text)
   }
   return usefulLines(texts.join('\n'))
 }
@@ -641,21 +672,21 @@ function hostEntry(lines: readonly string[], host: string | null): JsonObject | 
   const doc = jsonIn(lines)
   if (doc === null || !Array.isArray(doc.results)) return null
   for (const item of doc.results) {
-    const entry = objectOf(item)
-    if (entry !== null && entry.host === host) return entry
+    if (isRecord(item) && item.host === host) return item
   }
   return null
 }
 
-function hasTruncation(lines: readonly string[], via: Via): boolean {
-  const marks = via === 'cli' ? TRUNCATION_MARKS.concat(ENGINE_PERSISTED_TEXTS) : TRUNCATION_MARKS
+/** `persisted` : lire aussi la marque de sortie persistée de Claude Code, que seule la CLI peut porter. */
+function hasTruncation(lines: readonly string[], persisted: boolean): boolean {
+  const marks = persisted ? TRUNCATION_MARKS.concat(ENGINE_PERSISTED_TEXTS) : TRUNCATION_MARKS
   return lines.some((line) => marks.some((mark) => mark.test(line)))
 }
 
 /** Code distant d'un appel qui a tourné : `[exit:N]` pour tout outil, `"exit_code":N` pour un outil codeWithoutError à un seul hôte. */
 function remoteCode(lines: readonly string[], info: ToolInfo | undefined): number | undefined {
-  const tag = EXIT_TAG.exec(lines[0] ?? '')
-  if (tag !== null) return Number(tag[1])
+  const tag = exitTag(lines)
+  if (tag !== undefined) return tag
   if (info?.codeWithoutError !== true || info.multi) return undefined
   const json = JSON_EXIT_CODE.exec(lines.join('\n'))
   return json === null ? undefined : Number(json[1])
@@ -676,12 +707,12 @@ function succeeded(lines: readonly string[], info: ToolInfo | undefined, truncat
 
 /** La commande a tourné et a échoué : `echec-machine`, code et première ligne qui suit `[exit:N]`. */
 function ranAndFailed(lines: readonly string[], truncated: boolean): Outcome {
-  const tag = EXIT_TAG.exec(lines[0] ?? '')
-  if (tag === null) return { state: 'echec-machine', truncated }
+  const code = exitTag(lines)
+  if (code === undefined) return { state: 'echec-machine', truncated }
   const detail = lines[1]
   return detail === undefined
-    ? { state: 'echec-machine', code: Number(tag[1]), truncated }
-    : { state: 'echec-machine', code: Number(tag[1]), truncated, reason: detail }
+    ? { state: 'echec-machine', code, truncated }
+    : { state: 'echec-machine', code, truncated, reason: detail }
 }
 
 function codeOutcome(code: number | undefined, truncated: boolean): Outcome {
@@ -706,20 +737,21 @@ function execCode(lines: readonly string[]): number | undefined {
 
 /** exec, upload, download : pas de table de codes, seule la table des textes (A4) ; exec est une commande libre. */
 function classifySubcommand(tool: string, exit: number, lines: readonly string[]): Outcome {
-  const truncated = hasTruncation(lines, 'cli')
+  const truncated = hasTruncation(lines, true)
   const code = tool === 'exec' ? execCode(lines) : undefined
   if (code !== undefined) return code === 0 ? { state: 'fait', truncated } : { state: 'code', code, truncated }
   return exit === 0 ? { state: 'fait', truncated } : failed(headOf(lines), truncated)
 }
 
 function classifyCli(p: ParsedCall, lines: readonly string[], isError: boolean, info: ToolInfo | undefined): Outcome {
+  // Stryker disable next-line StringLiteral: '' et tout autre texte ne sont pas une ligne `Exit code N`
   const bash = BASH_EXIT_LINE.exec(lines[0] ?? '')
   const exit = bash === null ? (isError ? 1 : 0) : Number(bash[1])
   const raw = bash === null ? lines : lines.slice(1)
   if (PLAIN_SUBCOMMANDS.includes(p.tool)) return classifySubcommand(p.tool, exit, raw)
   const content = contentLines(raw)
   const body = content ?? raw
-  const truncated = hasTruncation(content === null ? raw : raw.concat(content), 'cli')
+  const truncated = hasTruncation(raw, true) || (content !== null && hasTruncation(content, true))
   const entry = info?.multi === true ? hostEntry(body, p.host) : null
   if (entry !== null) return fromHostEntry(entry, truncated)
   switch (exit) {
@@ -746,11 +778,11 @@ function classifyCli(p: ParsedCall, lines: readonly string[], isError: boolean, 
 }
 
 function classifyMcp(p: ParsedCall, lines: readonly string[], isError: boolean, info: ToolInfo | undefined): Outcome {
-  const truncated = hasTruncation(lines, 'mcp')
+  const truncated = hasTruncation(lines, false)
   const entry = info?.multi === true ? hostEntry(lines, p.host) : null
   if (entry !== null) return fromHostEntry(entry, truncated)
   if (!isError) return succeeded(lines, info, truncated)
-  if (EXIT_TAG.test(lines[0] ?? '')) return ranAndFailed(lines, truncated)
+  if (exitTag(lines) !== undefined) return ranAndFailed(lines, truncated)
   return failed(headOf(lines), truncated)
 }
 
@@ -827,17 +859,11 @@ export function steps(c: BridgeCall): Step[] {
 // --- Tâche 11 : lecture des résultats du moteur, sortie de register.tsx (spec §6) ---------------
 // Tests : tests/pure/glue.test.ts.
 
-/** Les champs d'un objet (résultat d'outil), sinon null. */
-function fieldsOf(value: unknown): Record<string, unknown> | null {
-  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null
-}
-
 /** stdout puis stderr d'un résultat Bash ; une chaîne (texte d'erreur) telle quelle ; sinon rien. */
 function outputText(result: unknown): string {
   if (typeof result === 'string') return result
-  const r = fieldsOf(result)
-  if (r === null) return ''
-  return [r.stdout, r.stderr].filter((x): x is string => typeof x === 'string').join('\n')
+  if (!isRecord(result)) return ''
+  return [result.stdout, result.stderr].filter((x): x is string => typeof x === 'string').join('\n')
 }
 
 /**
@@ -857,14 +883,14 @@ export function runResultOf(
   return {
     isError: denied || ran.isError === true,
     text: typeof ran.text === 'string' ? ran.text : typeof ran.deny === 'string' ? ran.deny : outputText(ran.result),
-    interrupted: aborted || fieldsOf(ran.result)?.interrupted === true,
+    interrupted: aborted || (isRecord(ran.result) && ran.result.interrupted === true),
     refusedByClaude: refusedByClaude || denied,
   }
 }
 
 /** Résultat Bash d'un appel passé en arrière-plan en cours de route : `backgroundTaskId` présent (spec §5.1). */
 export function hasBackgroundTask(result: unknown): boolean {
-  return typeof fieldsOf(result)?.backgroundTaskId === 'string'
+  return isRecord(result) && typeof result.backgroundTaskId === 'string'
 }
 
 /** Nom de l'outil du formulaire : entre accents graves, ou bloc clôturé pour un nom non simple (refs/bridge-facts.md §5.1, §5.3). */

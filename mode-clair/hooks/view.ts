@@ -72,6 +72,7 @@ const CODE_WORD = /^code[ \u00A0](?:\d+|\?)$/
 const UNSEEN_COUNT = /^\d+ problèmes? non vus?$/
 
 type IndexOf = (name: string) => number
+// Stryker disable next-line ArrowFunction: wordTone ne lit l'index que par « i >= 0 » : undefined >= 0 est faux comme -1 >= 0.
 const NO_HOSTS: IndexOf = () => -1
 
 /** Identifiant affiché sur une seule ligne, tel quel par ailleurs. */
@@ -79,9 +80,9 @@ function one(s: string): string {
   return s.replace(/[\r\n\t]+/g, ' ')
 }
 
-function sameTone(a: Tone, b: Tone): boolean {
-  if (typeof a === 'string' || typeof b === 'string') return a === b
-  return a.machine === b.machine
+/** Un ton se compare par sa clé : son nom, ou « machine:N » (deux objets de même machine sont le même ton). */
+function toneKey(t: Tone): string {
+  return typeof t === 'string' ? t : `machine:${t.machine}`
 }
 
 /** Morceaux vides retirés, voisins de même ton fusionnés : une seule écriture par ligne. */
@@ -90,7 +91,7 @@ function norm(line: readonly Piece[]): Line {
   for (const p of line) {
     if (p.text === '') continue
     const last = out[out.length - 1]
-    if (last !== undefined && sameTone(last.tone, p.tone))
+    if (last !== undefined && toneKey(last.tone) === toneKey(p.tone))
       out[out.length - 1] = { text: last.text + p.text, tone: last.tone }
     else out.push({ text: p.text, tone: p.tone })
   }
@@ -159,6 +160,7 @@ function toneLine(text: string, indexOf: IndexOf): Line {
       return
     }
     const rest = seg.slice(sign.length + 1)
+    // Stryker disable next-line StringLiteral: sans deuxième segment, « » et toute autre chaîne qui n'est pas un libellé donnent le même rowOf indéfini.
     const next = segs[1] ?? ''
     const key = i === 0 && rowOf(next) !== undefined ? next : rest
     out.push({ text: sign, tone: signTone(sign, key) })
@@ -168,8 +170,8 @@ function toneLine(text: string, indexOf: IndexOf): Line {
   return norm(out)
 }
 
-/** « signe machine · état · détails » ; dans la carte, « voir /clair » n'a pas de sens. */
-function callText(c: BridgeCall, inCard: boolean): string {
+/** « signe machine · état · détails » (« voir /clair », qui n'a pas de sens dans la carte, est ajouté par callLine). */
+function callText(c: BridgeCall): string {
   const row = STATE_TABLE[c.state]
   const parts: string[] = []
   if (c.state === 'en-cours' || c.state === 'fait') parts.push(one(c.tool))
@@ -188,18 +190,19 @@ function callText(c: BridgeCall, inCard: boolean): string {
   }
   if (!row.isCall) parts.push(NOTHING_RAN)
   if (c.truncated) parts.push(TRUNCATED)
-  if (c.state === 'echec' && !inCard) parts.push(SEE_CARD)
   return `${row.sign} ${hostText(c.host)}${SEP}${parts.join(SEP)}`
 }
 
-/** fr() sur un texte qui contient des identifiants : seules les parties autour d'eux sont touchées. */
+/**
+ * fr() sur un texte qui contient des identifiants : seules les parties autour d'eux sont touchées.
+ * Un identifiant retiré par split n'existe plus dans les parties : la récursion garde la liste entière.
+ */
 function frAround(s: string, ids: readonly string[]): string {
   const id = ids.find((x) => x !== '' && s.includes(x))
   if (id === undefined) return fr(s)
-  const others = ids.filter((x) => x !== id)
   return s
     .split(id)
-    .map((part) => frAround(part, others))
+    .map((part) => frAround(part, ids))
     .join(id)
 }
 
@@ -211,6 +214,7 @@ function frAround(s: string, ids: readonly string[]): string {
  * souvent la seule raison pour laquelle l'appel est dans « à regarder ».
  */
 function pipelineText(c: BridgeCall): string {
+  // Stryker disable next-line StringLiteral: '' est écarté par la garde de frAround ; toute autre chaîne absente du libellé l'est aussi.
   const ids = [c.host ?? '', c.tool]
   const parts = steps(c).map((st) =>
     st.label === NOTHING_RAN ? NOTHING_RAN : `${MARK_SIGN[st.mark]} ${frAround(one(st.label), ids)}`,
@@ -242,11 +246,18 @@ export function fit(line: Line, columns: number): Line {
   const chars: Piece[] = []
   for (const p of line) for (const ch of p.text) chars.push({ text: ch, tone: p.tone })
   const seps: number[] = []
-  for (let i = 0; i + 2 < chars.length; i++) {
-    if (chars[i]?.text === ' ' && chars[i + 1]?.text === '·' && chars[i + 2]?.text === ' ') seps.push(i)
-  }
-  for (let k = seps.length - 1; k >= 1; k--) {
-    const head = chars.slice(0, seps[k])
+  chars.forEach((_, i) => {
+    if (
+      chars
+        .slice(i, i + SEP.length)
+        .map((c) => c.text)
+        .join('') === SEP
+    )
+      seps.push(i)
+  })
+  // De la dernière séparation à la deuxième : la première borne « signe machine », qui ne se coupe qu'en dernier.
+  for (const at of seps.slice(1).reverse()) {
+    const head = chars.slice(0, at)
     const w = width(textOf(head))
     if (w + 2 <= max) return norm([...head, { text: ' …', tone: 'attenue' }])
     if (w <= max) return norm([...head, { text: w < max ? '…' : '', tone: 'attenue' }])
@@ -298,7 +309,8 @@ function waitingCallLine(c: BridgeCall, s: ClairState, columns: number): Line {
 /** La ligne d'un appel bridge, sous son appel (spec §4.3) ou dans la bande ; l'appel attendu par le formulaire dit l'attente. */
 export function callLine(c: BridgeCall, s: ClairState, columns: number): Line {
   if (s.waiting !== null && s.waiting.callId === c.id) return waitingCallLine(c, s, columns)
-  return fit(toneLine(callText(c, false), stateIndex(s)), columns)
+  const seeCard = c.state === 'echec' ? SEP + SEE_CARD : ''
+  return fit(toneLine(callText(c) + seeCard, stateIndex(s)), columns)
 }
 
 /** Le pipeline réel d'un appel (spec §5.1), étapes de bridge.steps. */
@@ -334,8 +346,9 @@ function spText(sp: Superpowers | null, forBand: boolean): string | null {
   else {
     t = sp.planTitle === null ? fr('plan') : `${fr('plan « ')}${one(sp.planTitle)}${fr(' »')}`
     if (sp.stage === 'taches') {
-      if (sp.current !== null && sp.current > 0) {
-        t += SEP + (sp.tasks > 0 ? fr(`tâche ${sp.current} sur ${sp.tasks}`) : fr(`tâche ${sp.current}`))
+      const current = sp.current ?? 0
+      if (current > 0) {
+        t += SEP + (sp.tasks > 0 ? fr(`tâche ${current} sur ${sp.tasks}`) : fr(`tâche ${current}`))
       } else if (sp.tasks > 0) {
         t += SEP + fr(plural(sp.tasks, 'tâche', 'tâches'))
       }
@@ -390,7 +403,7 @@ function runningLine(s: ClairState, run: readonly BridgeCall[]): Line {
   for (const c of run) if (!names.includes(c.host)) names.push(c.host)
   const out: Piece[] = [
     { text: '●', tone: 'accent' },
-    { text: ` ${fr(plural(run.length, 'appel', 'appels'))}`, tone: 'texte' },
+    { text: ` ${run.length} appels`, tone: 'texte' }, // au moins deux : un seul appel a sa propre ligne
     { text: SEP, tone: 'attenue' },
   ]
   names.slice(0, 3).forEach((h, i) => {
@@ -414,8 +427,7 @@ export function bandLines(s: ClairState, ctx: Ctx): Line[] {
     (c) => c.state === 'en-cours' && (ctx.viewAgentId === undefined || c.agentId === ctx.viewAgentId),
   )
   const first = run[0]
-  if (first !== undefined)
-    lines.push(run.length === 1 ? toneLine(callText(first, false), stateIndex(s)) : runningLine(s, run))
+  if (first !== undefined) lines.push(run.length === 1 ? toneLine(callText(first), stateIndex(s)) : runningLine(s, run))
   if (ctx.viewAgentId === undefined) {
     const wf = latest(active(s.workflows))
     if (wf !== undefined) lines.push(toneLine(workflowText(wf), NO_HOSTS))
@@ -437,7 +449,8 @@ const VIEW_GONE = fr("plus d'appel en mémoire sur ")
 const QUOTE_OPEN = fr('« ')
 const QUOTE_CLOSE = fr(' »')
 const SUMMARY = /^\d+ machines? · \d+ appels? · /
-const MACHINE_LINE = /^(.*?) · \d+ appels? · /
+// Pas d'ancre : le début paresseux (.*?) part de toute façon du début de la ligne.
+const MACHINE_LINE = /(.*?) · \d+ appels? · /
 
 /** Dernier résultat d'une machine : « ✓ ssh_disk_usage », « ✓ code 2 », « ✗ injoignable ». */
 function lastText(c: BridgeCall): string {
@@ -463,12 +476,12 @@ function cardTexts(s: ClairState, args: string): string[] {
     return m === undefined ? `${one(host)}${SEP}${GONE}` : machineText(m)
   })
   const quote = (reason: string): string => `${QUOTE_OPEN}${one(reason)}${QUOTE_CLOSE}`
-  const name = args.trim().split(/\s+/)[0] ?? ''
+  const name = args.trim().replace(/\s.*/s, '')
   if (name !== '') {
     const out = [...hostLines]
     const m = ms.find((x) => x.host === name)
     if (m === undefined) return [...out, `${s.hostOrder.includes(name) ? VIEW_GONE : VIEW_NONE}${one(name)}`]
-    out.push(`${VIEW_HEAD}${one(m.host)}${VIEW_TAIL}`, callText(m.last, true), pipelineText(m.last))
+    out.push(`${VIEW_HEAD}${one(m.host)}${VIEW_TAIL}`, callText(m.last), pipelineText(m.last))
     if (m.last.reason !== undefined) out.push(quote(m.last.reason))
     return out
   }
@@ -493,7 +506,7 @@ function cardTexts(s: ClairState, args: string): string[] {
     const seen = (c: BridgeCall): boolean => (c.endedAt ?? c.startedAt) <= s.seenAt
     out.push(LOOK, pipelineText(newest) + (seen(newest) ? SEP + SEEN : ''))
     if (newest.reason !== undefined) out.push(quote(newest.reason))
-    for (const c of look.slice(1)) out.push(callText(c, true) + (seen(c) ? SEP + SEEN : ''))
+    for (const c of look.slice(1)) out.push(callText(c) + (seen(c) ? SEP + SEEN : ''))
   }
   if (sp !== null) out.push(sp)
   for (const w of wfs) out.push(workflowText(w))
@@ -513,7 +526,7 @@ function toneCard(texts: readonly string[]): Line[] {
   let dim = false
   return texts.map((t): Line => {
     if (t === EMPTY_CARD || t === LOOK || t.startsWith(VIEW_NONE) || t.startsWith(VIEW_GONE)) {
-      if (t !== EMPTY_CARD) head = false
+      head = false
       return [{ text: t, tone: 'attenue' }]
     }
     if (head && t.endsWith(SEP + GONE)) {

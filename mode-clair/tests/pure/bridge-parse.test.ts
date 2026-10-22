@@ -500,3 +500,171 @@ describe('parseMcp : appels MCP au serveur du bridge', () => {
     ])
   })
 })
+
+describe('splitShell : formes limites du découpage', () => {
+  const words = (line: string): string[] => splitShell(line).flatMap((seg) => seg.words)
+
+  test('la tabulation et le retour chariot séparent les mots comme l’espace', () => {
+    expect(splitShell('a\tb\rc')).toEqual([{ words: ['a', 'b', 'c'], op: '' }])
+  })
+
+  test('accent grave : un accent grave échappé ne ferme pas la substitution', () => {
+    expect(words('echo `echo \\` x` y')).toEqual(['echo', '`echo \\` x`', 'y'])
+    expect(words('echo `echo x')).toEqual(['echo', '`echo x'])
+  })
+
+  test('${ } : le contenu, espaces compris, reste dans le mot ; sans } il va jusqu’à la fin', () => {
+    expect(words('echo ${A:-x y} z')).toEqual(['echo', '${A:-x y}', 'z'])
+    expect(words('echo ${A}${B} y')).toEqual(['echo', '${A}${B}', 'y'])
+    expect(words('echo ${a b')).toEqual(['echo', '${a b'])
+  })
+
+  test('une parenthèse ou une accolade sans $ avant elle n’ouvre ni substitution ni ${ }', () => {
+    expect(words('echo a(b c)')).toEqual(['echo', 'a', 'b', 'c'])
+    expect(words('echo a{b c}')).toEqual(['echo', 'a{b', 'c}'])
+  })
+
+  test('guillemet simple jamais fermé : le reste de la ligne est le mot', () => {
+    expect(words("echo 'abc")).toEqual(['echo', 'abc'])
+    expect(words("echo 'a b' c")).toEqual(['echo', 'a b', 'c'])
+  })
+
+  test('guillemets doubles : retour à la ligne gardé, antislash final gardé', () => {
+    expect(words('echo "a\nb" c')).toEqual(['echo', 'a\nb', 'c'])
+    expect(words('echo "a\\')).toEqual(['echo', 'a\\'])
+  })
+
+  test('guillemets doubles : une substitution $( ) ou ` ` garde ses propres guillemets', () => {
+    expect(words('echo "$(echo "a b") c" z')).toEqual(['echo', '$(echo "a b") c', 'z'])
+    expect(words('echo "x `echo "b c"` y" z')).toEqual(['echo', 'x `echo "b c"` y', 'z'])
+    expect(words('echo "a(b "c" d)" z')).toEqual(['echo', 'a(b c d)', 'z'])
+  })
+
+  test('un antislash devant un caractère ordinaire le laisse seul', () => {
+    expect(words('echo \\x')).toEqual(['echo', 'x'])
+  })
+
+  test('heredoc <<- : plusieurs tabulations en tête du délimiteur, aucune ailleurs', () => {
+    expect(splitShell('cat <<-EOF\n\t\tx\n\t\tEOF\nbridge-mcp status')).toEqual([
+      { words: ['cat'], op: '\n' },
+      { words: ['bridge-mcp', 'status'], op: '' },
+    ])
+    expect(splitShell('cat <<-EOF\nE\tOF\nbridge-mcp status\nEOF\necho fin')).toEqual([
+      { words: ['cat'], op: '\n' },
+      { words: ['echo', 'fin'], op: '' },
+    ])
+  })
+
+  test('heredoc dans $( ) : le corps, parenthèse comprise, ne ferme pas la substitution', () => {
+    expect(words('echo $(cat <<EOF\n)\nEOF\n) x')).toEqual(['echo', '$(cat <<EOF\n)\nEOF\n)', 'x'])
+    expect(words('echo $(cat <<E\n)\nE\n) x')).toEqual(['echo', '$(cat <<E\n)\nE\n)', 'x'])
+    expect(words('echo $(cat <<EOF\na\nEOF\necho\n) y')).toEqual(['echo', '$(cat <<EOF\na\nEOF\necho\n)', 'y'])
+    expect(words('echo $(cat <a<<EOF\n)\nEOF\n) y')).toEqual(['echo', '$(cat <a<<EOF\n)\nEOF\n)', 'y'])
+  })
+
+  test('retour à la ligne dans $( ) sans heredoc : la substitution continue', () => {
+    expect(words('echo $(a\nb) c')).toEqual(['echo', '$(a\nb)', 'c'])
+  })
+
+  test('< seul, <<< et redirection finale ne sont pas des heredocs', () => {
+    expect(splitShell('cat < in.txt\nbridge-mcp status')).toEqual([
+      { words: ['cat'], op: '\n' },
+      { words: ['bridge-mcp', 'status'], op: '' },
+    ])
+    expect(splitShell('cat <<<x\nbridge-mcp status')).toEqual([
+      { words: ['cat'], op: '\n' },
+      { words: ['bridge-mcp', 'status'], op: '' },
+    ])
+    expect(words('echo >')).toEqual(['echo'])
+    expect(words('echo a &> f b')).toEqual(['echo', 'a', 'b'])
+  })
+
+  test('un mot collé à > ou < reste un mot ; seul un numéro de descripteur est retiré', () => {
+    expect(words('echo a>b c')).toEqual(['echo', 'a', 'c'])
+    expect(words('echo 2x>f')).toEqual(['echo', '2x'])
+    expect(words('echo a 12>f')).toEqual(['echo', 'a'])
+    expect(words('cat 0<in.txt')).toEqual(['cat'])
+    expect(words('echo a 2>&1 b')).toEqual(['echo', 'a', 'b'])
+  })
+
+  test('|b : le caractère après un tube est lu', () => {
+    expect(splitShell('a |b')).toEqual([
+      { words: ['a'], op: '|' },
+      { words: ['b'], op: '' },
+    ])
+  })
+})
+
+describe('parseCli : formes limites', () => {
+  test('un premier mot qui contient = sans être une affectation est le programme', () => {
+    expect(parse('./x=1 bridge-mcp tool ssh_disk_usage host=raspberry')).toEqual([])
+    expect(parse('FOO=1 ./x=1 bridge-mcp tool ssh_disk_usage host=raspberry')).toEqual([])
+  })
+
+  test('préfixe sans programme derrière : aucun appel, jamais une erreur', () => {
+    for (const line of ['sudo', 'sudo -u root', 'env', 'nice -n 5', 'timeout -s KILL', 'FOO=1', 'timeout']) {
+      expect(parse(line)).toEqual([])
+    }
+  })
+
+  test('-V et --version entre tool et le nom : rien ne tourne', () => {
+    expect(parse('bridge-mcp tool -V ssh_disk_usage host=raspberry')).toEqual([])
+    expect(parse('bridge-mcp tool --version ssh_disk_usage host=raspberry')).toEqual([])
+    expect(parse('bridge-mcp -V tool ssh_disk_usage host=raspberry')).toEqual([])
+  })
+
+  test('la valeur d’une option globale n’est pas un argument de l’outil', () => {
+    expect(parse('bridge-mcp --jq host=evil tool ssh_disk_usage path=/')).toEqual([cli({ host: null })])
+    expect(parse('bridge-mcp --jq session_id=zz tool ssh_session_exec command=pwd')).toEqual([
+      cli({ tool: 'ssh_session_exec', host: null, nature: 'peut-modifier' }),
+    ])
+  })
+
+  test('le nom de l’outil n’est pas un argument, même avec un =', () => {
+    expect(parse('bridge-mcp tool host=evil')).toEqual([cli({ tool: 'host=evil', nature: 'inconnu', host: null })])
+  })
+
+  test('un mot sans = n’est pas un argument : hosts n’est pas host=hosts', () => {
+    expect(parse('bridge-mcp tool ssh_disk_usage hosts')).toEqual([cli({ host: null })])
+    expect(parse('bridge-mcp tool ssh_disk_usage =x host=raspberry')).toEqual([cli()])
+  })
+
+  test('--json-args=valeur et --json-args valeur lisent le même JSON ; après les arguments, c’est un argument', () => {
+    expect(parse(`bridge-mcp tool ssh_disk_usage --json-args='{"host":"win2025"}'`)).toEqual([cli({ host: 'win2025' })])
+    expect(parse(`bridge-mcp tool ssh_disk_usage --json-args '{"host":"win2025"}'`)).toEqual([cli({ host: 'win2025' })])
+    expect(parse('bridge-mcp tool ssh_disk_usage host=raspberry --json-args')).toEqual([cli()])
+  })
+
+  test('option qui prend une valeur : --limit=5 n’en consomme pas d’autre, --limit 5 oui', () => {
+    expect(parse('bridge-mcp --limit=5 tool ssh_disk_usage host=raspberry')).toEqual([cli()])
+    expect(parse('bridge-mcp --limit 5 tool ssh_disk_usage host=raspberry')).toEqual([cli()])
+    expect(parse('bridge-mcp --yes=1 tool ssh_disk_usage host=raspberry')).toEqual([cli({ accordByOption: true })])
+  })
+
+  test('exec, upload, download avec une table d’outils vide : nature inconnue', () => {
+    const unknown = (tool: string) => cli({ tool, nature: 'inconnu' })
+    expect(parseCli('bridge-mcp exec raspberry ls', {})).toEqual([unknown('exec')])
+    expect(parseCli('bridge-mcp upload raspberry a b', {})).toEqual([unknown('upload')])
+    expect(parseCli('bridge-mcp tool ssh_disk_usage host=raspberry', {})).toEqual([unknown('ssh_disk_usage')])
+  })
+
+  test('option sans valeur à la fin de la ligne, ni sous-commande', () => {
+    expect(parse('bridge-mcp --limit')).toEqual([])
+    expect(parse('bridge-mcp --json --yes')).toEqual([])
+  })
+})
+
+describe('serverOf et isBridgeServer : ancres', () => {
+  test('mcp__ commence le nom et le nom d’outil finit la chaîne', () => {
+    expect(serverOf('xmcp__ssh-bridge__ssh_exec')).toBeNull()
+    expect(serverOf('mcp__ssh-bridge__a\nb')).toBeNull()
+    expect(parseMcp('mcp__ssh-bridge__ssh_disk_usage\nx', { host: 'raspberry' }, TOOLS)).toEqual([])
+  })
+
+  test('plugin_<plugin>_<serveur> commence le segment et le finit', () => {
+    expect(serverOf('mcp__xplugin_a_ssh-bridge__y')).toBe('xplugin_a_ssh-bridge')
+    expect(isBridgeServer('xplugin_x_ssh-bridge')).toBe(false)
+    expect(isBridgeServer('plugin_x_ssh-bridge\n')).toBe(false)
+    expect(isBridgeServer('plugin_x_ssh-bridge')).toBe(true)
+  })
+})

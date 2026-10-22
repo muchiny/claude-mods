@@ -14,11 +14,13 @@
     "typecheck": "tsc -p tsconfig.json",
     "validate": "claude plugin validate . && claude plugin validate mode-clair",
     "test": "claude plugin test mode-clair",
-    "mutate": "stryker run"
+    "mutate": "stryker run",
+    "coverage": "bun test mode-clair/tests/pure --coverage"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
     "@stryker-mutator/core": "10.0.0",
+    "bun": "1.4.3",
     "typescript": "7.0.2"
   }
 }

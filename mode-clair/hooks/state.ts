@@ -217,9 +217,9 @@ function sameOutcome(c: BridgeCall, o: Outcome): boolean {
  * appels `ids` (spec §5.1 : elle s'efface quand le tool.call de l'appel se
  * termine) ; `s` lui-même si rien n'a changé.
  */
-function withCalls(s: ClairState, calls: BridgeCall[], ids: readonly string[]): ClairState {
+function withCalls(s: ClairState, calls: BridgeCall[], ids?: readonly string[]): ClairState {
   const w = s.waiting
-  const waiting = w !== null && w.callId !== null && ids.includes(w.callId) ? null : w
+  const waiting = w !== null && ids?.some((id) => id === w.callId) ? null : w
   if (waiting === w && calls.every((c, i) => c === s.calls[i])) return s
   return { ...s, calls, waiting }
 }
@@ -231,26 +231,30 @@ function withCalls(s: ClairState, calls: BridgeCall[], ids: readonly string[]): 
  * inchangé. L'attente « à toi » qui désigne un de ces appels est effacée.
  */
 export function finishCalls(s: ClairState, toolUseId: string, outcomes: Outcome[], now: number): ClairState {
-  const ids: string[] = []
   const calls = s.calls.map((c) => {
     if (c.toolUseId !== toolUseId) return c
-    ids.push(c.id)
     if (c.state === 'refuse-claude') return c
     const o = outcomes[rankOf(c)] ?? UNKNOWN
     return c.endedAt !== undefined && sameOutcome(c, o) ? c : closed(c, o, now)
   })
-  return withCalls(s, calls, ids)
+  return withCalls(
+    s,
+    calls,
+    callsOf(s, toolUseId).map((c) => c.id),
+  )
 }
 
 /** Refus de Claude Code (PermissionDenied) : tous les appels du tool_use_id, terminés ou non. */
 export function refuseByClaude(s: ClairState, toolUseId: string, now: number): ClairState {
-  const ids: string[] = []
   const calls = s.calls.map((c) => {
     if (c.toolUseId !== toolUseId) return c
-    ids.push(c.id)
     return c.state === 'refuse-claude' ? c : closed(c, REFUSED, now)
   })
-  return withCalls(s, calls, ids)
+  return withCalls(
+    s,
+    calls,
+    callsOf(s, toolUseId).map((c) => c.id),
+  )
 }
 
 /**
@@ -259,13 +263,13 @@ export function refuseByClaude(s: ClairState, toolUseId: string, now: number): C
  * `interrompu`. Les appels des autres boucles ne bougent pas.
  */
 export function interruptOpen(s: ClairState, agentId: string | undefined, now: number): ClairState {
-  const ids: string[] = []
-  const calls = s.calls.map((c) => {
-    if (c.state !== 'en-cours' || c.agentId !== agentId) return c
-    ids.push(c.id)
-    return closed(c, INTERRUPTED, now)
-  })
-  return withCalls(s, calls, ids)
+  const inLoop = (c: BridgeCall): boolean => c.state === 'en-cours' && c.agentId === agentId
+  const calls = s.calls.map((c) => (inLoop(c) ? closed(c, INTERRUPTED, now) : c))
+  return withCalls(
+    s,
+    calls,
+    s.calls.filter(inLoop).map((c) => c.id),
+  )
 }
 
 function sameWaiting(a: Waiting | null, b: Waiting | null): boolean {
@@ -287,7 +291,7 @@ export function setWaiting(s: ClairState, w: Waiting | null): ClairState {
 export function recordAccord(s: ClairState, callId: string | null, granted: boolean): ClairState {
   const accord: BridgeCall['accord'] = granted ? 'formulaire-oui' : 'formulaire-non'
   const calls = s.calls.map((c) => (c.id === callId && c.accord !== accord ? { ...c, accord } : c))
-  return withCalls(s, calls, [])
+  return withCalls(s, calls)
 }
 
 /** Marqueur « vu » posé par /clair. */

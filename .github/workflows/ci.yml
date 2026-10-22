@@ -39,6 +39,25 @@ jobs:
       - name: Audit des dépendances de développement
         run: npm audit --audit-level=high
 
+  coverage:
+    name: Coverage (modules purs)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # bun:test remplace 'claude-code/testing' (dev/bun-claude-code-testing.ts) ; seuil de 100 %
+      # des lignes et des fonctions dans bunfig.toml. register.tsx n'est exercé que par les tests moteur.
+      - name: Coverage
+        run: npm run coverage
+
   mod:
     name: Validate and test
     runs-on: ubuntu-24.04

@@ -756,3 +756,328 @@ describe('steps : pipeline réel (spec §5.1)', () => {
     }
   })
 })
+
+describe('ancres des textes : un texte au milieu d’une ligne n’est pas lu', () => {
+  for (const [source, text] of FIXTURES) {
+    test(`${source} précédé d’un autre mot`, () => {
+      const line = `avant ${text}`
+      expect(classify(mcp('ssh_service_status'), ko(line), TOOLS)).toStrictEqual({
+        state: 'echec',
+        truncated: false,
+        reason: line,
+      })
+    })
+  }
+
+  test('le préfixe Error: n’est retiré qu’en tête de ligne', () => {
+    expect(classify(mcp('ssh_service_status'), ko('Fatal Error: boom'), TOOLS)).toStrictEqual({
+      state: 'echec',
+      truncated: false,
+      reason: 'Fatal Error: boom',
+    })
+    expect(classify(mcp('ssh_service_status'), ko('Error: boom'), TOOLS)).toStrictEqual({
+      state: 'echec',
+      truncated: false,
+      reason: 'boom',
+    })
+  })
+
+  test('un texte de refus du moteur au milieu de la première ligne n’est pas un refus', () => {
+    for (const text of RECORDED_REFUSALS) {
+      expect(classify(mcp('ssh_exec'), ko(`note : ${text}`), TOOLS).state).toBe('echec')
+      expect(classify(mcp('ssh_exec'), ko(text), TOOLS).state).toBe('refuse-claude')
+    }
+  })
+
+  test('une ligne de journal ne commence pas au milieu d’une ligne', () => {
+    const line = 'vu : 2026-10-14T23:33:55.485691Z  INFO Loading configuration'
+    expect(usefulLines(line)).toEqual([line])
+    expect(usefulLines('2026-10-14T23:33:55.485691Z  INFO Loading configuration')).toEqual([])
+  })
+
+  test('« Exit code N » : la ligne entière, sur tout le nombre', () => {
+    expect(classify(cli('ssh_service_status'), ko('Exit code 12\nError: Unknown host: x'), TOOLS)).toEqual({
+      state: 'machine-inconnue',
+      truncated: false,
+    })
+    expect(classify(cli('ssh_service_status'), ko('Exit code 1 de plus\nfoo'), TOOLS)).toStrictEqual({
+      state: 'echec',
+      truncated: false,
+      reason: 'Exit code 1 de plus',
+    })
+    expect(classify(cli('ssh_service_status'), ko('sExit code 3\nUnknown host: a'), TOOLS)).toStrictEqual({
+      state: 'echec',
+      truncated: false,
+      reason: 'sExit code 3',
+    })
+  })
+
+  test('[exit:N] : la ligne entière, sur tout le nombre, en tête de texte', () => {
+    expect(classify(mcp('ssh_exec'), ok('[exit:12]\nsortie'), TOOLS)).toStrictEqual({
+      state: 'code',
+      code: 12,
+      truncated: false,
+    })
+    expect(classify(mcp('ssh_exec'), ko('[exit:12]\nboom'), TOOLS)).toStrictEqual({
+      state: 'echec-machine',
+      code: 12,
+      truncated: false,
+      reason: 'boom',
+    })
+    for (const text of ['[exit:3] de plus', 'x[exit:3]', 'sortie\n[exit:3]']) {
+      expect(classify(mcp('ssh_exec'), ok(text), TOOLS)).toStrictEqual({ state: 'fait', truncated: false })
+    }
+  })
+
+  test('[exit:N] seul : échec sur la machine sans raison ; sans [exit:N] : sans code', () => {
+    expect(classify(mcp('ssh_exec'), ko('[exit:2]'), TOOLS)).toStrictEqual({
+      state: 'echec-machine',
+      code: 2,
+      truncated: false,
+    })
+    expect(classify(cli('ssh_exec'), ko(bash(6, 'boom')), TOOLS)).toStrictEqual({ state: 'code', truncated: false })
+    expect(classify(cli('ssh_k8s_get'), ko(bash(6, 'boom')), TOOLS)).toStrictEqual({
+      state: 'echec-machine',
+      truncated: false,
+    })
+  })
+
+  test('"exit_code" d’un outil à un seul hôte : tout le nombre, sur une seule ligne', () => {
+    expect(classify(mcp('ssh_exec'), ok('{"exit_code": 12,"output":""}'), TOOLS)).toStrictEqual({
+      state: 'code',
+      code: 12,
+      truncated: false,
+    })
+    expect(classify(mcp('ssh_exec'), ok('{\n"exit_code": 1\n2\n}'), TOOLS)).toStrictEqual({
+      state: 'code',
+      code: 1,
+      truncated: false,
+    })
+  })
+
+  test('marque --- [truncated: en tête de ligne seulement', () => {
+    expect(classify(mcp('ssh_disk_usage'), ok('vu --- [truncated: 5 lines] ---'), TOOLS).truncated).toBe(false)
+    expect(classify(mcp('ssh_disk_usage'), ok('--- [truncated: 5 lines] ---'), TOOLS).truncated).toBe(true)
+  })
+})
+
+describe('exec, upload, download : détails', () => {
+  test('upload et download n’ont pas de table de codes : un code 5 est un échec sans texte connu', () => {
+    for (const tool of ['upload', 'download']) {
+      expect(classify(cli(tool), ko(bash(5, 'texte inconnu')), TOOLS)).toStrictEqual({
+        state: 'echec',
+        truncated: false,
+        reason: 'texte inconnu',
+      })
+    }
+    expect(classify(cli('ssh_disk_usage'), ko(bash(5, 'texte inconnu')), TOOLS)).toStrictEqual({
+      state: 'erreur-config',
+      truncated: false,
+    })
+  })
+
+  test('seul exec lit « Exit code: N » ; upload et download sortis en 0 ont fait', () => {
+    for (const tool of ['upload', 'download']) {
+      expect(classify(cli(tool), ok(bash(0, 'Exit code: 3')), TOOLS)).toStrictEqual({ state: 'fait', truncated: false })
+      expect(classify(cli(tool), ok(bash(0, '{"exit_code": 3}')), TOOLS)).toStrictEqual({
+        state: 'fait',
+        truncated: false,
+      })
+    }
+    expect(classify(cli('exec'), ok(bash(0, 'Exit code: 3')), TOOLS)).toStrictEqual({
+      state: 'code',
+      code: 3,
+      truncated: false,
+    })
+  })
+
+  test('« Exit code: N » : la ligne entière, sur tout le nombre', () => {
+    expect(classify(cli('exec'), ko(bash(1, 'Exit code: 12')), TOOLS)).toStrictEqual({
+      state: 'code',
+      code: 12,
+      truncated: false,
+    })
+    for (const line of ['Exit code: 2 de plus', 'vu Exit code: 2']) {
+      expect(classify(cli('exec'), ko(bash(1, line)), TOOLS)).toStrictEqual({
+        state: 'echec',
+        truncated: false,
+        reason: line,
+      })
+    }
+  })
+
+  test('"exit_code" de exec --json : tout le nombre, sur une seule ligne', () => {
+    expect(classify(cli('exec'), ko(bash(1, '{"exit_code": 12}')), TOOLS)).toStrictEqual({
+      state: 'code',
+      code: 12,
+      truncated: false,
+    })
+    expect(classify(cli('exec'), ko(bash(1, '{"exit_code": 1', '2}')), TOOLS)).toStrictEqual({
+      state: 'code',
+      code: 1,
+      truncated: false,
+    })
+  })
+
+  test('exec, upload, download : la marque de sortie persistée compte comme tronquée', () => {
+    expect(RECORDED_PERSISTED.length).toBeGreaterThan(0)
+    for (const tool of ['exec', 'upload', 'download']) {
+      for (const text of RECORDED_PERSISTED) {
+        expect(classify(cli(tool), ok(bash(0, text)), TOOLS)).toStrictEqual({ state: 'fait', truncated: true })
+      }
+    }
+  })
+})
+
+describe('JSON de la CLI : enveloppe content et results', () => {
+  const envelope = (...content: unknown[]): string => JSON.stringify({ content })
+  const text = (t: string): { type: string; text: string } => ({ type: 'text', text: t })
+
+  test('une marque de troncature dans content[].text, que le JSON échappe, compte', () => {
+    const body = envelope(text('début\nPour la suite : ssh_output_fetch(output_id="3f9c", offset=0)'))
+    expect(classify(cli('ssh_journal_query'), ok(bash(0, body)), TOOLS)).toStrictEqual({
+      state: 'fait',
+      truncated: true,
+    })
+    expect(classify(cli('ssh_journal_query'), ok(bash(0, envelope(text('rien')))), TOOLS)).toStrictEqual({
+      state: 'fait',
+      truncated: false,
+    })
+  })
+
+  test('une marque dans la sortie brute, hors enveloppe, compte aussi', () => {
+    const raw = '--- [truncated: 5 lines total] ---'
+    expect(classify(cli('ssh_journal_query'), ok(bash(0, raw)), TOOLS).truncated).toBe(true)
+    expect(classify(cli('ssh_journal_query'), ok(bash(0, envelope(text('rien')), raw)), TOOLS).truncated).toBe(true)
+  })
+
+  test('les blocs de content sont des lignes distinctes, ceux qui ne portent pas de texte sont sautés', () => {
+    const body = envelope({ text: 7 }, null, 5, ['x'], text('[exit:3]'), { type: 'image' }, text('boom'))
+    expect(classify(cli('ssh_k8s_get'), ko(bash(6, body)), TOOLS)).toStrictEqual({
+      state: 'echec-machine',
+      code: 3,
+      truncated: false,
+      reason: 'boom',
+    })
+  })
+
+  test('le JSON commence à la première ligne ouverte par {, après un texte', () => {
+    expect(classify(cli('ssh_exec_multi'), ok(bash(0, 'note', MULTI_JSON)), TOOLS)).toStrictEqual({
+      state: 'code',
+      code: 2,
+      truncated: false,
+    })
+  })
+
+  test('seule la première ligne ouverte par { compte : si elle ne se lit pas, pas de JSON', () => {
+    expect(classify(cli('ssh_exec_multi'), ok(bash(0, '{oups', MULTI_JSON)), TOOLS)).toStrictEqual({
+      state: 'fait',
+      truncated: false,
+    })
+  })
+
+  test('les lignes du JSON sont jointes par un retour à la ligne, jamais collées', () => {
+    const split = ['{"results":[{"host":"raspberry","exit_code":1', '2}]}']
+    expect(classify(cli('ssh_exec_multi'), ok(bash(0, ...split)), TOOLS)).toStrictEqual({
+      state: 'fait',
+      truncated: false,
+    })
+  })
+
+  test('results : les entrées qui ne sont pas des objets sont sautées, l’hôte choisit l’entrée', () => {
+    const results = (...entries: unknown[]): string => JSON.stringify({ results: entries })
+    const body = results(null, 5, ['raspberry'], { host: 'win2025', exit_code: 0 }, { host: 'raspberry', exit_code: 2 })
+    expect(classify(cli('ssh_exec_multi'), ok(bash(0, body)), TOOLS)).toStrictEqual({
+      state: 'code',
+      code: 2,
+      truncated: false,
+    })
+    expect(classify(cli('ssh_exec_multi', { host: 'win2025' }), ok(bash(0, body)), TOOLS)).toStrictEqual({
+      state: 'fait',
+      truncated: false,
+    })
+    expect(classify(mcp('ssh_exec_multi', 'raspberry'), ok(body), TOOLS)).toStrictEqual({
+      state: 'code',
+      code: 2,
+      truncated: false,
+    })
+  })
+
+  test('une machine inconnue ne choisit aucune entrée, même une entrée sans machine', () => {
+    const body = JSON.stringify({ results: [{ host: null, exit_code: 3 }, { exit_code: 4 }] })
+    expect(classify(cli('ssh_exec_multi', { host: null }), ok(bash(0, body)), TOOLS)).toStrictEqual({
+      state: 'fait',
+      truncated: false,
+    })
+    expect(classify(mcp('ssh_exec_multi', null), ok(body), TOOLS)).toStrictEqual({ state: 'fait', truncated: false })
+  })
+
+  test('entrée de results : erreur, code non nul, code nul, code absent ou pas un nombre', () => {
+    const one = (entry: object): string => JSON.stringify({ results: [{ host: 'raspberry', ...entry }] })
+    const run = (entry: object) => classify(mcp('ssh_exec_multi'), ok(one(entry)), TOOLS)
+    expect(run({ exit_code: 0 })).toStrictEqual({ state: 'fait', truncated: false })
+    expect(run({})).toStrictEqual({ state: 'fait', truncated: false })
+    expect(run({ exit_code: '3' })).toStrictEqual({ state: 'fait', truncated: false })
+    expect(run({ exit_code: 3 })).toStrictEqual({ state: 'code', code: 3, truncated: false })
+    expect(run({ error: 'Rate limit exceeded' })).toStrictEqual({ state: 'limite', truncated: false })
+    expect(run({ error: 'inconnue', exit_code: 0 })).toStrictEqual({
+      state: 'echec',
+      truncated: false,
+      reason: 'inconnue',
+    })
+  })
+
+  test('un outil à un seul hôte ne lit pas results ; un outil inconnu non plus', () => {
+    const body = JSON.stringify({ results: [{ host: 'raspberry', exit_code: 2 }] })
+    expect(classify(cli('ssh_disk_usage'), ok(bash(0, body)), TOOLS)).toStrictEqual({ state: 'fait', truncated: false })
+    expect(classify(mcp('ssh_disk_usage'), ko(body), TOOLS)).toStrictEqual({
+      state: 'echec',
+      truncated: false,
+      reason: body,
+    })
+    expect(classify(cli('ssh_nope'), ok(bash(0, body)), TOOLS)).toStrictEqual({ state: 'fait', truncated: false })
+    expect(classify(mcp('ssh_nope'), ok(body), TOOLS)).toStrictEqual({ state: 'fait', truncated: false })
+  })
+
+  test('outil absent de la table : classé comme un autre, sans code distant', () => {
+    expect(classify(mcp('ssh_nope'), ok('bonjour'), TOOLS)).toStrictEqual({ state: 'fait', truncated: false })
+    expect(classify(cli('ssh_nope'), ko(bash(6, '[exit:2]', 'boom')), TOOLS)).toStrictEqual({
+      state: 'echec-machine',
+      code: 2,
+      truncated: false,
+      reason: 'boom',
+    })
+  })
+})
+
+describe('steps : accord devant un formulaire refusé', () => {
+  const call = (patch: Partial<BridgeCall>): BridgeCall => ({
+    id: 'toolu_1#0',
+    toolUseId: 'toolu_1',
+    via: 'cli',
+    tool: 'ssh_exec',
+    host: 'raspberry',
+    nature: 'peut-modifier',
+    state: 'fait',
+    truncated: false,
+    accord: 'aucun',
+    startedAt: 0,
+    endedAt: 400,
+    ...patch,
+  })
+
+  test('decline et confirmation impossible sont décidés avant l’accord : aucune étape accord devant', () => {
+    expect(steps(call({ state: 'decline', accord: 'option' }))).toEqual([
+      { label: 'accord', mark: 'ko' },
+      { label: 'rien n’a tourné', mark: 'off' },
+    ])
+    expect(steps(call({ state: 'confirmation-impossible', accord: 'formulaire-oui' }))).toEqual([
+      { label: 'confirmation impossible', mark: 'ko' },
+      { label: 'rien n’a tourné', mark: 'off' },
+    ])
+    expect(steps(call({ state: 'confirmation-impossible', accord: 'option' }))).toEqual([
+      { label: 'confirmation impossible', mark: 'ko' },
+      { label: 'rien n’a tourné', mark: 'off' },
+    ])
+  })
+})

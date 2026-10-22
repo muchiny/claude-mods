@@ -100,8 +100,8 @@ export function onAgent(sp: Superpowers | null, description: string, prompt: str
     return { ...sp, stage: 'relecture', lastEventAt: now, isStale: false }
   }
   if (!onPlan) return sp
-  const n = taskNumber(description)
-  if (n === null || n < 1 || (sp.tasks > 0 && n > sp.tasks)) return sp
+  const n = taskNumber(description) ?? 0
+  if (n < 1 || (sp.tasks > 0 && n > sp.tasks)) return sp
   return { ...sp, stage: 'taches', current: n, lastEventAt: now, isStale: false }
 }
 
