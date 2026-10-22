@@ -1,11 +1,13 @@
 // Garde locale de la fixture de rejeu committée (audit de confidentialité, M1) : les deux barrières de
 // l'anonymiseur (assertClean avec la liste noire privée, assertKnownForms) sur CHAQUE scénario de
-// SCENARIOS. Sans liste noire (CI, autre machine) : ignoré. Aucun message ne recopie de contenu.
+// SCENARIOS. Sans liste noire : échec, sauf sous GitHub Actions ou avec SKIP_PRIVATE_FIXTURES=1 (la raison est
+// affichée) ; assertKnownForms tourne toujours. Aucun message ne recopie de contenu.
 import { describe, expect, test } from 'claude-code/testing'
 import { assertFixture } from '../../dev/replay/anonymize'
+import { TYPES, typeOf } from '../../dev/replay/reduce'
 import { SCENARIOS, type Scenario } from '../../mode-clair/tests/replay/scenarios.generated'
 // @ts-expect-error module .mjs sans déclaration de types
-import { privateDenylist } from './private-denylist.mjs'
+import { denylistUnder, privateDenylist } from './private-denylist.mjs'
 
 const DENY = ['machine-reelle-1']
 const one = (id: string, text: string, files: Record<string, string> = {}): Scenario => ({
@@ -48,11 +50,46 @@ describe('garde des fixtures : fixture contaminée synthétique', () => {
   })
 })
 
-const deny = privateDenylist() as string[] | null
-describe('garde des fixtures : fixture committée et liste noire privée', () => {
-  if (deny === null) test('ignoré (CI ou ~/.config/claude-mods/denylist.txt absente)', () => {})
-  else
-    test(`les ${SCENARIOS.length} scénarios passent assertClean et assertKnownForms`, () => {
-      expect(() => assertFixture(SCENARIOS, deny)).not.toThrow()
+type Denylist = { entries: string[] } | { skip: boolean; reason: string }
+
+describe('garde des fixtures : quand la liste noire manque (L-3)', () => {
+  const under = (o: { env: Record<string, string>; content: string | null; mode?: number }) =>
+    denylistUnder(o) as Denylist
+  test('hors GitHub Actions, absente ou illisible : échec, pas un saut ; CI exporté à la main n’y change rien', () => {
+    expect(under({ env: {}, content: null })).toMatchObject({ skip: false })
+    expect(under({ env: { CI: 'true' }, content: null })).toMatchObject({ skip: false })
+    expect(under({ env: {}, content: '# rien\n\n' })).toMatchObject({ skip: false })
+  })
+  test('GitHub Actions ou SKIP_PRIVATE_FIXTURES=1 : sauté, avec la raison', () => {
+    expect(under({ env: { GITHUB_ACTIONS: 'true' }, content: null })).toMatchObject({ skip: true })
+    expect(under({ env: { SKIP_PRIVATE_FIXTURES: '1' }, content: null })).toMatchObject({ skip: true })
+  })
+  test('lisible : ses entrées', () => {
+    expect(under({ env: {}, content: 'a\n# b\nc\n' })).toEqual({ entries: ['a', 'c'] })
+  })
+})
+
+describe('garde des fixtures : fixture committée', () => {
+  test('assertKnownForms et les fuites génériques sur chaque scénario, sans liste noire (aussi en CI)', () => {
+    expect(() => assertFixture(SCENARIOS, [])).not.toThrow()
+  })
+  test('au moins 50 scénarios et chacun des types attendus (une fixture vide échoue)', () => {
+    expect(SCENARIOS.length).toBeGreaterThanOrEqual(50)
+    expect(new Set(SCENARIOS.map(typeOf))).toEqual(new Set(TYPES))
+  })
+
+  const deny = privateDenylist() as Denylist
+  if ('entries' in deny)
+    test(`les ${SCENARIOS.length} scénarios passent assertClean (liste noire privée) et assertKnownForms`, () => {
+      expect(() => assertFixture(SCENARIOS, deny.entries)).not.toThrow()
+    })
+  else if (deny.skip) {
+    console.log(`garde des fixtures (liste noire) sautée : ${deny.reason}`)
+    test(`liste noire privée : sauté (${deny.reason})`, () => {})
+  } else
+    test('liste noire privée lisible (sinon SKIP_PRIVATE_FIXTURES=1)', () => {
+      throw new Error(
+        `garde des fixtures : ${deny.reason} (~/.config/claude-mods/denylist.txt ; SKIP_PRIVATE_FIXTURES=1 pour sauter)`,
+      )
     })
 })
