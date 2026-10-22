@@ -1,17 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
 // @ts-expect-error module .mjs sans déclaration de types
-import {
-  baseUnder,
-  copied,
-  dirWithMode,
-  failing,
-  foreign,
-  interrupted,
-  modes,
-  sandbox,
-  swept,
-  sweptBoth,
-} from './paint-home.mjs'
+import * as home from './paint-home.mjs'
+
+const { baseUnder, copied, dirWithMode, failing, foreign, interrupted, modes, sandbox, swept, sweptBoth } = home
 
 type Box = { base: string; credentials: string; homes: () => string[]; dispose: () => void }
 
