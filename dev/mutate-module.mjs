@@ -5,7 +5,7 @@
 // dépôt) : PROPS_RUNS est donc réduit (30 par défaut, graine 42) ; les goldens et les tests purs restent entiers.
 // Le rapport JSON va dans reports/mutation-pure/<module>.json ; le planchers se vérifient avec dev/mutation-floors.mjs.
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -71,12 +71,17 @@ export function configFor(base, module, tests, runs = DEFAULT_PROPS_RUNS) {
   }
 }
 
+/** Un nom de fichier de mode-clair/hooks : minuscules, chiffres, tirets, en .ts ; ni séparateur ni `..`. */
+export function validModule(name) {
+  return /^[a-z][a-z0-9-]*\.ts$/.test(name)
+}
+
 function main(argv) {
   const module = argv.find((a) => !a.startsWith('--') && /\.ts$/.test(a))
   const opt = (name) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : undefined)
   const concurrency = opt('--concurrency') ?? '2'
   const runs = opt('--runs') ?? String(DEFAULT_PROPS_RUNS)
-  if (!module || !existsSync(join(ROOT, 'mode-clair/hooks', module))) {
+  if (!module || !validModule(module) || !existsSync(join(ROOT, 'mode-clair/hooks', module))) {
     console.error('usage : node dev/mutate-module.mjs <module.ts> [--concurrency N] [--runs N] [--list]')
     return 2
   }
@@ -92,16 +97,22 @@ function main(argv) {
   console.log(`mutate-module ${module} : ${tests.length} fichiers de test, PROPS_RUNS=${runs}\n  ${tests.join('\n  ')}`)
   if (argv.includes('--list')) return 0
   const base = JSON.parse(readFileSync(join(ROOT, 'stryker.pure.json'), 'utf8'))
-  const config = join('/var/tmp', `stryker-module-${module}-${process.pid}.json`)
-  writeFileSync(config, JSON.stringify(configFor(base, module, tests, Number(runs))))
-  mkdirSync(join(ROOT, 'reports/mutation-pure'), { recursive: true })
-  const bin = join(ROOT, 'node_modules/.bin')
-  const run = spawnSync(join(bin, 'stryker'), ['run', config, '--concurrency', concurrency], {
-    stdio: 'inherit',
-    cwd: ROOT,
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`, TMPDIR: process.env.TMPDIR ?? '/var/tmp' },
-  })
-  return run.status ?? 1
+  // Configuration dans un dossier neuf (mkdtemp, mode 700), fichier créé exclusivement (wx), effacée à la fin.
+  const dir = mkdtempSync(join('/var/tmp', 'stryker-module-'))
+  try {
+    const config = join(dir, `${module}.json`)
+    writeFileSync(config, JSON.stringify(configFor(base, module, tests, Number(runs))), { flag: 'wx', mode: 0o600 })
+    mkdirSync(join(ROOT, 'reports/mutation-pure'), { recursive: true })
+    const bin = join(ROOT, 'node_modules/.bin')
+    const run = spawnSync(join(bin, 'stryker'), ['run', config, '--concurrency', concurrency], {
+      stdio: 'inherit',
+      cwd: ROOT,
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`, TMPDIR: process.env.TMPDIR ?? '/var/tmp' },
+    })
+    return run.status ?? 1
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)

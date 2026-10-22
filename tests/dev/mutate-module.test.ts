@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 // @ts-expect-error module .mjs sans déclaration de types
-import { configFor, DEFAULT_PROPS_RUNS, testsFor } from '../../dev/mutate-module.mjs'
+import { configFor, DEFAULT_PROPS_RUNS, testsFor, validModule } from '../../dev/mutate-module.mjs'
 // @ts-expect-error module .mjs sans déclaration de types
 import { runModule } from './glue-cli.mjs'
 
@@ -34,8 +34,29 @@ describe('mutate-module en ligne de commande', () => {
     expect(runModule(['nexiste.ts']).status).toBe(2)
     expect(runModule(['fr.ts', '--concurrency', '0']).status).toBe(2)
     expect(runModule(['fr.ts', '--runs', 'x']).status).toBe(2)
+    // Revue finale (L-5) : un nom de module avec séparateur ou `..` sortait de mode-clair/hooks.
+    for (const bad of ['../hooks/fr.ts', 'sub/fr.ts', '/tmp/fr.ts', 'Fr.ts', '-fr.ts', 'fr.ts.bak'])
+      expect(runModule([bad, '--list']).status).toBe(2)
     const list = runModule(['fr.ts', '--list'])
     expect(list.status).toBe(0)
     expect(list.stdout).toContain('mode-clair/tests/pure/fr.test.ts')
+  })
+})
+
+describe('validModule : un nom de fichier de mode-clair/hooks, rien d’autre (L-5)', () => {
+  test('nom simple en .ts accepté ; séparateur, .., absolu, majuscule, tiret initial, autre extension refusés', () => {
+    for (const ok of ['fr.ts', 'view.ts', 'tools-generated.ts']) expect(validModule(ok)).toBe(true)
+    for (const bad of [
+      '../hooks/fr.ts',
+      'sub/fr.ts',
+      '/tmp/fr.ts',
+      '..ts',
+      'Fr.ts',
+      '-fr.ts',
+      'fr.ts.bak',
+      'fr.tsx',
+      '',
+    ])
+      expect(validModule(bad)).toBe(false)
   })
 })
