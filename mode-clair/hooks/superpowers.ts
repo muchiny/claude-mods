@@ -8,7 +8,7 @@
 // Claude Code 2.1.300 lance les agents en arrière-plan par défaut : le tour
 // principal peut finir pendant qu'un agent du plan tourne encore. Ces agents
 // sont suivis (runningAgents) du résultat `async_launched` de leur appel
-// jusqu'au turn.complete de leur boucle (tâche 14b).
+// jusqu'au turn.complete de leur boucle.
 
 import type { Stage, Superpowers } from '../types'
 
